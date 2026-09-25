@@ -6,7 +6,7 @@
          "command.rkt" "keymap.rkt" "mode.rkt" "hook.rkt" "editor.rkt" "input.rkt"
          "theme.rkt" "picker.rkt" "frame.rkt" "eval.rkt" "platform.rkt" "modes.rkt" "owner.rkt" "fuzzy.rkt" "glossary.rkt")
 (provide save-buffer! confirm-quit? palette-items palette-matches command-description
-         confirm-discard-changes
+         confirm-discard-changes confirm-save-changes
          builtin-command-names)
 
 (define (t) (current-buffer))
@@ -30,10 +30,15 @@
 
 ;; ---- files ---------------------------------------------------------------
 
-(define (ask-save b)     ; -> 'save 'discard 'cancel
-  (case (message-box/custom "Rackmac" (format "Save changes to ~a?" (send b get-name))
-                            "Save" "Don't Save" "Cancel" (ui-parent) '(caution default=1) 3)
-    [(1) 'save] [(2) 'discard] [else 'cancel]))
+;; "Save changes to X?" -> 'save, 'discard or 'cancel. A parameter so tests and scripts
+;; can answer without the native dialog.
+(define confirm-save-changes
+  (make-parameter
+   (lambda (b)
+     (case (message-box/custom "Rackmac" (format "Save changes to ~a?" (send b get-name))
+                               "Save" "Don't Save" "Cancel" (ui-parent) '(caution default=1) 3)
+       [(1) 'save] [(2) 'discard] [else 'cancel]))))
+(define (ask-save b) ((confirm-save-changes) b))
 
 (define (save-buffer-as! b)
   (define dir (and (send b get-path) (let-values ([(base n d?) (split-path (send b get-path))]) base)))

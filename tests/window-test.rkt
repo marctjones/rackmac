@@ -96,3 +96,61 @@
   (check-equal? (send b get-text) "one two one")
   (replace-current!)                         ; now "one" at 8 is selected: replaced
   (check-equal? (send b get-text) "one two 1"))
+
+;; ---- tabs and layout (UI foundation) ------------------------------------------------
+
+(define tabs (main-tabs))
+(define (fresh-tabs names)
+  (define bs (for/list ([n names]) (new-buffer! n)))
+  (for ([b (all-buffers)] #:unless (or (memq b bs) (messages-buffer? b))) (kill-buffer! b))
+  (set-current-buffer! (car bs))
+  bs)
+
+(test-case "the tab strip has close boxes, reordering and a + button, the same on both OSes"
+  (for ([st '(can-close can-reorder new-button flat-portable)])
+    (check-not-false (memq st tab-strip-style) (format "~a" st))))
+
+(test-case "a tab's close box closes that document"
+  (define bs (fresh-tabs '("one" "two" "three")))
+  (send tabs on-close-request 1)
+  (check-equal? (map (lambda (b) (send b get-name)) (visible-buffers)) '("one" "three")))
+
+(test-case "the + button makes a new document"
+  (define bs (fresh-tabs '("only")))
+  (send tabs on-new-request)
+  (check-equal? (length (visible-buffers)) 2)
+  (check-equal? (send (current-buffer) get-name) "untitled"))
+
+(test-case "dragging tabs reorders the documents (and Go to Tab N follows)"
+  (define bs (fresh-tabs '("a" "b" "c")))
+  (send tabs on-reorder '(2 0 1))             ; c moved to the front
+  (check-equal? (map (lambda (b) (send b get-name)) (visible-buffers)) '("c" "a" "b"))
+  (check-equal? (send tabs get-item-label 0) "c" "the strip shows the new order")
+  (run-command 'go-to-tab-1)
+  (check-equal? (send (current-buffer) get-name) "c"))
+
+(test-case "closing a modified document from its tab asks first"
+  (define bs (fresh-tabs '("keep" "other")))
+  (send (car bs) insert "unsaved")
+  (parameterize ([confirm-save-changes (lambda (b) 'cancel)])
+    (send tabs on-close-request 0))
+  (check-equal? (length (visible-buffers)) 2 "Cancel keeps it open")
+  (parameterize ([confirm-save-changes (lambda (b) 'discard)])
+    (send tabs on-close-request 0))
+  (check-equal? (map (lambda (b) (send b get-name)) (visible-buffers)) '("other") "Don't Save closes it"))
+
+(test-case "the editor has comfortable margins"
+  (check-equal? (send canvas horizontal-inset) 16)
+  (check-equal? (send canvas vertical-inset) 12))
+
+(test-case "prose wraps at a readable measure, code does not wrap"
+  (define b (doc "some prose"))
+  (send b set-mode! 'text-mode)
+  (define w (send b measure-width))
+  (check-true (and (real? w) (> w 200)) "80 columns of the editor font")
+  (send b set-max-width 100000)             ; as if the window were very wide
+  (send b on-display-size)
+  (check-true (<= (send b get-max-width) w) "clamped to the measure")
+  (send b set-mode! 'racket-mode)
+  (check-false (send b auto-wrap))
+  (check-false (send b measure-width) "no measure for code"))

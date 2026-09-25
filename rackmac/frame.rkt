@@ -3,13 +3,14 @@
 ;; menu bar generated from command metadata. Key handling lives in buffer%/input.rkt;
 ;; menus deliberately carry no shortcuts of their own, so a key never fires twice.
 (require racket/class racket/gui/base racket/list racket/string
-         "editor.rkt" "command.rkt" "keymap.rkt" "hook.rkt" "theme.rkt" "mode.rkt")
+         "editor.rkt" "command.rkt" "keymap.rkt" "hook.rkt" "theme.rkt" "mode.rkt" "ui/layout.rkt")
 (provide make-main-frame show-find-bar! hide-find-bar!
-         find! replace-current! replace-all! focus-editor! main-frame main-canvas set-find-options!)
+         find! replace-current! replace-all! focus-editor! main-frame main-canvas main-tabs set-find-options! tab-strip-style)
 
 (define frame #f)
 (define (main-frame) frame)
 (define (main-canvas) canvas)
+(define (main-tabs) tabs)
 (define menu-bar #f)
 (define tabs #f)
 (define canvas #f)
@@ -28,6 +29,23 @@
 
 ;; ---- window --------------------------------------------------------------
 
+;; The tab strip's styles: close boxes, drag to reorder, a "+" button, same look on both OSes.
+(define tab-strip-style '(no-border flat-portable can-reorder can-close new-button))
+
+;; The tab strip: a tab's close box closes that document (asking to save), "+" makes a new
+;; one, and dragging reorders the documents.
+(define document-tabs%
+  (class tab-panel%
+    (super-new)
+    (define/override (on-close-request i)
+      (when (< i (length tab-buffers))
+        (set-current-buffer! (list-ref tab-buffers i))
+        (run-command/safe 'close-buffer)))
+    (define/override (on-new-request) (run-command/safe 'new-buffer))
+    ;; `former` lists, for each tab position after the drag, the position it had before.
+    (define/augment (on-reorder former)
+      (set-tab-order! (for/list ([i (in-list former)]) (list-ref tab-buffers i))))))
+
 (define main-frame%
   (class frame%
     (super-new)
@@ -41,14 +59,17 @@
   (set! frame (new main-frame% [label "Rackmac"] [width 1100] [height 760]))
   (set-ui-parent! frame)
   (set! menu-bar (new menu-bar% [parent frame]))
-  (set! tabs (new tab-panel% [parent frame] [choices '("untitled")]
+  ;; Browser-style document tabs: close boxes, drag to reorder, and a "+" button, drawn the
+  ;; same way on macOS and Windows ('flat-portable).
+  (set! tabs (new document-tabs% [parent frame] [choices '("untitled")]
+                  [style tab-strip-style]
                   [callback (lambda (tp e)
                               (unless syncing?
                                 (define i (send tp get-selection))
                                 (when (and i (< i (length tab-buffers)))
                                   (set-current-buffer! (list-ref tab-buffers i)))))]))
   (set! canvas (new editor-canvas% [parent tabs] [style '(auto-hscroll)]
-                    [horizontal-inset 12] [vertical-inset 8]))
+                    [horizontal-inset editor-inset-x] [vertical-inset editor-inset-y]))
   (build-find-bar!)
   (build-status-bar!)
 
@@ -100,7 +121,7 @@
 
 (define (build-status-bar!)
   (set! status-panel (new horizontal-panel% [parent frame] [stretchable-height #f]
-                          [border 4] [spacing 12]))
+                          [border grid] [spacing (* 3 grid)]))
   (set! echo-label (new message% [parent status-panel] [label " "] [stretchable-width #t]))
   (set! info-label (new message% [parent status-panel] [label "Ln 1, Col 1"] [min-width 320])))
 
@@ -158,8 +179,8 @@
     (super-new)))
 
 (define (build-find-bar!)
-  (set! find-bar (new vertical-panel% [parent frame] [stretchable-height #f] [border 4]))
-  (define row1 (new horizontal-panel% [parent find-bar] [stretchable-height #f] [spacing 6]))
+  (set! find-bar (new vertical-panel% [parent frame] [stretchable-height #f] [border bar-border]))
+  (define row1 (new horizontal-panel% [parent find-bar] [stretchable-height #f] [spacing bar-spacing]))
   (set! find-field (new find-field% [parent row1] [label "Find"] [on-enter (lambda (shift?) (find! (if shift? 'backward 'forward)))]
                         [callback (lambda (t e)
                                     (when (eq? (send e get-event-type) 'text-field)
@@ -168,7 +189,7 @@
   (new button% [parent row1] [label "Next"] [callback (lambda (b e) (find! 'forward))])
   (set! case-box (new check-box% [parent row1] [label "Match case"]))
   (new button% [parent row1] [label "Close"] [callback (lambda (b e) (hide-find-bar!))])
-  (set! replace-row (new horizontal-panel% [parent find-bar] [stretchable-height #f] [spacing 6]))
+  (set! replace-row (new horizontal-panel% [parent find-bar] [stretchable-height #f] [spacing bar-spacing]))
   (set! replace-field (new find-field% [parent replace-row] [label "Replace"]
                            [on-enter (lambda (shift?) (replace-current!))]))
   (new button% [parent replace-row] [label "Replace"] [callback (lambda (b e) (replace-current!))])

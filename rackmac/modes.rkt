@@ -1,11 +1,11 @@
 #lang racket/base
 ;; Built-in modes. Every one uses the same public define-mode that user code gets.
-(require "mode.rkt" "keymap.rkt" "highlight.rkt")
+(require "mode.rkt" "keymap.rkt" "highlight.rkt" "ui/layout.rkt")
 
 (define-mode text-mode
   #:label "Plain Text"
   #:doc "Plain text. Wraps long lines."
-  #:locals '((wrap-lines . #t) (indent-string . "  ")))
+  #:locals `((wrap-lines . #t) (indent-string . "  ") (measure . ,prose-measure)))
 
 (define-mode prog-mode
   #:label "Code"

@@ -4,7 +4,7 @@
 (require racket/class racket/list racket/string racket/path
          "buffer.rkt" "hook.rkt" "mode.rkt" "modes.rkt")
 (provide current-buffer set-current-buffer! all-buffers visible-buffers messages-buffer?
-         reopen-closed-tab! closed-tab-paths reload-buffer!
+         reopen-closed-tab! closed-tab-paths reload-buffer! set-tab-order!
          new-buffer! open-file! kill-buffer! find-buffer-by-path unique-name
          message messages-buffer show-messages!
          ui-parent set-ui-parent!
@@ -77,6 +77,13 @@
      (send b set-position (min pos (send b last-position)))
      (run-hook 'buffers-changed)
      #t]))
+
+;; Reorder the visible buffers (tabs) to `order`; hidden buffers keep their places after them.
+(define (set-tab-order! order)
+  (unless (equal? (sort (map eq-hash-code order) <) (sort (map eq-hash-code (visible-buffers)) <))
+    (raise-argument-error 'set-tab-order! "a permutation of the visible buffers" order))
+  (set! buffers (append order (filter (lambda (b) (not (memq b order))) buffers)))
+  (run-hook 'buffers-changed))
 
 ;; Paths of closed tabs, most recent first, for Reopen Closed Tab (as in Chrome).
 (define closed '())

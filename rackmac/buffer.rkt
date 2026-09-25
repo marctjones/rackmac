@@ -108,6 +108,22 @@
       (schedule-highlight!) (inner (void) after-insert s l))
     (define/augment (after-delete s l)
       (schedule-highlight!) (inner (void) after-delete s l))
+    ;; Readable measure: a Language can set the local `measure` (characters per line); when
+    ;; wrapping, lines then wrap at that width or the window edge, whichever is narrower.
+    (define/public (measure-width)
+      (define cols (local-ref 'measure #f))
+      (define dc (send this get-dc))
+      (and cols dc
+           (let-values ([(w h d a) (send dc get-text-extent "0"
+                                         (send (send (send this get-style-list) find-named-style "Standard") get-font))])
+             (* cols w))))
+    (define/augment (on-display-size)
+      (when (send this auto-wrap)
+        (define w (measure-width))
+        (define cur (send this get-max-width))
+        (when (and w (real? cur) (> cur w)) (send this set-max-width w)))
+      (inner (void) on-display-size))
+
     (define/augment (after-set-position)
       (run-hook 'status-changed) (inner (void) after-set-position))
     (define/override (set-modified m)
