@@ -1,6 +1,7 @@
 #lang racket/base
 ;; Drives the real picker dialog with timers: type a query, press Enter, check the result.
 ;; A watchdog closes the dialog so a regression fails instead of hanging.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/gui/base racket/list "../rackmac/picker.rkt")
 
 (define items '(("Save" "⌘S" save) ("Save As…" "⇧⌘S" save-as) ("Select All" "⌘A" select-all) ("Undo" "⌘Z" undo)))

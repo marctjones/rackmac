@@ -3,6 +3,7 @@
 ;; popup builder (items, separators, enabled states -- built, never shown), word selection
 ;; under a right-click outside the selection (RM-058), the tab context menu's commands
 ;; (RM-071), menu on-demand enabling (RM-065) and double/triple click (RM-069).
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/gui/base racket/list racket/file
          "../rackmac/context-menu.rkt" "../rackmac/context-defaults.rkt" "../rackmac/owner.rkt"
          "../rackmac/mode.rkt" "../rackmac/commands.rkt" "../rackmac/editor.rkt"

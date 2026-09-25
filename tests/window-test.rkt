@@ -2,6 +2,7 @@
 ;; The real main window, built but never shown: keys delivered to its editor canvas reach
 ;; the buffer's key dispatch, and find/replace behave. (The OS -> window step still needs a
 ;; person or CI with a display; see issue "Verify real keystrokes".)
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/gui/base racket/string racket/list
          "../rackmac/commands.rkt" "../rackmac/editor.rkt" "../rackmac/frame.rkt"
          "../rackmac/command.rkt" "../rackmac/platform.rkt")

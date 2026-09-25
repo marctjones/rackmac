@@ -3,6 +3,7 @@
 ;; polling-timer technique as picker-test.rkt: no fixed sleeps, and a watchdog closes the
 ;; modal dialog so a regression fails instead of hanging. docs/UI-DESIGN.md §2, §7.3;
 ;; issues #257, #30, #31, #39.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/gui/base racket/list
          "../rackmac/picker.rkt" "../rackmac/command.rkt" "../rackmac/commands.rkt"
          "../rackmac/editor.rkt" "../rackmac/ui/palette.rkt")

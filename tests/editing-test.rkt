@@ -1,6 +1,7 @@
 #lang racket/base
 ;; Editing commands and key dispatch, driven through the real registry with real
 ;; text% buffers (no window needed) and synthetic key events.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/gui/base racket/list racket/file
          "../rackmac/editor.rkt" "../rackmac/command.rkt" "../rackmac/commands.rkt"
          "../rackmac/keymap.rkt" "../rackmac/input.rkt" "../rackmac/platform.rkt"

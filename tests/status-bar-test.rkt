@@ -3,6 +3,7 @@
 ;; message truncation, narrow widths, colors at 1x/2x light/dark), then the real (hidden)
 ;; window: segment text, hover hints, click hit-testing, the Line Endings command, the word-
 ;; count cache, and an extension's own segment.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/gui/base racket/list racket/draw racket/file racket/string
          "../rackmac/ui/status-bar.rkt" "../rackmac/ui/tokens.rkt" "../rackmac/ui/layout.rkt"
          "../rackmac/theme.rkt" "../rackmac/status.rkt" "../rackmac/status-defaults.rkt"

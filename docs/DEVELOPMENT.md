@@ -40,8 +40,10 @@ Rules for anyone (person or agent) changing this repository.
   drive controls with `command`, synthetic `key-event%`/`mouse-event%`, assert through hooks and state).
 - Generated docs have drift tests: the README shortcut table (`rackmac/cheatsheet.rkt`), the glossary
   (`rackmac/glossary.rkt`), `ROADMAP.md` (`racket tools/roadmap.rkt`). Regenerate them when they change.
+- GUI test files `(require "no-front.rkt")` FIRST (before racket/gui) so tests never take keyboard focus.
 - Never launch the GUI (`racket main.rkt`), send keystrokes, or take screenshots from an automated agent.
-  Visual checks are done by the maintainer session, announced to the owner first.
+  Visual checks are done by the maintainer session, announced to the owner first, launched with
+  `RACKMAC_NO_FRONT=1` so the window never takes focus.
 
 ## Commits, issues, releases
 

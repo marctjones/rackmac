@@ -1,5 +1,6 @@
 #lang racket/base
 ;; Reload from Disk, Save All, and the large-file guard.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/file racket/string
          "../rackmac/editor.rkt" "../rackmac/commands.rkt" "../rackmac/command.rkt"
          "../rackmac/buffer.rkt" "../rackmac/hook.rkt")

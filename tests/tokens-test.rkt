@@ -2,6 +2,7 @@
 ;; Design tokens: both appearances define every role, and the colors are readable
 ;; (WCAG AA: 4.5:1 for text, 3:1 for the accent), so a palette edit cannot quietly
 ;; make text hard to read.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/list racket/class
          "../rackmac/ui/tokens.rkt" "../rackmac/theme.rkt")
 

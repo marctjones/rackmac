@@ -2,6 +2,7 @@
 ;; The toolbar: registry (grouping, per-Language items, unloading with extensions) and the
 ;; native button row in the real (hidden) window: buttons run commands, dim from #:when,
 ;; follow the Language, show hover hints, and the row can be hidden.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/gui/base racket/list racket/file
          "../rackmac/toolbar.rkt" "../rackmac/owner.rkt" "../rackmac/mode.rkt"
          "../rackmac/commands.rkt" "../rackmac/toolbar-defaults.rkt" "../rackmac/editor.rkt"

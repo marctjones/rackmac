@@ -1,5 +1,6 @@
 #lang racket/base
 ;; Pure-module tests: keys, keymaps, commands, modes, fuzzy matching. No GUI needed.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/list
          "../rackmac/keymap.rkt" "../rackmac/command.rkt" "../rackmac/mode.rkt"
          "../rackmac/fuzzy.rkt" "../rackmac/hook.rkt" "../rackmac/platform.rkt")

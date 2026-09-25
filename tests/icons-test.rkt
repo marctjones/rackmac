@@ -1,6 +1,7 @@
 #lang racket/base
 ;; Icons: every menu command has one from the drawn set, each icon renders visible pixels
 ;; at 1x and 2x, and icons are distinguishable from each other. All headless (bitmaps).
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/draw racket/list racket/string
          "../rackmac/ui/icons.rkt" "../rackmac/commands.rkt" "../rackmac/command.rkt")
 

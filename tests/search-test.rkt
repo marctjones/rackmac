@@ -1,5 +1,6 @@
 #lang racket/base
 ;; The pure matcher (rackmac/search.rkt): no window, no buffer, just strings and options.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit "../rackmac/search.rkt")
 
 ;; ---- find-matches ----------------------------------------------------------------

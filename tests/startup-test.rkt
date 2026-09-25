@@ -2,6 +2,7 @@
 ;; Regression: starting with no file arguments must build the window and a scratch
 ;; buffer without recursing (hooks fired while creating the first buffer call
 ;; `current-buffer`). Kept in its own file so no other test has created a buffer first.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/gui/base
          "../rackmac/commands.rkt" "../rackmac/editor.rkt" "../rackmac/frame.rkt")
 

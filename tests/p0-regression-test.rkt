@@ -1,5 +1,6 @@
 #lang racket/base
 ;; Regressions for the must-fix items from the code review (Fable, 2026-09-25).
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/gui/base racket/file racket/list
          "../rackmac/editor.rkt" "../rackmac/commands.rkt" "../rackmac/command.rkt"
          "../rackmac/keymap.rkt" "../rackmac/mode.rkt" "../rackmac/owner.rkt"

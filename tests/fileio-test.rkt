@@ -1,6 +1,7 @@
 #lang racket/base
 ;; Files must round-trip byte-for-byte when nothing was edited, whatever their encoding
 ;; and line endings, and saving must never corrupt or half-write a file.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/file racket/class racket/string "../rackmac/fileio.rkt")
 
 (define (round-trip bs)

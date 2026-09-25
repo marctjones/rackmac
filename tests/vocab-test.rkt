@@ -2,6 +2,7 @@
 ;; The vocabulary layer: friendly titles, Emacs-name aliases, help text, palette search,
 ;; recents, and Describe. The layer is display-only, so command NAMES are pinned here:
 ;; a user's init.rkt refers to them (bind-key!, run-command), and must never break.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/list racket/string
          "../rackmac/command.rkt" "../rackmac/commands.rkt" "../rackmac/mode.rkt"
          "../rackmac/keymap.rkt" "../rackmac/editor.rkt" "../rackmac/picker.rkt"

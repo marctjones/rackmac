@@ -2,6 +2,7 @@
 ;; The init file must register into the RUNNING editor's registry. If it were loaded
 ;; into a namespace that re-instantiated rackmac/api, its commands would land in a
 ;; second, invisible registry.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/file racket/path racket/runtime-path
          "../rackmac/command.rkt" "../rackmac/eval.rkt" "../rackmac/commands.rkt"
          "../rackmac/editor.rkt" "../rackmac/keymap.rkt" "../rackmac/hook.rkt")

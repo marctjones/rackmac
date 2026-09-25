@@ -2,6 +2,7 @@
 ;; Default shortcuts follow macOS, Windows, Microsoft Office and Chrome conventions.
 ;; The expected table below is the contract; the rules after it check EVERY default
 ;; binding, so a new command with an un-modern shortcut fails here.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/list racket/string
          "../rackmac/commands.rkt" "../rackmac/command.rkt" "../rackmac/keymap.rkt"
          "../rackmac/platform.rkt" "../rackmac/cheatsheet.rkt" racket/file racket/runtime-path)

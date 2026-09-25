@@ -1,6 +1,7 @@
 #lang racket/base
 ;; #lang rackmac: the module language, extension ownership/unloading, compile-time checks,
 ;; and the restriction of extensions to the public API.
+(require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/file racket/port racket/string racket/list racket/runtime-path
          "../rackmac/command.rkt" "../rackmac/eval.rkt" "../rackmac/commands.rkt"
          "../rackmac/editor.rkt" "../rackmac/keymap.rkt" "../rackmac/hook.rkt"

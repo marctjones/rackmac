@@ -57,6 +57,7 @@ the `rackmac` module language: `racket/base` plus the whole public API, with not
 `Mod` means Cmd on macOS and Ctrl on Windows. Select code anywhere and press `Mod-Enter` to
 evaluate it in the running editor; redefining a command takes effect immediately.
 Set `RACKMAC_HOME` to use a different config directory, `RACKMAC_THEME=dark|light` to force a theme, and
+`RACKMAC_NO_FRONT=1` to open the window without taking keyboard focus, and
 `RACKMAC_KEYLOG=1` to log every key event the editor receives (and what it dispatched) to stderr, which helps debug shortcuts.
 
 ### Command metadata
