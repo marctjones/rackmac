@@ -35,6 +35,14 @@ Rules for anyone (person or agent) changing this repository.
 ## Tests
 
 - Run everything: `raco make rackmac/*.rkt rackmac/ui/*.rkt rackmac/lang/*.rkt tests/*.rkt main.rkt && raco test tests`
+- `rackmac-markdown/` (docs/MARKDOWN-DESIGN.md) is a separate sibling package with its own tests:
+  `raco test rackmac-markdown` (no install needed; it also runs unlinked). Locally and in CI,
+  installing both is two steps: `raco pkg install --link ./rackmac-markdown` (its own package;
+  `commonmark-lib` is an optional build-only oracle dependency, network-fetched on demand) then
+  `raco pkg install --link .` for the app -- the two cannot be `--link`-installed together in one
+  command from this checkout, since `rackmac-markdown/` sits inside the app's own directory tree
+  and `raco pkg install --link` refuses overlapping linked directories; `racket main.rkt` needs
+  neither installed.
 - Every change adds or updates tests. Prefer behavior tests through the real registry and the real (hidden)
   window (`tests/window-test.rkt`, `tests/toolbar-test.rkt` show how: `make-main-frame` without `show`,
   drive controls with `command`, synthetic `key-event%`/`mouse-event%`, assert through hooks and state).
