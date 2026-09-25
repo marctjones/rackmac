@@ -56,11 +56,11 @@
    (for/list ([m (in-list (mode-chain name))])
      (filter values (list (hash-ref user-keymaps (mode-name m) #f) (mode-keymap m))))))
 
+;; The value from the most specific mode that sets `var`, even when that value is #f
+;; (a child of text-mode can turn wrapping off).
 (define (mode-local name var [default #f])
-  (or (for/or ([m (in-list (mode-chain name))])
-        (define p (assq var (mode-locals m)))
-        (and p (cdr p)))
-      default))
+  (define p (for/or ([m (in-list (mode-chain name))]) (assq var (mode-locals m))))
+  (if p (cdr p) default))
 
 (define (find-highlighter name)
   (for/or ([m (in-list (mode-chain name))]) (mode-highlighter m)))

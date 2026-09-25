@@ -5,10 +5,11 @@
 (require racket/class racket/gui/base racket/list racket/string
          "editor.rkt" "command.rkt" "keymap.rkt" "hook.rkt" "theme.rkt" "mode.rkt")
 (provide make-main-frame show-find-bar! hide-find-bar!
-         find! replace-current! replace-all! focus-editor! main-frame)
+         find! replace-current! replace-all! focus-editor! main-frame main-canvas set-find-options!)
 
 (define frame #f)
 (define (main-frame) frame)
+(define (main-canvas) canvas)
 (define menu-bar #f)
 (define tabs #f)
 (define canvas #f)
@@ -187,12 +188,20 @@
   (send find-field focus)
   (send (send find-field get-editor) select-all))
 
+;; Set what the find bar searches for without the UI (tests, and recorded actions later).
+(define (set-find-options! query #:replace [replacement #f] #:match-case? [case? #f])
+  (send find-field set-value query)
+  (when replacement (send replace-field set-value replacement))
+  (send case-box set-value case?))
+
 (define (hide-find-bar!)
   (send frame change-children (lambda (cs) (list tabs status-panel)))
   (focus-editor!))
 
+;; Returns the position where the match begins. text%'s get-start? flag means "the start in
+;; the search direction", which for a backward search is the match's END, so it is flipped.
 (define (search b s dir start)
-  (send b find-string s dir start (if (eq? dir 'forward) 'eof 0) #t (send case-box get-value)))
+  (send b find-string s dir start (if (eq? dir 'forward) 'eof 0) (eq? dir 'forward) (send case-box get-value)))
 
 (define (find! dir #:from-start? [from-start? #f])
   (define b (current-buffer))

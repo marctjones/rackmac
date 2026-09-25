@@ -90,7 +90,11 @@
            (define existing (hash-ref t (car ks) #f))
            (define sub (if (keymap? existing)
                            existing
-                           (let ([n (make-keymap)]) (hash-set! t (car ks) n) n)))
+                           (let ([n (make-keymap)])
+                             (hash-set! t (car ks) n)
+                             ;; turning a key (maybe bound to a command) into a prefix is undoable too
+                             (register-undo! 'key (lambda () (if existing (hash-set! t (car ks) existing) (hash-remove! t (car ks)))))
+                             n)))
            (loop sub (cdr ks))])))
 
 (define (make-keymap/pairs name pairs)
@@ -102,7 +106,10 @@
   (let loop ([km km] [ks (parse-key-sequence seq)])
     (define t (keymap-table km))
     (if (null? (cdr ks))
-        (hash-remove! t (car ks))
+        (let ([prev (hash-ref t (car ks) #f)])
+          (when prev
+            (hash-remove! t (car ks))
+            (register-undo! 'key (lambda () (hash-set! t (car ks) prev)))))
         (let ([sub (hash-ref t (car ks) #f)])
           (when (keymap? sub) (loop sub (cdr ks)))))))
 
@@ -114,14 +121,15 @@
 
 ;; Look up `ks` in `kms` (highest priority first).
 ;; Returns (values 'command name), (values 'prefix #f) or (values 'none #f).
+;; The first (highest-priority) layer that has anything for `ks` decides: a minor mode's
+;; chord prefix is not hidden by a single-key global binding for the same key.
 (define (lookup-key kms ks)
   (let/ec return
-    (define prefix? #f)
     (for ([km (in-list kms)])
       (define e (walk km ks))
       (cond [(symbol? e) (return 'command e)]
-            [(and (keymap? e) (positive? (hash-count (keymap-table e)))) (set! prefix? #t)]))
-    (if prefix? (values 'prefix #f) (values 'none #f))))
+            [(and (keymap? e) (positive? (hash-count (keymap-table e)))) (return 'prefix #f)]))
+    (values 'none #f)))
 
 ;; All bindings as (list key-sequence command), for help and menus.
 (define (keymap-bindings km)

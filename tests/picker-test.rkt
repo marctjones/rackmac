@@ -8,15 +8,22 @@
 (define (dialog) (for/first ([w (get-top-level-windows)] #:when (is-a? w dialog%)) w))
 (define (enter) (new key-event% [key-code #\return]))
 
+;; Polls until the modal dialog is actually up (no fixed delay), runs the script once, and
+;; has a watchdog so a regression fails instead of hanging.
 (define (run-pick script)
+  (define done? #f)
   (define step
-    (new timer% [notify-callback (lambda ()
-                                   (define d (dialog))
-                                   (when d (script d (first (send d get-children)) (second (send d get-children)))))]))
+    (new timer% [interval 30]
+         [notify-callback (lambda ()
+                            (define d (dialog))
+                            (when (and d (not done?) (send d is-shown?))
+                              (set! done? #t)
+                              (send step stop)
+                              (script d (first (send d get-children)) (second (send d get-children)))))]))
   (define watchdog (new timer% [notify-callback (lambda () (define d (dialog)) (when d (send d show #f)))]))
-  (send step start 250 #t)
-  (send watchdog start 4000 #t)
+  (send watchdog start 8000 #t)
   (begin0 (pick "Test" items #:detail-heading "Shortcut")
+          (send step stop)
           (send watchdog stop)))
 
 (test-case "typing filters, Enter chooses the top match"

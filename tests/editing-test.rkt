@@ -82,12 +82,23 @@
 
 ;; ---- key events ------------------------------------------------------------
 
+;; Synthetic key events. #:cmd and #:alt describe macOS (meta-down = Command, alt-down =
+;; Option). For Windows use `wkev`, which builds events the way racket/gui delivers them
+;; there: Alt arrives as meta-down, and AltGr as Ctrl+Alt with control+meta-is-altgr set.
 (define (kev code #:cmd [cmd #f] #:ctrl [ctrl #f] #:alt [alt #f] #:shift [shift #f]
              #:other-shift [os #f] #:altgr [ag #f])
   (define e (new key-event% [key-code code] [meta-down cmd] [control-down ctrl]
                  [alt-down alt] [shift-down shift]))
   (when os (send e set-other-shift-key-code os))
   (when ag (send e set-other-altgr-key-code ag))
+  e)
+
+(define (wkev code #:ctrl [ctrl #f] #:alt [alt #f] #:shift [shift #f] #:other-shift [os #f]
+              #:altgr-char? [altgr? #f])
+  (define e (new key-event% [key-code code] [control-down (or ctrl altgr?)]
+                 [meta-down (or alt altgr?)] [shift-down shift]))
+  (when altgr? (send e set-control+meta-is-altgr #t))
+  (when os (send e set-other-shift-key-code os))
   e)
 
 (test-case "event->key normalization (macOS)"
@@ -102,10 +113,21 @@
     (check-false (event->key (kev 'shift)) "bare modifiers are ignored")
     (check-equal? (event->key (kev 'prior)) (key 'pageup '()))))
 
-(test-case "event->key normalization (Windows)"
+(test-case "event->key normalization (Windows): Alt arrives as meta-down"
   (parameterize ([current-platform 'windows])
-    (check-equal? (event->key (kev #\z #:ctrl #t)) (key #\z '(ctrl)))
-    (check-equal? (event->key (kev #\| #:ctrl #t #:shift #t #:other-shift #\\)) (key #\\ '(ctrl shift)))))
+    (check-equal? (event->key (wkev #\z #:ctrl #t)) (key #\z '(ctrl)))
+    (check-equal? (event->key (wkev #\| #:ctrl #t #:shift #t #:other-shift #\\)) (key #\\ '(ctrl shift)))
+    (check-equal? (event->key (wkev 'up #:alt #t)) (key 'up '(alt)) "Alt+Up is Alt, not Cmd")
+    (check-equal? (event->key (wkev #\z #:alt #t)) (key #\z '(alt)))
+    (check-equal? (event->key (wkev #\x #:ctrl #t #:alt #t)) (key #\x '(ctrl alt)) "real Ctrl+Alt stays a chord")
+    (check-false (event->key (wkev #\@ #:altgr-char? #t)) "AltGr+q types @: not a shortcut")))
+
+(test-case "Windows Alt bindings dispatch (Alt+Down moves the line)"
+  (parameterize ([current-platform 'windows])
+    (define b (fresh! "one\ntwo" #:sel '(0 . 0)))
+    (keymap-bind! global-keymap "Alt-Down" 'move-line-down)
+    (check-true (dispatch-key-event b (wkev 'down #:alt #t)))
+    (check-equal? (text b) "two\none")))
 
 (test-case "dispatch: a bound key runs its command and is consumed"
   (parameterize ([current-platform 'mac])
@@ -118,7 +140,7 @@
   (parameterize ([current-platform 'windows])
     (define b (fresh! "one two" #:sel '(0 . 0)))
     (keymap-bind! global-keymap "Ctrl-Right" 'word-right)
-    (check-true (dispatch-key-event b (kev 'right #:ctrl #t #:shift #t)))
+    (check-true (dispatch-key-event b (wkev 'right #:ctrl #t #:shift #t)))
     (check-equal? (sel b) '(0 . 3))))
 
 (test-case "dispatch: plain typing is not consumed"
@@ -135,8 +157,10 @@
 (test-case "dispatch: unbound Ctrl/Alt combos are swallowed on Windows, AltGr passes"
   (parameterize ([current-platform 'windows])
     (define b (fresh! ""))
-    (check-true (dispatch-key-event b (kev #\j #:ctrl #t)))
-    (check-false (dispatch-key-event b (kev #\@ #:ctrl #t #:alt #t)) "AltGr+q types @")))
+    (check-true (dispatch-key-event b (wkev #\j #:ctrl #t)))
+    (check-true (dispatch-key-event b (wkev #\j #:alt #t)) "unbound Alt+J is swallowed too")
+    (check-false (dispatch-key-event b (wkev #\@ #:altgr-char? #t)) "AltGr+q types @")
+    (check-false (dispatch-key-event b (wkev #\{ #:altgr-char? #t)) "AltGr+7 types {")))
 
 (test-case "dispatch: chords wait for the second key and undefined chords are reported"
   (parameterize ([current-platform 'mac])
@@ -164,11 +188,11 @@
   (define-command (ct-minor-cmd) (send (current-buffer) insert "M"))
   (keymap-bind! (mode-user-keymap 'ct-minor) "Ctrl-F9" 'ct-minor-cmd)
   (parameterize ([current-platform 'windows])
-    (check-true (dispatch-key-event b (kev 'f9 #:ctrl #t)) "unbound: swallowed on Windows")
+    (check-true (dispatch-key-event b (wkev 'f9 #:ctrl #t)) "unbound: swallowed on Windows")
     (check-false (regexp-match? #rx"M" (text b)) "and the command did not run"))
   (send b enable-minor-mode! 'ct-minor)
   (parameterize ([current-platform 'windows])
-    (check-true (dispatch-key-event b (kev 'f9 #:ctrl #t)))
+    (check-true (dispatch-key-event b (wkev 'f9 #:ctrl #t)))
     (check-true (regexp-match? #rx"M" (text b)))))
 
 (test-case "mode change swaps locals and wrapping"

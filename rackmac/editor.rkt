@@ -3,7 +3,7 @@
 ;; Activity log (Emacs: *Messages*), plus small text helpers that user code can call.
 (require racket/class racket/list racket/string racket/path
          "buffer.rkt" "hook.rkt" "mode.rkt" "modes.rkt")
-(provide current-buffer set-current-buffer! all-buffers visible-buffers
+(provide current-buffer set-current-buffer! all-buffers visible-buffers messages-buffer?
          new-buffer! open-file! kill-buffer! find-buffer-by-path unique-name
          message messages-buffer show-messages!
          ui-parent set-ui-parent!
@@ -36,7 +36,7 @@
 
 (define (current-buffer)
   (unless current
-    (set! current (or (and (pair? buffers) (car buffers))
+    (set! current (or (let ([vs (visible-buffers)]) (and (pair? vs) (car vs)))
                       (let ([b (new-buffer! "Scratch Pad" #:mode 'racket-mode)])
                         (send b insert ";; Scratch Pad: a place to try Racket code.\n;; Select some code and press Mod-Enter to run it.\n\n")
                         (send b set-modified #f)
@@ -54,15 +54,29 @@
   (define p (simplify-path (path->complete-path path)))
   (or (find-buffer-by-path p)
       (let ([b (new-buffer! (let-values ([(base name dir?) (split-path p)]) (path->string name)))])
-        (when (file-exists? p) (send b load-path! p))
+        (cond [(file-exists? p)
+               (send b load-path! p)
+               (define note (send b local-ref 'file-note #f))
+               (when note (message "~a: ~a" (send b get-name) note))]
+              [else (send b set-mode! (or (mode-for-path p) 'text-mode))])   ; a new file still gets its Language
         (send b set-path! p)
         b)))
 
+;; Closing picks the nearest visible neighbour, never a hidden buffer. The Activity log is
+;; only hidden, never destroyed, so messages keep going somewhere.
 (define (kill-buffer! b)
-  (set! buffers (remq b buffers))
-  (when (eq? b current)
-    (set! current #f)
-    (set-current-buffer! (current-buffer)))     ; picks a neighbour or a fresh scratch
+  (cond
+    [(messages-buffer? b)
+     (send b set-shown! #f)
+     (when (eq? b current) (set! current #f) (set-current-buffer! (current-buffer)))]
+    [else
+     (define vs (visible-buffers))
+     (define i (or (index-of vs b) 0))
+     (define rest (remq b vs))
+     (set! buffers (remq b buffers))
+     (when (eq? b current)
+       (set! current (and (pair? rest) (list-ref rest (min i (sub1 (length rest))))))
+       (set-current-buffer! (current-buffer)))])       ; makes a Scratch Pad if none are left
   (run-hook 'buffers-changed))
 
 (define (unsaved-buffers)
@@ -71,6 +85,7 @@
 ;; ---- messages ------------------------------------------------------------
 
 (define messages #f)
+(define (messages-buffer? b) (and messages (eq? b messages)))
 (define (messages-buffer)
   (unless messages
     (set! messages (new-buffer! "Activity" #:shown? #f)))

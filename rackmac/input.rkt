@@ -21,10 +21,17 @@
     [(f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20) s]
     [else #f]))       ; 'release, bare modifiers, wheel events, ...: not ours
 
+;; How racket/gui reports modifiers (see the key-event% docs):
+;;   macOS:   meta-down = Command, alt-down = Option, control-down = Control.
+;;   Windows: meta-down = Alt (alt-down is never set), control-down = Ctrl; AltGr arrives
+;;            as Ctrl+Alt with get-control+meta-is-altgr true, and must type, not dispatch.
 (define (event->key ev)
   (define code (send ev get-key-code))
   (define shift? (send ev get-shift-down))
-  (define alt? (send ev get-alt-down))
+  (define ctrl? (send ev get-control-down))
+  (define alt? (if (mac?) (send ev get-alt-down) (or (send ev get-meta-down) (send ev get-alt-down))))
+  (define cmd? (and (mac?) (send ev get-meta-down)))
+  (define altgr? (and (not (mac?)) ctrl? alt? (send ev get-control+meta-is-altgr)))
   (define altgr-code (send ev get-other-altgr-key-code))
   (define shift-code (send ev get-other-shift-key-code))
   (define base
@@ -37,8 +44,9 @@
       [(symbol? code) (symbol-base code)]
       [else #f]))
   (and base
+       (not (and altgr? (char? code)))            ; AltGr+q = @ : let text% insert it
        (key base (for/list ([m '(ctrl alt shift cmd)]
-                            [down? (list (send ev get-control-down) alt? shift? (send ev get-meta-down))]
+                            [down? (list ctrl? alt? shift? cmd?)]
                             #:when down?)
                    m))))
 

@@ -3,7 +3,7 @@
 ;; name, file, major/minor modes and buffer-local variables. Keys are routed through
 ;; the keymap layers before text% sees them.
 (require racket/class racket/gui/base racket/string racket/list racket/file
-         "keymap.rkt" "mode.rkt" "hook.rkt" "input.rkt" "theme.rkt")
+         "keymap.rkt" "mode.rkt" "hook.rkt" "input.rkt" "theme.rkt" "fileio.rkt")
 (provide buffer%)
 
 (define buffer%
@@ -54,26 +54,29 @@
 
     ;; ---- files -----------------------------------------------------------
     (define/public (load-path! p)
-      (define raw (bytes->string/utf-8 (file->bytes p) #\uFFFD))
-      (define crlf? (regexp-match? #rx"\r\n" raw))
-      (local-set! 'eol (if crlf? "\r\n" "\n"))
+      (define-values (text enc eol note) (decode-file (file->bytes p)))
+      (local-set! 'encoding enc)
+      (local-set! 'eol eol)
+      (local-set! 'file-note note)
+      (send this lock #f)
       (send this set-max-undo-history 0)
       (send this begin-edit-sequence #f)
       (send this erase)
-      (send this insert (if crlf? (string-replace raw "\r\n" "\n") raw))
+      (send this insert text)
       (send this end-edit-sequence)
       (send this set-max-undo-history 'forever)
       (send this set-position 0)
-      (send this set-modified #f)
       (set! buf-path p)
       (define-values (base fname dir?) (split-path p))
       (set! buf-name (path->string fname))
       (set-mode! (or (mode-for-path p) 'text-mode))
+      (when (eq? enc 'binary) (send this lock #t))      ; never write a binary file back
       (send this set-modified #f))
+    ;; Encodes first, so an unsavable character aborts the save before anything is written;
+    ;; then writes through a temp file and a rename, so a failed save leaves the original.
     (define/public (save-to! p)
-      (define text (send this get-text))
-      (define out (if (equal? (local-ref 'eol "\n") "\r\n") (string-replace text "\n" "\r\n") text))
-      (display-to-file out p #:exists 'truncate/replace)
+      (define bs (encode-text (send this get-text) (local-ref 'encoding 'utf-8) (local-ref 'eol "\n")))
+      (safe-write-bytes! p bs)
       (set! buf-path p)
       (define-values (base fname dir?) (split-path p))
       (set! buf-name (path->string fname))
