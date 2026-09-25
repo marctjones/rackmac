@@ -7,11 +7,11 @@ redefinable core. See [DESIGN.md](DESIGN.md) for the full design; this file cove
 ## Run
 
     racket main.rkt [file ...]
-    raco test tests            # 61 tests
+    raco test tests            # 107 tests
 
 Needs Racket 9.x with the GUI libraries (the standard distribution).
 
-What is verified: the 61 automated tests (commands, keymaps, key-event normalization, the picker
+What is verified: the 107 automated tests (commands, keymaps, key-event normalization, the picker
 dialog driven by timers, startup, the extension loader), and a launch on macOS (Apple Silicon)
 that renders correctly. **What is not verified:** that real keystrokes in the live window reach the
 buffer and run commands (one attempt with synthetic OS-level keystrokes produced no dispatch, and the
@@ -75,13 +75,15 @@ plus `#:doc`, `#:keys`, `#:menu`. A command's symbol name never changes when its
   is checked against the API version (currently 1) at compile time as well.
 - **Public API only.** While an extension loads, `require` is limited to `rackmac/api`, `rackmac/lang/*`
   and ordinary Racket libraries. Requiring a private core module (`rackmac/editor`, `rackmac/commands`, ...)
-  is refused with an error naming the module.
+  is refused with an error naming the module, however the path is spelled (files are compared by identity).
+  This keeps the API the contract; it is *not* a security sandbox. Extension code runs with the editor's
+  full privileges, so only load extensions you trust.
 - **Quiet modules.** Module-level values are not printed (plain `#lang racket/base` would print them).
 - **Plain Racket works too.** `#lang racket/base` with `(require rackmac/api)` is loaded the same way;
   `#lang rackmac` adds the conveniences above.
 
-Known limits: `unbind-key!` is not undone on unload, live-evaluated code (`Mod-Enter`) is not tracked
-as an extension, and the API restriction applies at load time only.
+Known limits: live-evaluated code (`Mod-Enter`) is not tracked as an extension, and the API restriction
+applies to `require` at load time, not to code that runs later.
 
 ## Glossary: Emacs terms
 

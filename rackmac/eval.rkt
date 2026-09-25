@@ -40,7 +40,12 @@
   (unless ns (set! ns (make-editor-namespace)))
   ns)
 
-;; Evaluate every form in `str`; return the printed output plus non-void results.
+;; Evaluate `str` in the editor namespace; return the printed output plus non-void results.
+;; Text that starts with #lang (a whole module, e.g. the init file) is declared as a module
+;; under a fresh name and instantiated; anything else is evaluated form by form.
+(define run-counter 0)
+(define (lang-text? str) (regexp-match? #px"^(?:\\s|;[^\n]*\n)*#lang " str))
+
 (define (eval-string str)
   (define out (open-output-string))
   (define vals
@@ -48,11 +53,20 @@
                    [current-output-port out]
                    [current-error-port out])
       (define in (open-input-string str))
-      (let loop ([acc '()])
-        (define form (read in))
-        (if (eof-object? form)
-            (reverse acc)
-            (loop (append (reverse (call-with-values (lambda () (eval form)) list)) acc))))))
+      (cond
+        [(lang-text? str)
+         (set! run-counter (add1 run-counter))
+         (define name (make-resolved-module-path (string->symbol (format "rackmac-run-~a" run-counter))))
+         (define form (parameterize ([read-accept-reader #t] [read-accept-lang #t]) (read-syntax 'run in)))
+         (parameterize ([current-module-declare-name name]) (eval form))
+         (dynamic-require name #f)
+         '()]
+        [else
+         (let loop ([acc '()])
+           (define form (read in))
+           (if (eof-object? form)
+               (reverse acc)
+               (loop (append (reverse (call-with-values (lambda () (eval form)) list)) acc))))])))
   (string-join
    (filter (lambda (s) (not (string=? s "")))
            (cons (get-output-string out)
@@ -60,37 +74,50 @@
    "\n"))
 
 ;; ---- restricting what extensions may require -------------------------------
+;; This is hygiene, not a sandbox: it stops an extension from *requiring* private core
+;; modules (so the API stays the contract), but extension code runs with the editor's full
+;; privileges, and `eval-string` (Run Selection) is not restricted at all.
+;;
+;; Files are compared by identity (device + inode), not by path text, so a different
+;; spelling, letter case or symlink of the same file is still recognised.
 
-(define rackmac-dir (path->string (path->directory-path here)))
+(define (core-files)
+  (for/list ([p (in-directory here)] #:when (regexp-match? #rx"[.]rkt$" (path->string p))) p))
 
-(define (inside-rackmac? p)
-  (and (path? p) (string-prefix? (path->string p) rackmac-dir)))
+(define (identity p) (with-handlers ([exn:fail? (lambda (e) #f)]) (file-or-directory-identity p)))
 
-;; Public = the API facade and the module language; everything else in the core is private.
-(define (private-core-module? p)
-  (and (inside-rackmac? p)
-       (file-exists? p)                 ; the resolver also probes names that do not exist
+(define-values (core-ids public-ids)
+  (let ([public (list* (build-path here "api.rkt")
+                       (for/list ([p (in-directory (build-path here "lang"))]) p))])
+    (values (for/hash ([p (core-files)]) (values (identity p) #t))
+            (for/hash ([p public]) (values (identity p) #t)))))
 
-       (let ([rel (substring (path->string p) (string-length rackmac-dir))])
-         (not (or (equal? rel "api.rkt") (string-prefix? rel "lang/"))))))
+(define (core-module? p) (and (path? p) (hash-ref core-ids (identity p) #f)))
+(define (private-core-module? p) (and (core-module? p) (not (hash-ref public-ids (identity p) #f))))
 
 (define (module-name->path r)
   (define n (and (resolved-module-path? r) (resolved-module-path-name r)))
   (if (pair? n) (car n) n))       ; (list path 'submodule)
 
+;; The core file's own name (e.g. "editor.rkt"), however the requirement spelled it.
+(define core-names (for/hash ([p (core-files)]) (values (identity p) (path->string (find-relative-path here p)))))
+(define (core-relative p) (hash-ref core-names (identity p) (lambda () (path->string p))))
+
 ;; Wraps the module name resolver: a requirement that reaches a private core module from
-;; OUTSIDE the core (i.e. from an extension) is an error. Requirements that core modules
-;; make of each other, including those introduced by macros from the public API, are fine.
+;; OUTSIDE the core (i.e. from an extension) is an error, raised before the module is
+;; loaded. Requirements core modules make of each other, including those introduced by
+;; macros from the public API, are fine.
 (define (restrict-to-public-api orig)
-  (lambda args
-    (define r (apply orig args))
-    (when (>= (length args) 3)
-      (define target (module-name->path r))
-      (define from (module-name->path (cadr args)))
-      (when (and (private-core-module? target) (not (inside-rackmac? from)))
-        (error 'require "extensions may only use rackmac/api, not the private core module ~a"
-               (substring (path->string target) (string-length rackmac-dir)))))
-    r))
+  (case-lambda
+    [(r ns) (orig r ns)]                                     ; notification form: pass through
+    [(mp rel stx load?)
+     (define resolved (orig mp rel stx #f))                  ; resolve only; do not load yet
+     (define target (module-name->path resolved))
+     (define from (module-name->path rel))
+     (when (and (private-core-module? target) (not (core-module? from)))
+       (error 'require "extensions may only use rackmac/api, not the private core module ~a"
+              (core-relative target)))
+     (if load? (orig mp rel stx #t) resolved)]))
 
 ;; ---- extensions ----------------------------------------------------------
 

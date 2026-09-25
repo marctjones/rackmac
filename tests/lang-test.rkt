@@ -167,3 +167,29 @@
   (check-true (command-enabled? c))
   (clean!) (reload!)
   (check-false (find-command 'lt-meta) "and it unloads with the extension"))
+
+(test-case "the API check is not fooled by path spelling (case, .., symlink)"
+  (define editor-path (build-path root "rackmac" "editor.rkt"))
+  (define upper (string-upcase (path->string (simplify-path editor-path))))   ; macOS: case-insensitive FS
+  (define dotted (path->string (build-path root "rackmac" "lang" 'up "editor.rkt")))
+  (define link (build-path dir "sneaky-link.rkt"))
+  (when (link-exists? link) (delete-file link))
+  (make-file-or-directory-link (simplify-path editor-path) link)
+  (for ([spelling (list upper dotted (path->string link))])
+    (clean!)
+    (write-init! "#lang racket/base\n(require (file \"" spelling "\"))\n(define lt-evil 1)\n")
+    (when (or (not (equal? spelling upper)) (file-exists? upper))    ; skip the case test on case-sensitive disks
+      (check-regexp-match #rx"private core module editor.rkt" (reload!) spelling))))
+
+(test-case "a raising #:when is reported, and the command stays enabled"
+  (define reported #f)
+  (define-command (lt-bad-when) #:when (lambda () (error "when broke")) (void))
+  (parameterize ([error-reporter (lambda (who e) (set! reported who))])
+    (check-true (command-enabled? (find-command 'lt-bad-when))))
+  (check-eq? reported 'lt-bad-when))
+
+(test-case "Run Document works on a #lang file (the init file, for example)"
+  (check-equal? (eval-string "#lang racket/base\n(displayln \"hello from a module\")\n") "hello from a module\n")
+  (check-equal? (eval-string ";; comment first\n#lang racket/base\n(display 7)") "7")
+  (check-equal? (eval-string "#lang racket/base\n(display 1)") "1" "runs again under a fresh name")
+  (check-equal? (eval-string "(+ 40 2)") "42" "plain forms still work"))

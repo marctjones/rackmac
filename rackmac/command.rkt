@@ -128,10 +128,13 @@
   (note-recent! name)
   (run-hook 'after-command name))
 
-;; Does the command apply right now? A failing predicate counts as enabled.
+;; Does the command apply right now? A predicate that raises is reported (Activity log)
+;; and counts as enabled, so a buggy extension cannot hide a command.
 (define (command-enabled? c)
   (define w (command-when c))
-  (or (not w) (with-handlers ([exn:fail? (lambda (e) #t)]) (and (w) #t))))
+  (or (not w)
+      (with-handlers ([exn:fail? (lambda (e) (report-error! (command-name c) e) #t)])
+        (and (w) #t))))
 
 ;; Extra fields the palette matches besides the title: the internal name and the aliases.
 (define (command-search-fields c) (cons (symbol->string (command-name c)) (command-aliases c)))

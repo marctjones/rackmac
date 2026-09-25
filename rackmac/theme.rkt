@@ -12,7 +12,7 @@
 
 (define (mac-dark-mode?)
   ;; `AppleInterfaceStyle` is "Dark" in dark mode and absent in light mode.
-  (with-handlers ([void (lambda (e) #f)])
+  (with-handlers ([exn:fail? (lambda (e) #f)])        ; no `defaults` command: assume light
     (regexp-match? #rx"^Dark"
                    (with-output-to-string
                      (lambda () (parameterize ([current-error-port (open-output-nowhere)])
