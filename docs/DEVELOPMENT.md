@@ -7,9 +7,11 @@ Rules for anyone (person or agent) changing this repository.
 - **Modern shortcuts only.** Defaults follow macOS, Windows, Microsoft Office and Chrome conventions.
   No Emacs-style key sequences in the defaults; `tests/shortcuts-test.rkt` enforces this. Emacs keys belong
   only to the optional v0.7 preset.
-- **Office vocabulary in the UI.** "Document/Tab", "Language", "Activity log", never "buffer", "major mode",
-  `*starred*` names. Emacs names go in `#:aliases` so the palette still finds them. Never rename a command's
-  symbol; `tests/vocab-test.rkt` pins them (add new names there).
+- **A native app, not Emacs.** macOS and Windows users must never meet Emacs: no Emacs command names in
+  `#:aliases`, help text, titles, menus or dialogs, and no Emacs vocabulary ("buffer", "major mode", "kill",
+  "yank", `*starred*` names). Use office words ("Document/Tab", "Language", "Activity log", "Cut", "Paste").
+  Emacs names and keys arrive only with the opt-in v0.7 preset (epic E13). Never rename a command's symbol;
+  `tests/vocab-test.rkt` pins them (add new names there).
 - **Native controls, modern layout.** Follow `docs/UI-DESIGN.md`. Colors come from `rackmac/ui/tokens.rkt`
   (roles, light and dark); spacing from `rackmac/ui/layout.rkt`; icons from `rackmac/ui/icons.rkt`.
 - **macOS first.** Releases target macOS. Keep Windows code paths compiling and their tests passing, but
@@ -20,7 +22,7 @@ Rules for anyone (person or agent) changing this repository.
 
 - Match the surrounding style: short modules, a header comment saying what the module is for, comments
   only where they explain *why*.
-- Commands: `define-command` with `#:title`, `#:aliases` (include the Emacs name if there is one), `#:help`
+- Commands: `define-command` with `#:title`, `#:aliases` (plain words people might type), `#:help`
   (one plain sentence ending in a period), `#:icon` if it appears in a menu, `#:menu`/`#:menu-order`, and keys
   per platform (`#:keys`, `#:keys/mac`, `#:keys/windows`). `#:when` for "does it apply right now".
 - Anything a user or an extension can register (commands, keys, hooks, modes, toolbar items, context items,
