@@ -103,7 +103,7 @@ document can be switched between a **Formatted view and a Markdown Source view**
 
 | Key | Title | Size | Acceptance | Depends |
 |---|---|---|---|---|
-| `default-no-emacs` | Remove from the default product: Help > Glossary: Emacs Terms, the palette footer "Emacs: …" line, "Emacs-style" in About; the glossary command and footer return only with the v0.8 preset (data stays in `glossary.rkt`) | S | `vocab-test` extended: no visible string contains "Emacs" outside E13 code | — |
+| `default-no-emacs` | Remove from the default product: Help > Glossary: Emacs Terms, the palette footer "Emacs: …" line, "Emacs-style" in About; the glossary command and footer return only with the v0.8 preset (done: data moved to `rackmac/presets/emacs-names.rktd` and `docs/emacs-glossary.md`) | S | `vocab-test` extended: no visible string contains "Emacs" outside E13 code | — |
 | `run-code-only` (absorbs #101) | Run Selection/Run Document bound in code Languages' keymaps only (⌘↩ free in prose), Tools menu items `#:when` code; Scratch Pad no longer the fallback document (empty state is the start screen) and is reachable from Tools > Scratch Pad; Toggle Comment, Indent/Outdent Lines `#:when` code (Tab in prose goes to `md-lists-enter`) | S | opening the app with no files shows the start screen, not Racket; ⌘↩ in a note does nothing; tests | `start-view` |
 | `menu-tools` | Menus: **Format** (prose), **Tools** holds Run, Scratch Pad, Extensions (Customize with Code, Reload, List) ; ⌘, goes to Settings… | S | menu snapshot test; cheat sheet regenerates | `settings-dialog-min` |
 
