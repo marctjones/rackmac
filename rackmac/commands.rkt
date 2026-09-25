@@ -70,6 +70,7 @@
     (confirm-close-buffer? b)))
 
 (define-command (new-buffer)
+  #:icon "new"
   #:aliases ("new document" "new file" "create buffer" "new tab")
   #:help "Start a new empty document in a new tab."
   #:title "New Document" #:menu "File" #:menu-order 10 #:keys ("Mod-n" "Mod-t")
@@ -77,6 +78,7 @@
   (set-current-buffer! (new-buffer! "untitled")))
 
 (define-command (open-file)
+  #:icon "open"
   #:aliases ("find-file" "open document" "visit file" "open file")
   #:help "Choose a file on your computer to open in a tab."
   #:title "Open…" #:menu "File" #:menu-order 11 #:keys ("Mod-o")
@@ -99,6 +101,7 @@
 (define skipped-dirs '(".git" "node_modules" "compiled" ".svn" ".hg" "__pycache__"))
 
 (define-command (quick-open)
+  #:icon "search"
   #:aliases ("find file in project" "projectile" "fuzzy open" "go to file")
   #:help "Type part of a file name to open it from the current project."
   #:title "Quick Open…" #:menu "File" #:menu-order 12 #:keys ("Mod-Shift-o")
@@ -119,6 +122,7 @@
      (when choice (set-current-buffer! (open-file! (build-path root choice))))]))
 
 (define-command (save)
+  #:icon "save"
   #:aliases ("save-buffer" "write file" "save document")
   #:help "Save the document to its file (asks for a name the first time)."
   #:title "Save" #:menu "File" #:menu-order 20 #:keys ("Mod-s")
@@ -126,12 +130,14 @@
   (save-buffer! (t)))
 
 (define-command (save-as)
+  #:icon "save-as"
   #:aliases ("write-file" "save a copy" "rename file")
   #:help "Save the document under a new name or location."
   #:title "Save As…" #:menu "File" #:menu-order 21 #:keys ("Mod-Shift-s") #:keys/windows ("F12")
   (save-buffer-as! (t)))
 
 (define-command (close-buffer)
+  #:icon "close"
   #:aliases ("kill-buffer" "close document" "close file")
   #:help "Close this tab, asking to save unsaved changes first."
   #:title "Close Tab" #:menu "File" #:menu-order 22 #:keys ("Mod-w") #:keys/windows ("Ctrl-F4")
@@ -145,6 +151,7 @@
   (set-current-buffer! (list-ref bs (modulo (+ i delta) (length bs)))))
 
 (define-command (next-buffer)
+  #:icon "chevron-right"
   #:aliases ("next-buffer" "switch tab" "other-buffer" "next document")
   #:help "Switch to the next tab."
   #:title "Next Tab" #:menu "File" #:menu-order 30
@@ -152,6 +159,7 @@
   (cycle-buffer 1))
 
 (define-command (previous-buffer)
+  #:icon "chevron-left"
   #:aliases ("previous-buffer" "prev tab" "previous document")
   #:help "Switch to the previous tab."
   #:title "Previous Tab" #:menu "File" #:menu-order 31
@@ -167,6 +175,7 @@
                                 "Reload" "Cancel" #f (ui-parent) '(caution default=2) 2)))))
 
 (define-command (reload-from-disk)
+  #:icon "history"
   #:aliases ("revert-buffer" "revert" "reload file" "discard changes")
   #:help "Read the document again from its file, discarding unsaved changes."
   #:title "Reload from Disk" #:menu "File" #:menu-order 24
@@ -178,6 +187,7 @@
     [else (reload-buffer! b) (message "Reloaded ~a" (send b get-name))]))
 
 (define-command (save-all)
+  #:icon "save"
   #:aliases ("save-some-buffers" "save everything")
   #:help "Save every open document that has unsaved changes."
   #:title "Save All" #:menu "File" #:menu-order 26 #:keys/mac ("Mod-Alt-s")
@@ -186,6 +196,7 @@
   (message (if (null? bs) "Nothing to save." (format "Saved ~a of ~a document~a." saved (length bs) (if (= 1 (length bs)) "" "s")))))
 
 (define-command (reopen-closed-tab)
+  #:icon "history"
   #:aliases ("undo close tab" "restore tab" "reopen tab")
   #:help "Open the tab you closed most recently again."
   #:title "Reopen Closed Tab" #:menu "File" #:menu-order 23 #:keys ("Mod-Shift-t")
@@ -205,6 +216,7 @@
                      #:keys (list (format "Mod-~a" n))))
 
 (define-command (print-document)
+  #:icon "print"
   #:aliases ("print" "print-buffer" "printout")
   #:help "Print the document."
   #:title "Print…" #:menu "File" #:menu-order 25 #:keys ("Mod-p")
@@ -236,6 +248,7 @@ TEMPLATE
   )
 
 (define-command (open-init-file)
+  #:icon "settings"
   #:aliases ("init file" "init.el" "open init file" "config" "settings file" "customize")
   #:help "Open the file that customizes Rackmac with Racket code."
   #:title "Customize with Code" #:menu "File" #:menu-order 40 #:keys ("Mod-,")
@@ -247,12 +260,14 @@ TEMPLATE
   (set-current-buffer! (open-file! p)))
 
 (define-command (reload-init)
+  #:icon "extensions"
   #:aliases ("reload init" "reload init file" "load-file init" "reload config")
   #:help "Run your customization files again, replacing what they registered before."
   #:title "Reload Extensions" #:menu "File" #:menu-order 41
   (load-init!))
 
 (define-command (list-extensions)
+  #:icon "extensions"
   #:aliases ("list packages" "installed extensions" "add-ons" "list-packages")
   #:help "Show which customization files are loaded and what each one added."
   #:title "List Extensions" #:menu "Help" #:menu-order 13
@@ -281,6 +296,7 @@ TEMPLATE
         "\n"))))
 
 (define-command (quit)
+  #:icon "x"
   #:aliases ("exit" "kill-emacs" "close app" "quit application")
   #:help "Close Rackmac, asking to save unsaved changes first."
   #:title "Quit" #:menu "File" #:menu-order 50 #:keys/mac ("Mod-q") #:keys/windows ("Alt-F4")
@@ -289,12 +305,14 @@ TEMPLATE
 ;; ---- editing -------------------------------------------------------------
 
 (define-command (undo)
+  #:icon "undo"
   #:aliases ("undo-tree" "history" "revert change")
   #:help "Undo the last change."
   #:title "Undo" #:menu "Edit" #:menu-order 10 #:keys ("Mod-z")
   (send (t) undo))
 
 (define-command (redo)
+  #:icon "redo"
   #:aliases ("undo-redo" "redo change")
   #:help "Redo a change you undid."
   #:title "Redo" #:menu "Edit" #:menu-order 11
@@ -302,26 +320,31 @@ TEMPLATE
   (send (t) redo))
 
 (define-command (cut)
+  #:icon "cut"
   #:aliases ("kill-region" "kill" "cut selection")
   #:help "Remove the selected text and put it on the clipboard."
   #:title "Cut" #:menu "Edit" #:menu-order 20 #:keys ("Mod-x")
   (send (t) cut))
 (define-command (copy)
+  #:icon "copy"
   #:aliases ("kill-ring-save" "copy selection")
   #:help "Copy the selected text to the clipboard."
   #:title "Copy" #:menu "Edit" #:menu-order 21 #:keys ("Mod-c")
   (send (t) copy))
 (define-command (paste)
+  #:icon "paste"
   #:aliases ("yank" "paste clipboard")
   #:help "Insert the clipboard contents at the cursor."
   #:title "Paste" #:menu "Edit" #:menu-order 22 #:keys ("Mod-v")
   (send (t) paste))
 (define-command (select-all)
+  #:icon "select-all"
   #:aliases ("mark-whole-buffer" "select everything")
   #:help "Select the whole document."
   #:title "Select All" #:menu "Edit" #:menu-order 23 #:keys ("Mod-a")
   (send (t) set-position 0 (send (t) last-position)))
 (define-command (select-line)
+  #:icon "select-all"
   #:aliases ("mark line" "select current line")
   #:help "Select the current line."
   #:title "Select Line" #:menu "Edit" #:menu-order 24 #:keys ("Mod-l")
@@ -331,22 +354,26 @@ TEMPLATE
         (min (send b last-position) (add1 (send b paragraph-end-position p2)))))
 
 (define-command (find)
+  #:icon "find"
   #:aliases ("isearch-forward" "search" "find in document")
   #:help "Search for text in this document."
   #:title "Find…" #:menu "Edit" #:menu-order 30 #:keys ("Mod-f")
   (show-find-bar! #f))
 (define-command (replace)
+  #:icon "replace"
   #:aliases ("query-replace" "replace-string" "find and replace" "substitute")
   #:help "Find text and replace it with something else."
   #:title "Find and Replace…" #:menu "Edit" #:menu-order 31
   #:keys/mac ("Mod-Alt-f") #:keys/windows ("Ctrl-h")
   (show-find-bar! #t))
 (define-command (find-next)
+  #:icon "arrow-down"
   #:aliases ("isearch-repeat-forward" "next match" "search again")
   #:help "Jump to the next match."
   #:title "Find Next" #:menu "Edit" #:menu-order 32 #:keys/mac ("Mod-g") #:keys/windows ("F3")
   (find! 'forward))
 (define-command (find-previous)
+  #:icon "arrow-up"
   #:aliases ("isearch-repeat-backward" "previous match")
   #:help "Jump to the previous match."
   #:title "Find Previous" #:menu "Edit" #:menu-order 33
@@ -354,6 +381,7 @@ TEMPLATE
   (find! 'backward))
 
 (define-command (goto-line)
+  #:icon "goto"
   #:aliases ("goto-line" "jump to line" "line number")
   #:help "Move the cursor to a line number."
   #:title "Go to Line…" #:menu "Edit" #:menu-order 34 #:keys ("Ctrl-g")
@@ -365,6 +393,7 @@ TEMPLATE
 ;; Lines --------------------------------------------------------------------
 
 (define-command (toggle-comment)
+  #:icon "comment"
   #:aliases ("comment-dwim" "comment-region" "uncomment")
   #:help "Turn the selected lines into comments, or back into code."
   #:title "Toggle Comment" #:menu "Edit" #:menu-order 40 #:keys ("Mod-/")
@@ -400,6 +429,7 @@ TEMPLATE
            [else (send b insert (string-append cs " ") (+ start indent))])))]))
 
 (define-command (duplicate-line)
+  #:icon "duplicate"
   #:aliases ("copy line" "duplicate")
   #:help "Copy the current line (or the selected lines) just below."
   #:title "Duplicate Line" #:menu "Edit" #:menu-order 41 #:keys ("Mod-Shift-d")
@@ -412,6 +442,7 @@ TEMPLATE
   (send b set-position (+ e 1)))
 
 (define-command (delete-line)
+  #:icon "delete-line"
   #:aliases ("kill-whole-line" "kill line" "remove line")
   #:help "Delete the current line (or the selected lines)."
   #:title "Delete Line" #:menu "Edit" #:menu-order 42 #:keys ("Mod-Shift-k")
@@ -453,11 +484,13 @@ TEMPLATE
      (send b set-position (- s shift) (- e shift))]))
 
 (define-command (move-line-up)
+  #:icon "arrow-up"
   #:aliases ("transpose-lines" "swap line up")
   #:help "Move the current line up by one."
   #:title "Move Line Up" #:menu "Edit" #:menu-order 43 #:keys ("Alt-Up")
   (move-lines! -1))
 (define-command (move-line-down)
+  #:icon "arrow-down"
   #:aliases ("transpose-lines" "swap line down")
   #:help "Move the current line down by one."
   #:title "Move Line Down" #:menu "Edit" #:menu-order 44 #:keys ("Alt-Down")
@@ -485,12 +518,14 @@ TEMPLATE
         (send b insert (indent-string b) (send b paragraph-start-position p))))))
 
 (define-command (indent-lines)
+  #:icon "indent"
   #:aliases ("indent-rigidly" "indent region")
   #:help "Indent the selected lines."
   #:title "Indent Lines" #:menu "Edit" #:menu-order 45 #:keys ("Mod-]")
   (indent-selected-lines!))
 
 (define-command (outdent-lines)
+  #:icon "outdent"
   #:aliases ("unindent" "dedent")
   #:help "Remove one level of indent from the selected lines."
   #:title "Outdent Lines" #:menu "Edit" #:menu-order 46 #:keys ("Mod-[" "Shift-Tab")
@@ -595,22 +630,26 @@ TEMPLATE
   (run-hook 'theme-changed))
 
 (define-command (zoom-in)
+  #:icon "zoom-in"
   #:aliases ("text-scale-increase" "bigger text" "increase font size")
   #:help "Make the text bigger."
   #:title "Zoom In" #:menu "View" #:menu-order 10 #:keys ("Mod-=" "Mod-Shift-=")
   (set-font-size! (add1 font-size)) (run-hook 'theme-changed))
 (define-command (zoom-out)
+  #:icon "zoom-out"
   #:aliases ("text-scale-decrease" "smaller text" "decrease font size")
   #:help "Make the text smaller."
   #:title "Zoom Out" #:menu "View" #:menu-order 11 #:keys ("Mod--")
   (set-font-size! (sub1 font-size)) (run-hook 'theme-changed))
 (define-command (zoom-reset)
+  #:icon "zoom-reset"
   #:aliases ("text-scale-adjust" "reset zoom" "default font size")
   #:help "Return the text to its normal size."
   #:title "Actual Size" #:menu "View" #:menu-order 12 #:keys ("Mod-0")
   (set-font-size! (if (mac?) 14 12)) (run-hook 'theme-changed))
 
 (define-command (toggle-word-wrap)
+  #:icon "wrap"
   #:aliases ("visual-line-mode" "truncate-lines" "line wrap")
   #:help "Wrap long lines to fit the window, or let them run off the edge."
   #:title "Toggle Word Wrap" #:menu "View" #:menu-order 20 #:keys/windows ("Alt-z")
@@ -618,6 +657,7 @@ TEMPLATE
   (send b auto-wrap (not (send b auto-wrap))))
 
 (define-command (toggle-full-screen)
+  #:icon "maximize"
   #:aliases ("fullscreen" "toggle-frame-fullscreen" "maximize")
   #:help "Fill the whole screen with the window, or return to normal."
   #:title "Toggle Full Screen" #:menu "View" #:menu-order 22
@@ -626,12 +666,14 @@ TEMPLATE
   (when f (send f fullscreen (not (send f is-fullscreened?)))))
 
 (define-command (toggle-theme)
+  #:icon "theme"
   #:aliases ("load-theme" "dark mode" "light mode" "appearance")
   #:help "Switch between the dark and light color themes."
   #:title "Toggle Dark/Light Theme" #:menu "View" #:menu-order 21
   (toggle-theme!) (restyle!))
 
 (define-command (show-messages)
+  #:icon "activity"
   #:aliases ("view-echo-area-messages" "messages" "*Messages*" "show messages" "log" "errors")
   #:help "Open the log of messages and errors."
   #:title "Show Activity Log" #:menu "View" #:menu-order 30
@@ -650,6 +692,7 @@ TEMPLATE
   (map caddr (fuzzy-filter* q (palette-items) pick-item-fields)))
 
 (define-command (command-palette)
+  #:icon "palette"
   #:aliases ("M-x" "execute-extended-command" "run command" "search commands")
   #:help "Search every command by name and run it."
   #:title "Command Palette…" #:menu "View" #:menu-order 40 #:keys ("Mod-Shift-p") #:keys/windows ("Alt-q")
@@ -659,6 +702,7 @@ TEMPLATE
   (when choice (run-command/safe choice)))
 
 (define-command (set-major-mode)
+  #:icon "language"
   #:aliases ("major mode" "set-major-mode" "language mode" "change language" "syntax")
   #:help "Choose what kind of document this is, for coloring and shortcuts."
   #:title "Set Language…" #:menu "View" #:menu-order 41
@@ -674,6 +718,7 @@ TEMPLATE
   (line-text b (send b position-paragraph (send b get-start-position))))
 
 (define-command (eval-selection)
+  #:icon "run"
   #:aliases ("eval-region" "evaluate selection" "evaluate" "eval-last-sexp" "run code")
   #:help "Run the selected Racket code, or the current line."
   #:title "Run Selection" #:menu "Tools" #:menu-order 10 #:keys ("Mod-Enter")
@@ -684,6 +729,7 @@ TEMPLATE
   (message "~a" (if (string=? r "") "(no output)" r)))
 
 (define-command (eval-buffer)
+  #:icon "run-all"
   #:aliases ("eval-buffer" "evaluate buffer" "evaluate document" "run file")
   #:help "Run the whole document as Racket code."
   #:title "Run Document" #:menu "Tools" #:menu-order 11 #:keys ("Mod-Shift-Enter")
@@ -705,6 +751,7 @@ TEMPLATE
   (set-current-buffer! b))
 
 (define-command (describe-key)
+  #:icon "keyboard"
   #:aliases ("describe-key" "help key" "which command is this key")
   #:help "Press a key to see which command it runs."
   #:title "What Does This Key Do?" #:menu "Help" #:menu-order 10
@@ -712,6 +759,7 @@ TEMPLATE
   (request-describe-key!))
 
 (define-command (list-keybindings)
+  #:icon "keyboard"
   #:aliases ("describe-bindings" "list keybindings" "keybindings" "shortcuts" "key map" "cheat sheet")
   #:help "List every shortcut."
   #:keys/windows ("F1") #:title "Keyboard Shortcuts" #:menu "Help" #:menu-order 11
@@ -741,6 +789,7 @@ TEMPLATE
    (if (string=? (command-doc c) "") "" (string-append "\n" (command-doc c) "\n"))))
 
 (define-command (describe-command)
+  #:icon "help"
   #:aliases ("describe-function" "describe command" "explain command" "help command" "apropos")
   #:help "Read what a command does."
   #:title "Explain a Command…" #:menu "Help" #:menu-order 12
@@ -748,12 +797,14 @@ TEMPLATE
   (when choice (show-text-buffer! "Help" (command-description choice))))
 
 (define-command (show-glossary)
+  #:icon "book"
   #:aliases ("glossary" "emacs terms" "vocabulary" "what is a buffer")
   #:help "Show what Rackmac calls each Emacs term."
   #:title "Glossary: Emacs Terms" #:menu "Help" #:menu-order 14
   (show-text-buffer! "Glossary" (glossary-text)))
 
 (define-command (about)
+  #:icon "info"
   #:aliases ("about-emacs" "version")
   #:help "Show information about Rackmac."
   #:title "About Rackmac" #:menu "Help" #:menu-order 20
