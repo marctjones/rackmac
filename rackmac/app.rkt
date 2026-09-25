@@ -1,0 +1,26 @@
+#lang racket/base
+;; Application startup.
+(require racket/class racket/gui/base
+         "commands.rkt" "command.rkt" "editor.rkt" "frame.rkt" "eval.rkt" "theme.rkt" "hook.rkt")
+(provide main)
+
+;; The system appearance is only reliable once the app is up.
+(define (refresh-system-theme!)
+  (unless (getenv "RACKMAC_THEME")
+    (define detected (detect-theme))
+    (unless (eq? detected current-theme-name)
+      (set-theme! detected)
+      (for ([b (in-list (all-buffers))]) (send b rehighlight!))
+      (run-hook 'theme-changed))))
+
+(define (main args)
+  ;; Cmd+Q on macOS and Finder "Open With" arrive through these handlers.
+  (application-quit-handler (lambda () (run-command/safe 'quit)))
+  (application-file-handler (lambda (p) (set-current-buffer! (open-file! p))))
+  (for ([a (in-list args)]) (set-current-buffer! (open-file! a)))
+  (define f (make-main-frame))
+  (load-init!)
+  (send f show #t)
+  (focus-editor!)                    ; focus set while the window was hidden does not stick
+  (refresh-system-theme!)
+  (yield 'wait))

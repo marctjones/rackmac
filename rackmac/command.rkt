@@ -1,0 +1,146 @@
+#lang racket/base
+;; The command registry: the spine of the editor. Menus, the palette, keymaps and
+;; help all read from it. Pure (no GUI).
+(require (for-syntax racket/base syntax/parse "keymap.rkt")
+         racket/list racket/string
+         "keymap.rkt" "hook.rkt" "platform.rkt" "owner.rkt")
+(provide (struct-out command) define-command register-command!
+         find-command all-commands run-command run-command/safe
+         default-title command-shortcut extending-selection?
+         command-enabled? command-search-text command-search-fields recent-commands)
+
+;; title is the name users see; name is the stable symbol used by keymaps and scripts.
+;; aliases are extra search terms (including the Emacs name); help is one plain sentence;
+;; icon names a toolbar/menu icon; when is a thunk saying whether the command applies now.
+;; menu is a string ("File") or #f; menu-order groups items (a new tens digit adds a separator).
+(struct command (name title doc category menu menu-order proc aliases help icon when))
+
+(define registry (make-hasheq))
+(define definition-order (make-hasheq))
+(define counter 0)
+
+;; Set by the key dispatcher when Shift was held on a motion key and the unshifted
+;; binding is a command that can extend the selection (e.g. Shift+Alt+Left).
+(define extending-selection? (make-parameter #f))
+
+(define (default-title name)
+  (string-titlecase (string-replace (symbol->string name) "-" " ")))
+
+(define (register-command! name proc
+                           #:title [title (default-title name)]
+                           #:doc [doc ""]
+                           #:category [category #f]
+                           #:menu [menu #f]
+                           #:menu-order [menu-order #f]
+                           #:keys [keys '()]
+                           #:keys/mac [keys/mac '()]
+                           #:keys/windows [keys/windows '()]
+                           #:aliases [aliases '()]
+                           #:help [help ""]
+                           #:icon [icon #f]
+                           #:when [when-thunk #f])
+  (unless (hash-has-key? definition-order name)
+    (set! counter (add1 counter))
+    (hash-set! definition-order name counter))
+  (define old (hash-ref registry name #f))
+  (hash-set! registry name
+             (command name title doc category menu
+                      (or menu-order (* 1000 (hash-ref definition-order name)))
+                      proc aliases help icon when-thunk))
+  (register-undo! 'command
+                  (lambda ()
+                    (if old (hash-set! registry name old) (hash-remove! registry name))
+                    (run-hook 'command-registered name)))
+  (for ([k (in-list (append keys (if (mac?) keys/mac keys/windows)))])
+    (keymap-bind! global-keymap k name))
+  (run-hook 'command-registered name))
+
+;; Key strings are checked when the module is compiled, so a typo is a syntax error at
+;; the offending string instead of a failure at startup.
+(begin-for-syntax
+  (define (check-key-strings! stxs)
+    (when stxs
+      (for ([s (in-list (syntax->list stxs))])
+        (define v (syntax-e s))
+        (unless (string? v)
+          (raise-syntax-error 'define-command "key binding must be a string literal" s))
+        (with-handlers ([exn:fail:user? (lambda (e) (raise-syntax-error 'define-command (exn-message e) s))])
+          (parse-key-sequence v))))))
+
+(define-syntax (define-command stx)
+  (syntax-parse stx
+    [(_ (name:id)
+        (~or (~optional (~seq #:title title:expr))
+             (~optional (~seq #:doc doc:expr))
+             (~optional (~seq #:category cat:expr))
+             (~optional (~seq #:keys keys:expr))
+             (~optional (~seq #:keys/mac keys/mac:expr))
+             (~optional (~seq #:keys/windows keys/win:expr))
+             (~optional (~seq #:menu menu:expr))
+             (~optional (~seq #:menu-order order:expr))
+             (~optional (~seq #:aliases aliases:expr))
+             (~optional (~seq #:help help:expr))
+             (~optional (~seq #:icon icon:expr))
+             (~optional (~seq #:when when:expr)))
+        ...
+        body:expr ...+)
+     #:do [(check-key-strings! (attribute keys))
+           (check-key-strings! (attribute keys/mac))
+           (check-key-strings! (attribute keys/win))]
+     #'(begin
+         (define (name) body ...)
+         (register-command! 'name name
+                            #:title (~? title (default-title 'name))
+                            #:doc (~? doc "")
+                            #:category (~? cat #f)
+                            #:menu (~? menu #f)
+                            #:menu-order (~? order #f)
+                            #:keys (~? 'keys '())
+                            #:keys/mac (~? 'keys/mac '())
+                            #:keys/windows (~? 'keys/win '())
+                            #:aliases (~? 'aliases '())
+                            #:help (~? help "")
+                            #:icon (~? icon #f)
+                            #:when (~? when #f)))]))
+
+(define (find-command name) (hash-ref registry name #f))
+
+(define (all-commands)
+  (sort (hash-values registry) string<? #:key command-title))
+
+(define recent '())
+(define (recent-commands) recent)
+(define (note-recent! name)
+  (unless (eq? name 'command-palette)               ; the palette launching itself is not "recent"
+    (set! recent (take-up-to (cons name (remq name recent)) 8))))
+(define (take-up-to l n) (if (> (length l) n) (take l n) l))
+
+(define (run-command name)
+  (define c (find-command name))
+  (unless c (error 'run-command "unknown command: ~a" name))
+  (run-hook 'before-command name)
+  ((command-proc c))
+  (note-recent! name)
+  (run-hook 'after-command name))
+
+;; Does the command apply right now? A failing predicate counts as enabled.
+(define (command-enabled? c)
+  (define w (command-when c))
+  (or (not w) (with-handlers ([exn:fail? (lambda (e) #t)]) (and (w) #t))))
+
+;; Extra fields the palette matches besides the title: the internal name and the aliases.
+(define (command-search-fields c) (cons (symbol->string (command-name c)) (command-aliases c)))
+
+;; The same as one string (kept for callers that want a single blob).
+(define (command-search-text c)
+  (string-join (list* (command-title c) (symbol->string (command-name c)) (command-aliases c)) " "))
+
+;; For UI entry points (keys, menus, palette): report errors, don't propagate.
+(define (run-command/safe name)
+  (with-handlers ([exn:fail? (lambda (e) (report-error! name e))])
+    (run-command name)))
+
+;; First global binding for a command as display text ("⌘S"), or #f.
+(define (command-shortcut name)
+  (define ks (keymap-keys-for global-keymap name))
+  (and (pair? ks) (key-sequence->string (car (sort ks < #:key length)))))
