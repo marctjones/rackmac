@@ -8,11 +8,11 @@ visual design and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for how to contribu
 ## Run
 
     racket main.rkt [file ...]
-    raco test tests            # 168 tests
+    raco test tests            # 205 tests
 
 Needs Racket 9.x with the GUI libraries (the standard distribution).
 
-What is verified: the 168 automated tests (commands, keymaps, key-event normalization, the picker
+What is verified: the 205 automated tests (commands, keymaps, key-event normalization, the picker
 dialog driven by timers, startup, the extension loader), and a launch on macOS (Apple Silicon)
 that renders correctly. **What is not verified:** that real keystrokes in the live window reach the
 buffer and run commands (one attempt with synthetic OS-level keystrokes produced no dispatch, and the
@@ -74,6 +74,21 @@ The toolbar is built from a registry that extensions use too:
 
 Buttons dim when a command's `#:when` says it does not apply, hovering shows the name and shortcut in the
 status bar, and View → Show Toolbar hides the row. Items are removed when their extension unloads.
+
+### Context menus
+
+Right-click in the editor (or Ctrl-click on macOS) for a native menu built from a registry, same shape as
+the toolbar's:
+
+```racket
+(add-context-item! 'shout #:group 'text)                 ; adds "Shout" to the menu
+(add-context-item! 'eval-selection #:mode 'racket-mode)  ; only for Racket documents
+```
+
+The default menu is Cut, Copy, Paste, Select All and Find; Racket documents add Run Selection, and any
+code Language adds Toggle Comment. Items are enabled from `#:when`, just like the menu bar and toolbar; a
+click outside the current selection first selects the word under the pointer. Right-click a tab for Close,
+Close Other Tabs, Close Tabs to the Right, Copy Path and Reveal in Finder/File Explorer.
 
 ### Status bar
 

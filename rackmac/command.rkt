@@ -8,7 +8,7 @@
          find-command all-commands run-command run-command/safe
          default-title command-shortcut extending-selection?
          command-enabled? command-search-text command-search-fields recent-commands
-         default-key-strings)
+         default-key-strings command-menu-label)
 
 ;; title is the name users see; name is the stable symbol used by keymaps and scripts.
 ;; aliases are extra search terms (including the Emacs name); help is one plain sentence;
@@ -157,3 +157,14 @@
 (define (command-shortcut name)
   (define ks (keymap-keys-for global-keymap name))
   (and (pair? ks) (key-sequence->string (car (sort ks < #:key length)))))
+
+;; A menu label with its shortcut appended the way each platform expects (a tab on Windows;
+;; Cocoa ignores "\t", so macOS gets inline spaces instead). Shared by the menu bar
+;; (frame.rkt) and the context-menu popups (rackmac/ui/context-menu.rkt).
+(define (command-menu-label name)
+  (define c (find-command name))
+  (define title (if c (command-title c) (symbol->string name)))
+  (define s (command-shortcut name))
+  (cond [(not s) title]
+        [(mac?) (string-append title "    " s)]
+        [else (string-append title "\t" s)]))

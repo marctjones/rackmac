@@ -1,7 +1,8 @@
 #lang racket/base
 ;; Application startup.
 (require racket/class racket/gui/base
-         "commands.rkt" "toolbar-defaults.rkt" "status-defaults.rkt" "command.rkt" "editor.rkt" "frame.rkt" "eval.rkt" "theme.rkt" "hook.rkt")
+         "commands.rkt" "toolbar-defaults.rkt" "status-defaults.rkt" "context-defaults.rkt"
+         "command.rkt" "editor.rkt" "frame.rkt" "eval.rkt" "theme.rkt" "hook.rkt")
 (provide main)
 
 ;; The system appearance is only reliable once the app is up.

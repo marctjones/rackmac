@@ -3,10 +3,12 @@
 ;; menu bar generated from command metadata. Key handling lives in buffer%/input.rkt;
 ;; menus deliberately carry no shortcuts of their own, so a key never fires twice.
 (require racket/class racket/gui/base racket/list racket/string
-         "editor.rkt" "command.rkt" "keymap.rkt" "hook.rkt" "theme.rkt" "ui/layout.rkt" "ui/toolbar-panel.rkt" "ui/status-bar.rkt")
+         "editor.rkt" "command.rkt" "keymap.rkt" "hook.rkt" "theme.rkt" "platform.rkt"
+         "ui/layout.rkt" "ui/toolbar-panel.rkt" "ui/status-bar.rkt" "ui/context-menu.rkt")
 (provide make-main-frame show-find-bar! hide-find-bar!
          find! replace-current! replace-all! focus-editor! main-frame main-canvas main-tabs set-find-options! tab-strip-style
-         main-toolbar toolbar-shown? set-toolbar-shown! main-status-bar)
+         main-toolbar toolbar-shown? set-toolbar-shown! main-status-bar
+         menu-for-title menu-item-for refresh-menu-enabled! tab-context-menu-groups)
 
 (define frame #f)
 (define (main-frame) frame)
@@ -44,6 +46,12 @@
 ;; The tab strip's styles: close boxes, drag to reorder, a "+" button, same look on both OSes.
 (define tab-strip-style '(no-border flat-portable can-reorder can-close new-button))
 
+;; RM-071: Close, Close Others, Close Tabs to the Right, Copy Path, Reveal in Finder/Explorer.
+;; All are ordinary commands that act on (current-buffer); the tab strip makes the
+;; right-clicked tab current first, the same way on-close-request already does above.
+(define (tab-context-menu-groups)
+  (list '(close-buffer close-other-tabs close-tabs-to-right) '(copy-tab-path reveal-in-file-manager)))
+
 ;; The tab strip: a tab's close box closes that document (asking to save), "+" makes a new
 ;; one, and dragging reorders the documents.
 (define document-tabs%
@@ -56,7 +64,23 @@
     (define/override (on-new-request) (run-command/safe 'new-buffer))
     ;; `former` lists, for each tab position after the drag, the position it had before.
     (define/augment (on-reorder former)
-      (set-tab-order! (for/list ([i (in-list former)]) (list-ref tab-buffers i))))))
+      (set-tab-order! (for/list ([i (in-list former)]) (list-ref tab-buffers i))))
+    ;; Right-click (Ctrl-click on macOS) opens the tab context menu. tab-panel% has no
+    ;; per-tab hit test exposed to Racket (the flat-portable strip's own hit-testing is
+    ;; native code, not in gui-lib's mrpanel.rkt), and on-subwindow-event runs before the
+    ;; click can change which tab is selected, so this necessarily uses the tab selected
+    ;; when the click arrives; right-clicking a tab other than the active one is a known
+    ;; limitation (issue #71). `receiver` is only ever `this` for a click on the strip
+    ;; itself, never on the editor canvas nested below it, so no extra guard is needed for
+    ;; that.
+    (define/override (on-subwindow-event receiver e)
+      (when (and (eq? receiver this) (context-click-event? e))
+        (define i (send this get-selection))
+        (when (and i (< i (length tab-buffers)))
+          (set-current-buffer! (list-ref tab-buffers i))
+          (define menu (build-popup-menu (tab-context-menu-groups)))
+          (send this popup-menu menu (send e get-x) (send e get-y))))
+      (super on-subwindow-event receiver e))))
 
 (define main-frame%
   (class frame%
@@ -66,6 +90,23 @@
     (define/augment (can-close?) (run-command/safe 'quit) #f)
     (define/override (on-drop-file path)
       (set-current-buffer! (open-file! path)))))
+
+;; RM-056/057/058: right-click (Ctrl-click on macOS) builds a popup-menu% from the context
+;; registry for the editor's current Language, moving the caret and selecting the word
+;; under the pointer first when the click lands outside the current selection. This
+;; intercepts the event itself (no `super`) so text%'s own click handling never collapses
+;; the selection before the check above runs.
+(define context-canvas%
+  (class editor-canvas%
+    (super-new)
+    (define/override (on-event ev)
+      (define ed (send this get-editor))
+      (cond
+        [(and ed (context-click-event? ev))
+         (send ed context-click! (send ev get-x) (send ev get-y))
+         (send this popup-menu (build-popup-menu (editor-menu-groups (send ed get-mode)))
+               (send ev get-x) (send ev get-y))]
+        [else (super on-event ev)]))))
 
 (define (make-main-frame)
   (set! frame (new main-frame% [label "Rackmac"] [width 1100] [height 760]))
@@ -81,7 +122,7 @@
                                 (define i (send tp get-selection))
                                 (when (and i (< i (length tab-buffers)))
                                   (set-current-buffer! (list-ref tab-buffers i)))))]))
-  (set! canvas (new editor-canvas% [parent tabs] [style '(auto-hscroll)]
+  (set! canvas (new context-canvas% [parent tabs] [style '(auto-hscroll)]
                     [horizontal-inset editor-inset-x] [vertical-inset editor-inset-y]))
   (build-find-bar!)
   (build-status-bar!)
@@ -152,15 +193,25 @@
 
 (define menu-titles '("File" "Edit" "View" "Tools" "Help"))
 
-(define (menu-label c)
-  (define s (command-shortcut (command-name c)))
-  (cond [(not s) (command-title c)]
-        [(eq? (system-type 'os) 'macosx) (string-append (command-title c) "    " s)]   ; Cocoa ignores "\t"
-        [else (string-append (command-title c) "\t" s)]))
+;; RM-065: menu items enable and disable from #:when. menu% has no per-item enabled hook,
+;; so each top menu's demand-callback (run right before it opens) walks its own items and
+;; sets them from command-enabled?. menu-item-for and menu-for-title let tests trigger that
+;; the same way the GUI does: (send (menu-for-title "Edit") on-demand), then is-enabled?.
+(define menu-items (make-hasheq))     ; command name -> menu-item%
+(define menu-objects (make-hash))     ; title string -> menu%
+(define (menu-item-for name) (hash-ref menu-items name #f))
+(define (menu-for-title title) (hash-ref menu-objects title #f))
+
+(define (refresh-menu-enabled!)
+  (for ([(name item) (in-hash menu-items)])
+    (define c (find-command name))
+    (send item enable (and c (command-enabled? c)))))
 
 (define (rebuild-menus!)
   (when menu-bar
     (for ([m (send menu-bar get-items)]) (send m delete))
+    (hash-clear! menu-items)
+    (hash-clear! menu-objects)
     (define with-menu (filter command-menu (all-commands)))
     (define titles (append menu-titles
                            (remove-duplicates
@@ -169,12 +220,15 @@
       (define cmds (sort (filter (lambda (c) (equal? (command-menu c) title)) with-menu)
                          < #:key command-menu-order))
       (unless (null? cmds)
-        (define m (new menu% [label title] [parent menu-bar]))
+        (define m (new menu% [label title] [parent menu-bar]
+                       [demand-callback (lambda (menu) (refresh-menu-enabled!))]))
+        (hash-set! menu-objects title m)
         (for/fold ([prev #f]) ([c (in-list cmds)])
           (define group (quotient (command-menu-order c) 10))
           (when (and prev (not (= group prev))) (new separator-menu-item% [parent m]))
-          (new menu-item% [label (menu-label c)] [parent m]
-               [callback (lambda (i e) (run-command/safe (command-name c)))])
+          (define item (new menu-item% [label (command-menu-label (command-name c))] [parent m]
+                            [callback (lambda (i e) (run-command/safe (command-name c)))]))
+          (hash-set! menu-items (command-name c) item)
           group)))))
 
 ;; ---- find / replace bar --------------------------------------------------

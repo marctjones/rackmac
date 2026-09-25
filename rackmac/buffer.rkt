@@ -10,11 +10,20 @@
 ;; whole document after edits, which gets slow). A parameter so tests can lower it.
 (define large-file-threshold (make-parameter 500000))
 
+;; A word/space/punctuation classifier for word-boundary detection (double-click, RM-058).
+(define (word-char? ch) (or (char-alphabetic? ch) (char-numeric? ch) (eqv? ch #\_)))
+(define (char-class ch) (cond [(word-char? ch) 'word] [(char-whitespace? ch) 'space] [else 'punct]))
+
+;; A double/triple click's second and third click must land within this many milliseconds
+;; of the previous one (racket/gui has no get-double-click-time; this is the OS ballpark).
+(define double-click-interval 500)
+
 (define buffer%
   (class text%
     (init [name "untitled"] [path #f])
     (field [buf-name name] [buf-path path] [major 'text-mode] [minors '()]
-           [locals (make-hasheq)] [shown? #t] [highlight-timer #f])
+           [locals (make-hasheq)] [shown? #t] [highlight-timer #f]
+           [click-pos -1] [click-time 0] [click-count 0])
     (super-new)
     (send this set-style-list editor-style-list)
     (send this set-max-undo-history 'forever)
@@ -92,6 +101,85 @@
     (define/override (on-char ev)
       (unless (dispatch-key-event this ev)
         (super on-char ev)))
+
+    ;; ---- mouse: word/line selection under the pointer ---------------------
+    ;; text%'s own on-default-event only ever drags a character-granularity selection: it
+    ;; has no double-click-selects-word or triple-click-selects-line behavior (RM-069;
+    ;; verified against gui-lib's wxme/text.rkt, which tracks no click count at all). Both
+    ;; are implemented here, from the raw click position and event timestamp.
+    ;;
+    ;; `word-bounds-at` also backs the context menu (RM-058: right-click outside the
+    ;; selection selects the word under the pointer). text%'s own find-wordbreak was tried
+    ;; first, but both its 'caret and 'selection reasons give wrong answers exactly at a
+    ;; word's edge (e.g. right after the last letter, or at the end of the document, where
+    ;; 'selection returns an empty range) -- exactly the positions a real click lands on.
+    (define/public (word-bounds-at pos)
+      (define para (send this position-paragraph pos))
+      (define pstart (send this paragraph-start-position para))
+      (define pend (send this paragraph-end-position para))
+      (define text (send this get-text pstart pend))
+      (define len (string-length text))
+      (cond
+        [(zero? len) (values pos pos)]
+        [else
+         (define off (- pos pstart))
+         (define (class-at i) (and (>= i 0) (< i len) (char-class (string-ref text i))))
+         (define left (class-at (sub1 off)))
+         (define right (class-at off))
+         ;; A word character wins a boundary (clicking right at a word's edge still selects
+         ;; it); otherwise prefer the character to the right, as a caret position does.
+         (define i (cond [(eq? right 'word) off] [(eq? left 'word) (sub1 off)]
+                         [right off] [else (sub1 off)]))
+         (define cls (class-at i))
+         (define s (let loop ([j i]) (if (eq? (class-at (sub1 j)) cls) (loop (sub1 j)) j)))
+         (define e (let loop ([j i]) (if (eq? (class-at (add1 j)) cls) (loop (add1 j)) (add1 j))))
+         (values (+ pstart s) (+ pstart e))]))
+
+    (define/public (select-word-at! pos)
+      (define-values (s e) (word-bounds-at pos))
+      (send this set-position s e))
+
+    (define/public (select-line-at! pos)
+      (define p (send this position-paragraph pos))
+      (send this set-position (send this paragraph-start-position p)
+            (min (send this last-position) (add1 (send this paragraph-end-position p)))))
+
+    ;; Position-based, so tests can drive it without a pixel-accurate canvas: a second click
+    ;; at the same position within `double-click-interval` selects the word, a third the
+    ;; line; a fourth (or a click that breaks the streak) falls back to a plain caret.
+    (define/public (click-at! pos time)
+      (set! click-count (if (and (= pos click-pos) (<= (- time click-time) double-click-interval))
+                            (add1 click-count) 1))
+      (set! click-pos pos)
+      (set! click-time time)
+      (case click-count
+        [(2) (select-word-at! pos)]
+        [(3) (select-line-at! pos)]
+        [else (void)]))
+
+    (define/override (on-event ev)
+      (cond
+        [(send ev button-down? 'left)
+         (define-values (ex ey) (send this dc-location-to-editor-location (send ev get-x) (send ev get-y)))
+         (define pos (send this find-position ex ey))
+         (super on-event ev)                 ; the normal single click first (caret, drag-select)
+         (click-at! pos (send ev get-time-stamp))]
+        [else (super on-event ev)]))
+
+    ;; RM-058: a right-click (or Ctrl-click on macOS) outside the current selection moves
+    ;; the caret there and selects the word under the pointer; inside it, the selection is
+    ;; left alone (so Cut/Copy from the context menu act on the whole selection). Called
+    ;; from the canvas with device coordinates; `context-click-at!` takes a plain position,
+    ;; for tests.
+    (define/public (context-click-at! pos)
+      (define s (send this get-start-position))
+      (define e (send this get-end-position))
+      (unless (and (> e s) (>= pos s) (<= pos e))
+        (select-word-at! pos)))
+
+    (define/public (context-click! dc-x dc-y)
+      (define-values (ex ey) (send this dc-location-to-editor-location dc-x dc-y))
+      (context-click-at! (send this find-position ex ey)))
 
     ;; ---- change notification ---------------------------------------------
     (define/public (large?) (> (send this last-position) (large-file-threshold)))

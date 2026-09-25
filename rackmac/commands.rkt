@@ -8,7 +8,7 @@
          "fileio.rkt")
 (provide save-buffer! confirm-quit? palette-items palette-matches command-description
          confirm-discard-changes confirm-save-changes
-         builtin-command-names)
+         builtin-command-names reveal-argv launch!)
 
 (define (t) (current-buffer))
 (define (ext?) (extending-selection?))
@@ -146,6 +146,72 @@
   #:doc "Close the current buffer, offering to save unsaved changes."
   (define b (t))
   (when (confirm-close-buffer? b) (kill-buffer! b)))
+
+;; RM-071: the tab context menu's Close, Close Others and Close Tabs to the Right. The tab
+;; strip makes the right-clicked tab current before showing the menu (document-tabs% in
+;; frame.rkt), so, like Close Tab above, these simply act on (current-buffer).
+(define (close-tabs! bs) (for ([b bs]) (when (confirm-close-buffer? b) (kill-buffer! b))))
+
+(define-command (close-other-tabs)
+  #:when (lambda () (> (length (visible-buffers)) 1))
+  #:icon "close"
+  #:aliases ("close other tabs" "close others")
+  #:help "Close every open document except this one, asking to save unsaved changes first."
+  #:title "Close Other Tabs"
+  (close-tabs! (remq (t) (visible-buffers))))
+
+(define-command (close-tabs-to-right)
+  #:when (lambda () (define i (index-of (visible-buffers) (t))) (and i (< i (sub1 (length (visible-buffers))))))
+  #:icon "close"
+  #:aliases ("close tabs to the right" "close right tabs")
+  #:help "Close every open document to the right of this one, asking to save unsaved changes first."
+  #:title "Close Tabs to the Right"
+  (define bs (visible-buffers))
+  (define i (index-of bs (t)))
+  (when i (close-tabs! (list-tail bs (add1 i)))))
+
+;; RM-071: Copy Path and Reveal in Finder/Explorer. `reveal-argv` is factored out (pure, no
+;; process started) so tests can check the built command line for both platforms.
+(define-command (copy-tab-path)
+  #:when (lambda () (and (send (t) get-path) #t))
+  #:icon "copy"
+  #:aliases ("copy file path" "copy full path")
+  #:help "Copy this document's file path to the clipboard."
+  #:title "Copy Path"
+  (define p (send (t) get-path))
+  (when p
+    (send the-clipboard set-clipboard-string (path->string p) (current-milliseconds))
+    (message "Copied path: ~a" (path->string p))))
+
+;; The argv for showing `path` in the platform's file manager, one entry per process
+;; argument (the first is the executable name, resolved with find-executable-path).
+(define (reveal-argv path)
+  (cond [(windows?) (list "explorer" (format "/select,~a" (path->string path)))]
+        [(mac?) (list "open" "-R" (path->string path))]
+        [else (list "xdg-open" (path->string (let-values ([(base name dir?) (split-path path)]) base)))]))
+
+;; subprocess returns 4 values (process, stdout, stdin, stderr); the pipes are closed right
+;; away since nothing reads or writes them. Factored so a test can run it with a harmless
+;; argv and prove the arity is right, without popping an actual Finder/Explorer window.
+(define (launch! argv)
+  (define exe (find-executable-path (string->path (car argv))))
+  (cond
+    [exe
+     (define-values (proc out in err) (apply subprocess #f #f #f exe (cdr argv)))
+     (close-input-port out) (close-output-port in) (close-input-port err)
+     #t]
+    [else #f]))
+
+(define-command (reveal-in-file-manager)
+  #:when (lambda () (and (send (t) get-path) #t))
+  #:icon "open"
+  #:aliases ("reveal in finder" "show in explorer" "open containing folder" "reveal in explorer")
+  #:help "Show this document's file in Finder or File Explorer."
+  #:title (if (windows?) "Reveal in File Explorer" "Reveal in Finder")
+  (define p (send (t) get-path))
+  (when p
+    (define argv (reveal-argv p))
+    (unless (launch! argv) (message "Could not find ~a to reveal the file." (car argv)))))
 
 (define (cycle-buffer delta)
   (define bs (visible-buffers))
