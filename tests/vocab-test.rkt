@@ -18,8 +18,8 @@
     line-start list-extensions list-keybindings move-line-down move-line-up new-buffer
     newline-and-indent next-buffer open-file open-init-file outdent-lines page-down page-up paste
     previous-buffer quick-open quit redo reload-init replace save save-as select-all select-line
-    set-line-endings set-major-mode show-encoding show-glossary show-messages toggle-comment toggle-theme
-    toggle-word-wrap undo word-left word-right zoom-in zoom-out zoom-reset))
+    set-line-endings set-major-mode show-cheat-sheet show-encoding show-glossary show-messages
+    toggle-comment toggle-theme toggle-word-wrap undo word-left word-right zoom-in zoom-out zoom-reset))
 
 (test-case "built-in command names are stable (relabeling never renames a symbol)"
   (check-equal? (sort builtin-command-names symbol<?) (sort golden-names symbol<?))
@@ -116,8 +116,8 @@
   (for ([p '((eval-selection "Run Selection") (eval-buffer "Run Document")
              (show-messages "Show Activity Log") (set-major-mode "Set Language…")
              (open-init-file "Customize with Code") (reload-init "Reload Extensions")
-             (list-keybindings "Keyboard Shortcuts") (new-buffer "New Document")
-             (describe-command "Explain a Command…"))])
+             (show-cheat-sheet "Keyboard Shortcuts") (list-keybindings "Shortcuts as Text")
+             (new-buffer "New Document") (describe-command "Explain a Command…"))])
     (check-equal? (command-title (find-command (car p))) (cadr p)))
   (check-eq? (top "Run Selection") 'eval-selection)
   (check-eq? (top "eval-region") 'eval-selection)
@@ -125,12 +125,14 @@
   (check-eq? (top "reload init file") 'reload-init)
   (check-eq? (top "*Messages*") 'show-messages)
   (check-eq? (top "describe-function") 'describe-command)
-  (check-eq? (top "glossary") 'show-glossary))
+  (check-eq? (top "glossary") 'show-glossary)
+  (check-eq? (top "cheat sheet") 'show-cheat-sheet)
+  (check-eq? (top "shortcuts as text") 'list-keybindings))
 
 (test-case "buffer display names have no Emacs stars"
   (check-equal? (send (messages-buffer) get-name) "Activity")
   (run-command 'list-keybindings)
-  (check-equal? (send (current-buffer) get-name) "Keyboard Shortcuts")
+  (check-equal? (send (current-buffer) get-name) "Shortcuts as Text")
   (run-command 'show-glossary)
   (check-equal? (send (current-buffer) get-name) "Glossary")
   (check-regexp-match #rx"kill ring +Clipboard History" (send (current-buffer) get-text)))

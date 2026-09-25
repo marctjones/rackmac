@@ -7,7 +7,7 @@
 (provide (struct-out command) define-command register-command!
          find-command all-commands run-command run-command/safe
          default-title command-shortcut extending-selection?
-         command-enabled? command-search-text command-search-fields recent-commands
+         command-enabled? command-search-text command-search-fields command-category-label recent-commands
          default-key-strings command-menu-label)
 
 ;; title is the name users see; name is the stable symbol used by keymaps and scripts.
@@ -138,6 +138,10 @@
 
 ;; Extra fields the palette matches besides the title: the internal name and the aliases.
 (define (command-search-fields c) (cons (symbol->string (command-name c)) (command-aliases c)))
+
+;; The palette's Category column: the command's own #:category, else its menu, else "General"
+;; (docs/UI-DESIGN.md §2; RM-030).
+(define (command-category-label c) (or (command-category c) (command-menu c) "General"))
 
 ;; The same as one string (kept for callers that want a single blob).
 (define (command-search-text c)

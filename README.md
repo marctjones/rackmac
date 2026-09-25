@@ -8,11 +8,11 @@ visual design and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for how to contribu
 ## Run
 
     racket main.rkt [file ...]
-    raco test tests            # 205 tests
+    raco test tests            # 220 tests
 
 Needs Racket 9.x with the GUI libraries (the standard distribution).
 
-What is verified: the 205 automated tests (commands, keymaps, key-event normalization, the picker
+What is verified: the 220 automated tests (commands, keymaps, key-event normalization, the picker
 dialog driven by timers, startup, the extension loader), and a launch on macOS (Apple Silicon)
 that renders correctly. **What is not verified:** that real keystrokes in the live window reach the
 buffer and run commands (one attempt with synthetic OS-level keystrokes produced no dispatch, and the
@@ -26,9 +26,15 @@ with a simulated platform only).
 | Layered keymaps: minor mode → major mode → global; key chords | `rackmac/keymap.rkt`, `rackmac/input.rkt` |
 | Major/minor modes with inheritance, buffer-local variables, hooks | `rackmac/mode.rkt`, `rackmac/hook.rkt`, `rackmac/buffer.rkt` |
 | A live extension language, with ownership and unloading | `rackmac/eval.rkt`, `rackmac/api.rkt`, `rackmac/owner.rkt`, `rackmac/lang/` |
-| Self-documenting: describe key, list keybindings, describe command | `rackmac/commands.rkt` |
+| Self-documenting: describe key, describe command, a searchable shortcut cheat sheet | `rackmac/commands.rkt`, `rackmac/ui/palette.rkt` |
 
 Storage, rendering, selection and undo come from Racket's `text%`; the Emacs-style layer sits on top.
+
+The command palette (`rackmac/ui/palette.rkt`) sits over the top third of the main window with
+Command, Category and Shortcut columns, a footer showing the highlighted command's help text and
+its Emacs alias, and a helpful empty state. Help > Keyboard Shortcuts opens the same kind of
+picker over every default shortcut on both platforms, grouped by category and filterable by
+typing; Enter runs the selected command. "Shortcuts as Text" keeps the plain-text list.
 
 ## Customize: `#lang rackmac`
 

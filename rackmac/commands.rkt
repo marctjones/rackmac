@@ -5,7 +5,7 @@
 (require racket/class racket/gui/base racket/list racket/string racket/file racket/path
          "command.rkt" "keymap.rkt" "mode.rkt" "hook.rkt" "editor.rkt" "input.rkt"
          "theme.rkt" "picker.rkt" "frame.rkt" "eval.rkt" "platform.rkt" "modes.rkt" "owner.rkt" "fuzzy.rkt" "glossary.rkt"
-         "fileio.rkt")
+         "fileio.rkt" "ui/palette.rkt")
 (provide save-buffer! confirm-quit? palette-items palette-matches command-description
          confirm-discard-changes confirm-save-changes
          builtin-command-names reveal-argv launch!)
@@ -791,12 +791,15 @@ TEMPLATE
   #:doc "Open the Activity log (Emacs: *Messages*). Errors from commands, hooks and extensions land here."
   (show-messages!))
 
+;; Each item: (list title shortcut name search-fields category). `category` (RM-030) sits
+;; last, past what pick-item-fields searches, so it never skews ranking (see command.rkt's
+;; command-category-label); ui/palette.rkt's #:cells reorders it for display.
 (define (palette-items)
   (define recents (filter values (map find-command (recent-commands))))
   (define ordered (append recents (filter (lambda (c) (not (memq c recents))) (all-commands))))
   (for/list ([c (in-list ordered)])
     (list (command-title c) (or (command-shortcut (command-name c)) "") (command-name c)
-          (command-search-fields c))))
+          (command-search-fields c) (command-category-label c))))
 
 ;; What typing `q` in the palette finds, best first. (The palette dialog uses the same text.)
 (define (palette-matches q)
@@ -808,7 +811,7 @@ TEMPLATE
   #:help "Search every command by name and run it."
   #:title "Command Palette…" #:menu "View" #:menu-order 40 #:keys ("Mod-Shift-p") #:keys/windows ("Alt-q")
   #:doc "Search every command by its name, an alias (including its Emacs name) or its shortcut. Recently used commands come first."
-  (define choice (pick "Command Palette" (palette-items) #:detail-heading "Shortcut"))
+  (define choice (palette-pick "Command Palette" (palette-items)))
   (run-hook 'focus-editor)
   (when choice (run-command/safe choice)))
 
@@ -869,18 +872,35 @@ TEMPLATE
   #:doc "Press a key to see which command it runs."
   (request-describe-key!))
 
-(define-command (list-keybindings)
+;; RM-039: a searchable, filterable dialog grouped by category, showing both platforms'
+;; shortcuts (ui/palette.rkt's cheat-sheet-pick, built on cheatsheet.rkt's shortcut-rows).
+;; Enter runs the selected command. Keeps the "Keyboard Shortcuts" title and the F1 shortcut
+;; that list-keybindings (below) used to have.
+(define-command (show-cheat-sheet)
   #:icon "keyboard"
   #:aliases ("describe-bindings" "list keybindings" "keybindings" "shortcuts" "key map" "cheat sheet")
-  #:help "List every shortcut."
+  #:help "Search every shortcut, grouped by category, for both platforms."
   #:keys/windows ("F1") #:title "Keyboard Shortcuts" #:menu "Help" #:menu-order 11
+  #:doc "A searchable list of every default shortcut on macOS and Windows, grouped by category. Enter runs the selected command."
+  (define choice (cheat-sheet-pick))
+  (run-hook 'focus-editor)
+  (when choice (run-command/safe choice)))
+
+;; The same information as plain text, for copying or searching in an editor. Keeps its
+;; symbol (scripts and key bindings may refer to it) now that show-cheat-sheet, above, is the
+;; searchable dialog Help > Keyboard Shortcuts opens.
+(define-command (list-keybindings)
+  #:icon "keyboard"
+  #:aliases ("shortcuts as text" "export shortcuts" "plain text shortcuts")
+  #:help "List every shortcut as plain text."
+  #:title "Shortcuts as Text" #:menu "Help" #:menu-order 15
   (define (title-of name) (let ([c (find-command name)]) (if c (command-title c) (symbol->string name))))
   (define rows
     (sort (for/list ([b (keymap-bindings global-keymap)])
             (cons (key-sequence->string (car b)) (cadr b)))
           string-ci<? #:key (lambda (r) (title-of (cdr r)))))
   (show-text-buffer!
-   "Keyboard Shortcuts"
+   "Shortcuts as Text"
    (string-append "Keyboard shortcuts\n\n"
                   (string-join (for/list ([r rows])
                                  (format "~a  ~a" (~pad (car r) 16)
@@ -904,7 +924,7 @@ TEMPLATE
   #:aliases ("describe-function" "describe command" "explain command" "help command" "apropos")
   #:help "Read what a command does."
   #:title "Explain a Command…" #:menu "Help" #:menu-order 12
-  (define choice (pick "Describe Command" (palette-items) #:detail-heading "Shortcut"))
+  (define choice (palette-pick "Describe Command" (palette-items)))
   (when choice (show-text-buffer! "Help" (command-description choice))))
 
 (define-command (show-glossary)

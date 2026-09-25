@@ -55,7 +55,7 @@
     ("Ctrl-F4" close-buffer "Close document (Office)")
     ("Ctrl-PageDown" next-buffer "Next tab (Chrome)") ("Ctrl-PageUp" previous-buffer "Previous tab")
     ("Alt-F4" quit "Close app (Windows)")
-    ("F1" list-keybindings "Help (Office)")
+    ("F1" show-cheat-sheet "Help (Office)")
     ("Alt-q" command-palette "Search commands (Office Alt+Q)")
     ("F11" toggle-full-screen "Full screen (Chrome, Windows)")
     ("Ctrl-Left" word-left "Word left") ("Ctrl-Right" word-right "Word right")
