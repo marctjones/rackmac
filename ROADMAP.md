@@ -5,7 +5,8 @@ _Generated from `docs/roadmap.rktd` by `racket tools/roadmap.rkt`. Edit the data
 Hierarchy: **epic > milestone > sub-milestone > issue**. Sizes: `S` under half a day, `M` one to two days, `L` three to five.
 Issues are tracked on GitHub: <https://github.com/marctjones/rackmac/issues>. Issue N there is roadmap item RM-N, GitHub
 milestones are the milestones below, and each epic has a tracking issue. **This file is the initial plan**, kept as an
-overview; from the first filing onward, GitHub is the source of truth for status.
+overview; from the first filing onward, GitHub is the source of truth for status. Issues added after the first
+filing (#240 onward: review findings, UI foundation) exist only on GitHub.
 
 **Progress:** 27 of 217 active issues done (8 in the icebox).
 

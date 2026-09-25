@@ -804,6 +804,9 @@ email is Outlook; practice focus is transactional; PDF engine is one cross-platf
 
 ## 14. Office-friendly vocabulary, interface and workflow
 
+> The visual design (layout, color tokens, native vs painted surfaces, wireframes) is in
+> [docs/UI-DESIGN.md](docs/UI-DESIGN.md). Native `racket/gui` controls throughout; no custom widget toolkit for now.
+
 **Goal:** the same core, presented so that someone who lives in Word, Outlook and Excel can be productive in ten
 minutes and still grow into the full power. Nothing here changes the command registry, keymaps, modes, hooks, undo or
 `eval`. It changes (a) the **names users see**, (b) the **defaults**, and (c) the **surfaces** built on the registry.

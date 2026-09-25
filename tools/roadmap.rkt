@@ -57,7 +57,8 @@
   (p "Hierarchy: **epic > milestone > sub-milestone > issue**. Sizes: `S` under half a day, `M` one to two days, `L` three to five.")
   (p "Issues are tracked on GitHub: <https://github.com/marctjones/rackmac/issues>. Issue N there is roadmap item RM-N, GitHub")
   (p "milestones are the milestones below, and each epic has a tracking issue. **This file is the initial plan**, kept as an")
-  (p "overview; from the first filing onward, GitHub is the source of truth for status.")
+  (p "overview; from the first filing onward, GitHub is the source of truth for status. Issues added after the first")
+  (p "filing (#240 onward: review findings, UI foundation) exist only on GitHub.")
   (p)
   (define active (filter (lambda (i) (not (eq? (iss-status i) 'icebox))) is))
   (p (format "**Progress:** ~a of ~a active issues done (~a in the icebox)."

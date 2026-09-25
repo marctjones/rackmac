@@ -397,7 +397,13 @@ The foundation is about a week; nothing in it is throwaway.
    Count states: "12 matches" while typing · "3 of 12" after stepping · "Wrapped · 1 of 12" · "No matches" (error color).
 ```
 
-## Decisions needed from the owner
+## Decisions (defaults taken 2026-09-25; the owner can change any of them)
+
+Adopted as recommended below: (1) the `flat-portable` tab strip on both OSes, (2) one row of icon-only native
+buttons with overflow, (3) on Windows the editor follows the system theme with an "Editor theme" setting, (4) the
+gutter ships for code Languages in v0.3. Issues: GitHub #250–#262 (milestone "E2.M0 UI foundation" and others).
+
+## Decisions that were asked of the owner
 
 1. **Tabs:** the built-in `flat-portable` strip (close boxes, drag to reorder, "+", identical on both OSes;
    recommended), or Cocoa's own no-border strip on macOS (close boxes and reorder, native look, but no "+"
