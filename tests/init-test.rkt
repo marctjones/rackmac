@@ -44,9 +44,10 @@
   (check-true (string? (eval-string "(send (current-buffer) get-name)")))
   (check-exn exn:fail? (lambda () (eval-string "(car 1)"))))
 
-(test-case "no init file is a message, not an error"
+(test-case "no init file: quiet at startup, noted in the Activity log"
   (delete-file (build-path dir "init.rkt"))
   (define echoed #f)
   (add-hook! 'echo (lambda (s) (set! echoed s)))
   (load-init!)
-  (check-regexp-match #rx"No init file" echoed))
+  (check-false echoed "nothing in the status bar")
+  (check-regexp-match #rx"No customization files yet. \"Customize with Code\"" (send (messages-buffer) get-text)))

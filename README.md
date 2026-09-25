@@ -7,11 +7,11 @@ redefinable core. See [DESIGN.md](DESIGN.md) for the full design; this file cove
 ## Run
 
     racket main.rkt [file ...]
-    raco test tests            # 136 tests
+    raco test tests            # 148 tests
 
 Needs Racket 9.x with the GUI libraries (the standard distribution).
 
-What is verified: the 136 automated tests (commands, keymaps, key-event normalization, the picker
+What is verified: the 148 automated tests (commands, keymaps, key-event normalization, the picker
 dialog driven by timers, startup, the extension loader), and a launch on macOS (Apple Silicon)
 that renders correctly. **What is not verified:** that real keystrokes in the live window reach the
 buffer and run commands (one attempt with synthetic OS-level keystrokes produced no dispatch, and the
@@ -60,6 +60,19 @@ sentence), `#:icon` (for the toolbar), `#:when` (a thunk: does the command apply
 plus `#:doc`, `#:keys`, `#:menu`. A command's symbol name never changes when its title does, so
 `bind-key!` and `run-command` in your init file keep working. `define-mode` takes `#:label`
 (what people see, e.g. "Plain Text"). Typing `yank` in the palette finds Paste, and Describe shows both names.
+
+### Toolbar
+
+The toolbar is built from a registry that extensions use too:
+
+```racket
+(add-toolbar-item! 'shout #:group 'text)                 ; a button for your command (#:icon on the command)
+(add-toolbar-item! 'eval-selection #:mode 'racket-mode)  ; only for Racket documents
+(remove-toolbar-item! 'find)
+```
+
+Buttons dim when a command's `#:when` says it does not apply, hovering shows the name and shortcut in the
+status bar, and View → Show Toolbar hides the row. Items are removed when their extension unloads.
 
 ### How extensions work
 

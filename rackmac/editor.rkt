@@ -6,7 +6,7 @@
 (provide current-buffer set-current-buffer! all-buffers visible-buffers messages-buffer?
          reopen-closed-tab! closed-tab-paths reload-buffer! set-tab-order!
          new-buffer! open-file! kill-buffer! find-buffer-by-path unique-name
-         message messages-buffer show-messages!
+         message log-message messages-buffer show-messages!
          ui-parent set-ui-parent!
          buffer-string selection-string insert-text replace-selection! goto-line! buffer-modified?
          unsaved-buffers)
@@ -126,14 +126,20 @@
   messages)
 
 (define (message fmt . args)
-  (define s (apply format fmt args))
-  (define mb (messages-buffer))
-  (send mb insert (string-append s "\n") (send mb last-position))
-  (send mb set-modified #f)
+  (define s (apply log-message* fmt args))
   (run-hook 'echo (let ([lines (string-split s "\n")])
                     (cond [(null? lines) ""]
                           [(null? (cdr lines)) (car lines)]
                           [else (string-append (car lines) " …")]))))
+
+;; Record in the Activity log only, without interrupting the user in the status bar.
+(define (log-message fmt . args) (void (apply log-message* fmt args)))
+(define (log-message* fmt . args)
+  (define s (apply format fmt args))
+  (define mb (messages-buffer))
+  (send mb insert (string-append s "\n") (send mb last-position))
+  (send mb set-modified #f)
+  s)
 
 (define (show-messages!)
   (define mb (messages-buffer))

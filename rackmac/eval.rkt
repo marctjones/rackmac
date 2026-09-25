@@ -161,7 +161,8 @@
   (define files (extension-files))
   (cond
     [(null? files)
-     (message "No init file yet. Run \"Open Init File\" to create ~a" (path->string (init-file-path)))]
+     ;; Nothing to report at startup; the Activity log says where customizations would go.
+     (log-message "No customization files yet. \"Customize with Code\" creates ~a." (path->string (init-file-path)))]
     [else
      (define results (for/list ([f (in-list files)]) (load-extension! f)))
      (when (andmap values results)          ; on failure the failure message stays visible

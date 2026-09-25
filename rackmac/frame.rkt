@@ -3,14 +3,27 @@
 ;; menu bar generated from command metadata. Key handling lives in buffer%/input.rkt;
 ;; menus deliberately carry no shortcuts of their own, so a key never fires twice.
 (require racket/class racket/gui/base racket/list racket/string
-         "editor.rkt" "command.rkt" "keymap.rkt" "hook.rkt" "theme.rkt" "mode.rkt" "ui/layout.rkt")
+         "editor.rkt" "command.rkt" "keymap.rkt" "hook.rkt" "theme.rkt" "mode.rkt" "ui/layout.rkt" "ui/toolbar-panel.rkt")
 (provide make-main-frame show-find-bar! hide-find-bar!
-         find! replace-current! replace-all! focus-editor! main-frame main-canvas main-tabs set-find-options! tab-strip-style)
+         find! replace-current! replace-all! focus-editor! main-frame main-canvas main-tabs set-find-options! tab-strip-style
+         main-toolbar toolbar-shown? set-toolbar-shown!)
 
 (define frame #f)
 (define (main-frame) frame)
 (define (main-canvas) canvas)
 (define (main-tabs) tabs)
+(define toolbar #f)
+(define (main-toolbar) toolbar)
+
+;; The window's rows, top to bottom. Every show/hide goes through here.
+(define show-toolbar? #t)
+(define show-find? #f)
+(define (toolbar-shown?) show-toolbar?)
+(define (set-toolbar-shown! on?) (set! show-toolbar? (and on? #t)) (layout-rows!))
+(define (layout-rows!)
+  (send frame change-children
+        (lambda (cs) (append (if show-toolbar? (list toolbar) '()) (list tabs)
+                             (if show-find? (list find-bar) '()) (list status-panel)))))
 (define menu-bar #f)
 (define tabs #f)
 (define canvas #f)
@@ -59,6 +72,7 @@
   (set! frame (new main-frame% [label "Rackmac"] [width 1100] [height 760]))
   (set-ui-parent! frame)
   (set! menu-bar (new menu-bar% [parent frame]))
+  (set! toolbar (new toolbar-panel% [parent frame] [mode-getter (lambda () (send (current-buffer) get-mode))]))
   ;; Browser-style document tabs: close boxes, drag to reorder, and a "+" button, drawn the
   ;; same way on macOS and Windows ('flat-portable).
   (set! tabs (new document-tabs% [parent frame] [choices '("untitled")]
@@ -85,6 +99,13 @@
              (lambda () (send canvas set-canvas-background (canvas-background))
                         (send canvas refresh)))
 
+  (add-hook! 'toolbar-changed (lambda () (send toolbar rebuild!)))
+  (add-hook! 'current-buffer-changed (lambda (b) (send toolbar ensure-mode! (send b get-mode))))
+  (add-hook! 'mode-changed (lambda (b) (when (eq? b (current-buffer)) (send toolbar ensure-mode! (send b get-mode)))))
+  (for ([h '(after-command status-changed buffer-modified-changed current-buffer-changed)])
+    (add-hook! h (lambda _ (send toolbar refresh-enabled!))))
+
+  (send toolbar rebuild!)
   (refresh-tabs!)
   (show-buffer! (current-buffer))
   (rebuild-menus!)
@@ -196,7 +217,7 @@
   (new button% [parent replace-row] [label "Replace All"] [callback (lambda (b e) (replace-all!))])
   (send find-bar change-children (lambda (cs) (list row1)))     ; replace row hidden until asked
   (set! find-row1 row1)
-  (send frame change-children (lambda (cs) (remq find-bar cs))))
+  (send frame change-children (lambda (cs) (remq find-bar cs))))   ; hidden until Find; rows not all built yet
 
 (define find-row1 #f)
 
@@ -205,7 +226,8 @@
   (when (and (> (string-length sel) 0) (not (regexp-match? #rx"\n" sel)))
     (send find-field set-value sel))
   (send find-bar change-children (lambda (cs) (if replace? (list find-row1 replace-row) (list find-row1))))
-  (send frame change-children (lambda (cs) (list tabs find-bar status-panel)))
+  (set! show-find? #t)
+  (layout-rows!)
   (send find-field focus)
   (send (send find-field get-editor) select-all))
 
@@ -216,7 +238,8 @@
   (send case-box set-value case?))
 
 (define (hide-find-bar!)
-  (send frame change-children (lambda (cs) (list tabs status-panel)))
+  (set! show-find? #f)
+  (layout-rows!)
   (focus-editor!))
 
 ;; Returns the position where the match begins. text%'s get-start? flag means "the start in

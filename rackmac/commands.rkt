@@ -122,6 +122,7 @@
      (when choice (set-current-buffer! (open-file! (build-path root choice))))]))
 
 (define-command (save)
+  #:when (lambda () (or (send (t) is-modified?) (not (send (t) get-path))))
   #:icon "save"
   #:aliases ("save-buffer" "write file" "save document")
   #:help "Save the document to its file (asks for a name the first time)."
@@ -175,6 +176,7 @@
                                 "Reload" "Cancel" #f (ui-parent) '(caution default=2) 2)))))
 
 (define-command (reload-from-disk)
+  #:when (lambda () (and (send (t) get-path) #t))
   #:icon "history"
   #:aliases ("revert-buffer" "revert" "reload file" "discard changes")
   #:help "Read the document again from its file, discarding unsaved changes."
@@ -187,6 +189,7 @@
     [else (reload-buffer! b) (message "Reloaded ~a" (send b get-name))]))
 
 (define-command (save-all)
+  #:when (lambda () (pair? (unsaved-buffers)))
   #:icon "save"
   #:aliases ("save-some-buffers" "save everything")
   #:help "Save every open document that has unsaved changes."
@@ -305,6 +308,7 @@ TEMPLATE
 ;; ---- editing -------------------------------------------------------------
 
 (define-command (undo)
+  #:when (lambda () (send (t) can-do-edit-operation? 'undo))
   #:icon "undo"
   #:aliases ("undo-tree" "history" "revert change")
   #:help "Undo the last change."
@@ -312,6 +316,7 @@ TEMPLATE
   (send (t) undo))
 
 (define-command (redo)
+  #:when (lambda () (send (t) can-do-edit-operation? 'redo))
   #:icon "redo"
   #:aliases ("undo-redo" "redo change")
   #:help "Redo a change you undid."
@@ -320,18 +325,21 @@ TEMPLATE
   (send (t) redo))
 
 (define-command (cut)
+  #:when (lambda () (send (t) can-do-edit-operation? 'cut))
   #:icon "cut"
   #:aliases ("kill-region" "kill" "cut selection")
   #:help "Remove the selected text and put it on the clipboard."
   #:title "Cut" #:menu "Edit" #:menu-order 20 #:keys ("Mod-x")
   (send (t) cut))
 (define-command (copy)
+  #:when (lambda () (send (t) can-do-edit-operation? 'copy))
   #:icon "copy"
   #:aliases ("kill-ring-save" "copy selection")
   #:help "Copy the selected text to the clipboard."
   #:title "Copy" #:menu "Edit" #:menu-order 21 #:keys ("Mod-c")
   (send (t) copy))
 (define-command (paste)
+  #:when (lambda () (send (t) can-do-edit-operation? 'paste))
   #:icon "paste"
   #:aliases ("yank" "paste clipboard")
   #:help "Insert the clipboard contents at the cursor."
@@ -655,6 +663,13 @@ TEMPLATE
   #:title "Toggle Word Wrap" #:menu "View" #:menu-order 20 #:keys/windows ("Alt-z")
   (define b (t))
   (send b auto-wrap (not (send b auto-wrap))))
+
+(define-command (toggle-toolbar)
+  #:aliases ("show toolbar" "hide toolbar" "tool-bar-mode")
+  #:help "Show or hide the row of buttons above the tabs."
+  #:icon "more"
+  #:title "Show Toolbar" #:menu "View" #:menu-order 23
+  (set-toolbar-shown! (not (toolbar-shown?))))
 
 (define-command (toggle-full-screen)
   #:icon "maximize"
