@@ -2,7 +2,8 @@
 
 An Emacs-style editor for the desktop, scripted in Racket instead of Emacs Lisp.
 Modern shortcuts (Cmd on macOS, Ctrl on Windows), a command palette, tabs, and a live,
-redefinable core. See [DESIGN.md](DESIGN.md) for the full design; this file covers what is built.
+redefinable core. See [DESIGN.md](DESIGN.md) for the full design, [docs/UI-DESIGN.md](docs/UI-DESIGN.md) for the
+visual design and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for how to contribute. This file covers what is built.
 
 ## Run
 
