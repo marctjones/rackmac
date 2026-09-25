@@ -1,38 +1,58 @@
-# Rackmac UI design: a modern desktop editor on native controls
+# Rackmac UI design: an office-style notes and documents app on native controls
 
-_Status: proposal for the owner. Targets macOS and Windows. Scope, in the owner's words: use the existing
-Windows and macOS `racket/gui` controls; make the **window layout and coloring** modern and follow modern UX
-practice; do not make it look like old Emacs. So: no custom widget toolkit, no Skia layer, no custom title bar,
-no restyled buttons or text fields. Custom painting is limited to areas that are ours anyway (editor surface,
-gutter, selection, status bar) and to small `canvas%` pieces where `racket/gui` has no control at all. GNOME
-(libadwaita) is cited only where it informs a cross-platform choice; Linux is not a target. Nothing here changes
-the core: command registry, keymaps, modes, hooks, buffers on `text%`, `#lang rackmac` with ownership and unload.
-Every surface reads command metadata (`#:title #:help #:icon #:when #:aliases`, mode `#:label`), and the toolbar
-and context menu are extensions on the public API as ROADMAP E2 says._
+_Status: two layers. The **v0.2.0 layer** (proposed and built 2026-09-25, tagged as a checkpoint) gave Rackmac
+its modern chrome on native `racket/gui` controls: tokens, layout grid, toolbar, tabs, status bar, find row,
+palette, context menus. The **notes layer** (this revision, 2026-09-25, for the re-plan in
+[REPLAN.md](REPLAN.md) and the product in [PRODUCT.md](PRODUCT.md)) turns the window into a document-first
+notes app for people who live in Word, Pages and Outlook: a Library sidebar, Markdown that renders while you
+edit, a formatting toolbar, outline and backlinks, and code documents that look like code only when a document
+is code. Each section below is marked **_Unchanged_** (still applies as built or planned) or
+**_Changed 2026-09-25_** (new or revised for the notes product). Scope rules are the owner's and unchanged: existing
+`racket/gui` controls only; modern layout and color; no custom widget toolkit, no Skia, no custom title bar, no
+restyled buttons. Custom painting stays limited to surfaces that are ours anyway (editor, gutter, status bar) and to
+`snip%` objects inside the editor. macOS first; Windows notes are kept where they cost nothing. Nothing here
+changes the core: command registry, keymaps, Languages, hooks, documents on `text%`, `#lang rackmac` with
+ownership and unload. Every surface reads command metadata (`#:title #:help #:icon #:when #:aliases`, mode
+`#:label`)._
 
 ## 0. The short version
 
-- **Layout:** title bar (native) → menu bar (native) → one-row toolbar of native icon buttons → document tabs
-  (`tab-panel%` with close boxes, reordering and a "+" button, all built in) → optional InfoBar row → optional
-  find row → editor → status bar. Everything on a 4 px grid with real margins.
-- **Color:** one token module for the surfaces we paint (editor, gutter, selection, find highlight, status bar,
-  syntax faces), light and dark, with the accent taken from the OS highlight color. Native chrome keeps the OS look.
-- **UX:** discover by menu, toolbar, palette and shortcut hints; progressive disclosure (Advanced in Find,
-  overflow, settings search); non-modal feedback (status message and InfoBar, never a modal error box);
-  designed empty states; keyboard everything, which native controls give us for free with the screen reader.
-- **Order:** a small UI foundation milestone (tokens, layout constants, appearance detection, headless tests)
-  lands before the toolbar; E2 builds on it in v0.2; InfoBar (E8), start screen (E5) and panes (E9) follow.
-- **racket-skia:** out of scope for now (§4.1, one paragraph).
+_Changed 2026-09-25._
+
+- **Layout:** title bar (native) → menu bar (native) → one-row toolbar of native icon buttons, with a
+  **Format group that appears for notes** → **Library sidebar** (folders including OneDrive/SharePoint-synced
+  folders, Recent, Tags, Outline, Backlinks; `⌥⌘S`) beside document tabs → optional InfoBar row → optional find row →
+  **document area** → status bar. 4 px grid, real margins.
+- **Two looks, one editor.** A Markdown note renders like a word-processor page: proportional font, centered
+  6.5 in measure, headings sized and bold, lists indented, links clickable, checkboxes real, markup de-emphasized
+  but never hidden in v0.3. A `.py` or `.rkt` file looks like code: monospace, unwrapped, gutter, Run. Both are the
+  same `text%` with different styles, paragraph margins and snips (§5.3 says exactly what `text%` can and cannot do).
+- **Formatted or Source, per document.** Any Markdown document switches between the formatted view and plain
+  Markdown source (View menu, a Format-group button, a status segment, ⌥⌘U as in Chrome's View Source); the choice
+  is remembered per document; the same formatting keys edit the same characters in both (§2.2.1).
+- **Color:** the one token module for what we paint, light and dark, accent from the OS. No new roles were needed
+  for notes: headings use `heading`, markup `text-2`, links `accent`, overdue `error`.
+- **UX:** discover by menu, toolbar, palette and shortcut hints; Office/Pages/Notes/Chrome shortcuts only; non-modal
+  feedback; designed empty states (start screen, empty Library, no backlinks yet); keyboard everything.
+- **Not in the default:** anything named after Emacs, Run for prose, a Racket scratch pad at startup. Those return
+  only with the v0.8 preset or under Tools.
+- **racket-skia:** out of scope (§5.1).
 
 ## 1. Visual language
 
 ### 1.1 What is native and what we paint
 
+_Changed 2026-09-25: two additions in the right column (sidebar tree, editor snips)._
+
 | Native `racket/gui` (OS look, OS accessibility) | Painted by Rackmac (`racket/draw`) |
 |---|---|
-| title bar, menu bar, `button%` (toolbar, dialogs), `text-field%`, `check-box%`, `choice%`, `list-box%`, `tab-panel%`, `message%`, `dialog%`, `popup-menu%`, file and message dialogs | editor surface (`editor-canvas%` on `text%`): background, text, selection, caret, current line, find matches, syntax faces; gutter; status bar (`canvas%`); toolbar icons (vectors rendered to `bitmap%` labels); pane splitters (E9) |
+| title bar, menu bar, `button%` (toolbar, dialogs), `text-field%`, `check-box%`, `choice%`, `list-box%` (Recent, Tags, Outline, Backlinks, results), `tab-panel%`, `message%`, `dialog%`, `popup-menu%` (Heading▾, Export▾, context menus), file and message dialogs | editor surface (`editor-canvas%` on `text%`): background, text, selection, caret, current line, find matches, prose and syntax styles; **editor snips** (checkbox, fold, image preview); gutter; status bar (`canvas%`); toolbar icons (vectors rendered to `bitmap%` labels); the Folders tree (`mrlib/hierlist`, editor-based, standard distribution); pane splitters (E9) |
 
 ### 1.2 Color tokens (`rackmac/ui/tokens.rkt`)
+
+_Unchanged, as built. Notes reuse existing roles: `heading` for heading text, `text-2` for markup characters, quotes
+and done tasks, `accent` for link text and today's date, `error` for overdue, `match` for find, `line-highlight` off for
+prose. High-contrast columns remain RM-145._
 
 Roles, not colors. `theme.rkt` already holds `bg fg comment string constant keyword error heading`; this table
 extends it and moves it behind `(token 'name)`. Seeds: GitHub-light/VS-dark values already in `theme.rkt` for
@@ -43,49 +63,59 @@ selection color, which follows the Windows accent and the macOS accent setting) 
 |---|---|---|---|
 | `surface` | #FFFFFF | #1E1E1E | editor background (`canvas-background`) |
 | `text` | #1F2328 | #D4D4D4 | editor text (`fg`) |
-| `text-2` | #636C76 | #9DA5AD | gutter numbers, status segments, placeholders |
+| `text-2` | #636C76 | #9DA5AD | gutter numbers, status segments, placeholders, **Markdown markup, quotes, done tasks** |
 | `text-disabled` | #A6A6A6 | #6E6E6E | dimmed segments |
-| `stroke` | #D0D7DE | #3A3A3A | 1 px line above the status bar, gutter edge |
+| `stroke` | #D0D7DE | #3A3A3A | 1 px line above the status bar, gutter edge, **sidebar edge** |
 | `line-highlight` | #F6F8FA | #262626 | current line (prose Languages off, code on) |
 | `selection` | OS highlight (fallback #B3D7FF) | OS highlight (fallback #264F78) | text selection; `text%` uses the OS color itself |
-| `accent` | OS highlight, fallback #0067C0 / macOS #007AFF | fallback #60CDFF / macOS #0A84FF | status-bar hover underline, gutter marker for the current line, find count when matches exist |
+| `accent` | OS highlight, fallback #0067C0 / macOS #007AFF | fallback #60CDFF / macOS #0A84FF | status-bar hover underline, gutter marker for the current line, find count when matches exist, **link text, due today** |
 | `match` / `match-current` | #FFE08A / #FFB000 | #6B5900 / #7A4000 | Find All highlights (RM-109), 35% alpha |
-| `info` / `success` / `warning` / `error` | #0067C0 / #0F7B0F / #8A5100 / #C42B1C | #60CDFF / #6CCB5F / #FCE100 / #FF99A4 | status-bar icons, find "No matches", InfoBar text |
+| `info` / `success` / `warning` / `error` | #0067C0 / #0F7B0F / #8A5100 / #C42B1C | #60CDFF / #6CCB5F / #FCE100 / #FF99A4 | status-bar icons, find "No matches", InfoBar text, **overdue tasks (`error`)** |
 | `status-bg` | #F3F3F3 (macOS #ECECEC) | #202020 (macOS #282828) | status bar; sits visually with the OS window color |
-| faces `comment string constant keyword heading` | as `theme.rkt` | as `theme.rkt` | syntax coloring, unchanged |
+| faces `comment string constant keyword heading` | as `theme.rkt` | as `theme.rkt` | syntax coloring, unchanged; `heading` also colors note headings |
 
 As built (`rackmac/ui/tokens.rkt`): the contrast test adjusted light `warning`, dark `match-current` and the dark
 `comment` face; the OS highlight is used as `accent` only when it reaches 3:1 on the surface.
 
 Rules: `text` and `text-2` on `surface`, and every status token on `status-bg`, meet 4.5:1 (a test computes
 it); `stroke` and `accent` on their surfaces meet 3:1; nothing is conveyed by color alone (the current find match
-also gets a thicker outline, the modified tab also has "•" and the window title). High-contrast variants
-(RM-145) are two more columns of this table.
+also gets a thicker outline, the modified tab also has "•" and the window title, a done task is also checked and
+a folded section also shows "…"). High-contrast variants (RM-145) are two more columns of this table.
 
 ### 1.3 Typography
+
+_Changed 2026-09-25: a `prose` slot is added; `mono` now applies to code Languages and to code spans inside notes._
 
 Native controls use the OS control font automatically (`normal-control-font` is `.AppleSystemUIFont` 13 on
 macOS and Segoe UI on Windows; nothing to do). We choose fonts only for what we paint and for the start screen.
 
 | Slot | macOS | Windows | Where |
 |---|---|---|---|
-| `mono` | SF Mono → Menlo, 14 | Cascadia Mono → Consolas, 12 | editor, gutter; resolved once with `get-face-list` (SF Mono and Cascadia are not on a base install; Menlo and Consolas are) |
-| `ui` | `normal-control-font` (13) | `normal-control-font` (Segoe UI 9 pt) | status bar, InfoBar text |
+| `prose` | system family (SF Pro) 15, line spacing 4 | Segoe UI 11 pt | Markdown and Plain Text body; headings 1.6× / 1.35× / 1.15× bold (H4–H6 1.0× bold). Set through `style-delta%` `set-family 'system` so no face name is hard-coded (**verify** this yields SF Pro in `text%`; fallback `set-delta-face "Helvetica Neue"`). A setting offers a serif alternative (Georgia / Charter). |
+| `mono` | SF Mono → Menlo, 14 | Cascadia Mono → Consolas, 12 | code Languages, gutter, fenced code and inline code in notes; resolved once with `get-face-list` |
+| `ui` | `normal-control-font` (13) | `normal-control-font` (Segoe UI 9 pt) | status bar, InfoBar text, sidebar tree |
 | `ui-small` | `small-control-font` (11) | `small-control-font` | status segments when the window is narrow |
 | `title` | `ui` face at 22 bold | `ui` face at 20 bold | start screen heading (`message%` with `font`) |
 | `subtitle` | `ui` face at 15 | `ui` face at 14 | start screen card titles |
 
-Zoom (`font-size`, existing) scales the editor only; a `ui-scale` setting (RM-146) scales gutter and status
-bar fonts and metrics in the same step.
+Zoom (`font-size`, existing) scales the "Standard" style, and every note style is derived from it in the shared
+`style-list%` (`find-or-create-style base delta`), so headings and code spans scale with it; a `ui-scale` setting
+(RM-146) scales gutter and status bar fonts and metrics in the same step.
 
 ### 1.4 Spacing, metrics, motion
 
+_Changed 2026-09-25: the prose measure is a page, not 80 columns; sidebar width added._
+
 - **4 px grid** through `panel%` `border`, `spacing`, `horiz-margin`, `vert-margin`: window rows `border 0`,
   toolbar `spacing 4` with an 8 px gap (a `pane%` spacer) between groups, InfoBar and find row `border 8 spacing 8`,
-  dialogs `border 16 spacing 12`.
-- **Editor margins:** `horizontal-inset` 16 (today 12), `vertical-inset` 12; prose Languages wrap at a readable
-  measure (a fixed `set-max-width` of ~80 columns of the mono font instead of `buffer.rkt`'s `auto-wrap #t`,
-  which wraps at the window edge), text left-aligned; code Languages unwrapped.
+  dialogs `border 16 spacing 12`, sidebar `border 0`, sidebar section headers 8 px above.
+- **Editor margins:** `horizontal-inset` 16, `vertical-inset` 12 (as built). **Prose measure:** 6.5 in of text
+  (Letter minus 1 in margins) at the current zoom, so about 620 px at 96 dpi; the text is **centered** by setting every
+  paragraph's left and right margins to `(view-width − measure) / 2` in `on-display-size` (existing augment in
+  `buffer.rkt`; today it only clamps `set-max-width` to `prose-measure` characters, which becomes the fallback when
+  the view is narrower than the measure). Code Languages: unwrapped, no centering.
+- **Sidebar:** fixed 240 px (`min-width 240`, `stretchable-width #f`), a setting from 200 to 360; drag-resize arrives
+  with the E9 splitter (v0.6).
 - **Row heights** follow the controls: toolbar = button height + 8; tab strip as `tab-panel%` draws it; status
   bar 24 (macOS 22); InfoBar one line of `ui` + 16.
 - **Motion:** none required. State changes are instant; caret blink is the editor's own. A reduced-motion
@@ -93,108 +123,289 @@ bar fonts and metrics in the same step.
 
 ### 1.5 Icons
 
+_Changed 2026-09-25: names added for notes._
+
 Fluent System Icons style: single-weight line icons on a 16-unit grid, 1 px stroke at 16 px, 1.5 at 20 px,
 round caps. Each icon is a small `racket/draw` path program in `rackmac/ui/icons.rkt`, rendered on demand into a
 `bitmap%` at the display's backing scale (`make-bitmap #:backing-scale`) and handed to `button%` as a bitmap
 label, so `#:icon` drives native buttons directly. Toolbar icons take their color from the native chrome
 (`get-label-foreground-color`), not from the editor tokens, so they stay visible when the editor is dark and
 the Win32 chrome is light; only status-bar and gutter icons use `text`. Commands without `#:icon` get a
-letter tile (their initial in a rounded square), which RM-052 "Add to Toolbar" needs. Set: `new open save
-save-as close undo redo cut copy paste select-all find replace goto comment duplicate delete-line arrow-up
-arrow-down indent outdent zoom-in zoom-out zoom-reset wrap theme activity palette language run run-all keyboard
-help book info settings extensions history search chevron-down chevron-right chevron-left more x check warning
-error split-right split-down sidebar record stop play` (about 55). `#:icon` is set on 0 of 61 built-ins today;
-assigning names is its own small issue.
+letter tile (their initial in a rounded square), which RM-052 "Add to Toolbar" needs. Set as built (about 55):
+`new open save save-as close undo redo cut copy paste select-all find replace goto comment duplicate delete-line
+arrow-up arrow-down indent outdent zoom-in zoom-out zoom-reset wrap theme activity palette language run run-all
+keyboard help book info settings extensions history search chevron-down chevron-right chevron-left more x check
+warning error split-right split-down sidebar record stop play`. **Added for notes:** `bold italic code-inline link
+heading list-bullet list-number checklist quote export import word pdf note folder folder-cloud tag calendar outline
+backlink today lock`.
 
 ## 2. Window layout
 
+_Changed 2026-09-25: the sidebar and the two document looks are new; tabs, InfoBar, find row, status bar,
+palette, dialogs, context menus and notifications are as built or as planned before._
+
 ```
-frame% (native title: "• notes.md — Rackmac")
-├─ menu-bar%                           native, generated from #:menu (unchanged)
+frame% (native title: "• Weekly notes.md — Rackmac")
+├─ menu-bar%                           native, generated from #:menu: File Edit Format View Tools Help
 └─ vertical-panel% border 0 spacing 0
-   ├─ toolbar   horizontal-panel%      button% per toolbar item, bitmap labels, group spacers, hideable
-   ├─ tabs      tab-panel%             '(no-border flat-portable can-reorder can-close new-button)
-   │  └─ vertical-panel% border 0      the stacked rows under the strip
-   │     ├─ infobar  horizontal-panel% hidden unless a message is pending
-   │     ├─ find     vertical-panel%   hidden; one or two rows
-   │     └─ horizontal-pane%
-   │        ├─ gutter  canvas%         optional, line numbers for code Languages
-   │        └─ editor  editor-canvas%  or the start view panel when no documents are open
+   ├─ toolbar   horizontal-panel%      button% per toolbar item; Format group only for prose Languages
+   ├─ horizontal-panel% border 0 spacing 0
+   │  ├─ sidebar  vertical-panel% 240  Library: filter, Recent, Folders (hierarchical-list%), Tags, Outline, Backlinks
+   │  └─ tabs     tab-panel%           '(no-border flat-portable can-reorder can-close new-button)
+   │     └─ vertical-panel% border 0
+   │        ├─ infobar  horizontal-panel% hidden unless a message is pending
+   │        ├─ find     vertical-panel%   hidden; one or two rows
+   │        └─ horizontal-pane%
+   │           ├─ gutter  canvas%         code Languages only
+   │           └─ editor  editor-canvas%  or the start view when nothing is open
    └─ status   canvas%                 message segment left, clickable segments right
 ```
 
-- **Title bar and menus:** native, unchanged. The title carries the document name and the modified dot; the
-  menu bar keeps its metadata generation. Menu items enable from `#:when` on open (RM-065).
-- **Toolbar (one row, not a ribbon).** 61 commands do not justify tabs and groups; Office's Simplified Ribbon is
-  one row too. Default layout: `New Open Save | Undo Redo | Cut Copy Paste | Find | ⟨Language items: Run
-  Selection for Racket⟩ ... ⟨spacer⟩ Search commands` where the last is a `button%` that opens the palette.
-  Items come from the toolbar registry (RM-043, `add-toolbar-item!`), enable from `#:when` on the
-  `after-command`, `status-changed` and `buffer-modified-changed` hooks (RM-049), and the whole row hides from
-  View > Show Toolbar. Icon-only by default; `button%` accepts `(list bitmap "Save" 'bottom)` so labels under
-  icons are a setting. There is no tooltip API, so the hovered button's title and shortcut go to the status
-  message via `on-subwindow-event` on the toolbar panel (verify on both OSes that motion over a native
-  `button%` reaches it; if not, the hint shows on focus and in the menus only).
-- **Tabs.** `tab-panel%` with `'no-border 'flat-portable 'can-reorder 'can-close 'new-button`: close boxes
-  call `on-close-request` → `close-tab` on that buffer; dragging calls `on-reorder`; "+" calls
-  `on-new-request` → `new-document`. Labels keep the "• " modified prefix. `'flat-portable` must be explicit:
-  `mrpanel.rkt` only forces it on Windows, and without it macOS gets Cocoa's own no-border strip (close and
-  reorder, but no "+" and a different drawing). With it, both OSes draw the same strip. Right-click on the
-  strip (`on-subwindow-event`) opens the tab context menu (RM-071); middle-click closes (RM-070). Keyboard:
-  Ctrl+Tab as today.
-- **Editor.** `editor-canvas%` with the margins above and `set-canvas-background` from `surface`. The optional
-  gutter is a 48 px `canvas%` to the left that paints line numbers in `text-2` (current line in `text`) using
-  the editor's `position-location` and scroll offset; it is on for code Languages, off for prose, per mode local
-  `gutter?` (new issue `ui-gutter`).
-- **Find row.** Native and in-layout, appearing between the tabs and the editor (a real overlay is impossible:
-  `racket/gui` children never overlap). Row 1: `[ find text-field% ] 3 of 12  [☐ Match case] [☐ Whole word]
-  [Advanced ▾] [Previous] [Next] [✕]`; row 2 (Find and Replace): `[ replace text-field% ] [Replace] [Replace All]`.
-  `Advanced ▾` discloses `[☐ Regular expression] [☐ In selection]` inline (RM-107, RM-112). Esc closes and
-  refocuses the editor, Enter and Shift+Enter step, the count doubles as the wrap indicator ("Wrapped · 1 of 12")
-  and turns `error` at "No matches" (RM-110). Buttons take icon labels from the same set.
-- **Status bar.** One `canvas%` (a clickable native equivalent does not exist). Left: the message segment (the
-  echo area). Errors get an `error` icon and stay until clicked, which opens Activity. Right: segments `Ln 12,
-  Col 8 · 84 words · UTF-8 · LF · Markdown · 100%`, each hit-tested, underlined in `accent` on hover, with a hint
-  in the message segment ("Click to change the Language"), and reachable by Tab then Left/Right/Enter. Clicks
-  run the commands E2.M4 lists.
-- **Command palette.** The existing `dialog%` + `text-field%` + `list-box%`, restyled: 640 × 440, placed over
-  the top third of the main window (`move` after `center`), `'no-caption` when the platform accepts it (titled
-  "Command Palette" otherwise), columns `Command · Category · Shortcut`, recents first when empty (done), the
-  highlighted command's `#:help` and Emacs alias in a `message%` footer (RM-030), and an empty state row
-  "No commands match 'xyz'. Check the spelling or open Help > Keyboard Shortcuts." (RM-031).
-- **Dialogs.** Native `message-box`, `get-file`, `put-file`. One helper wraps app confirmations so wording is
-  plain ("Save changes to notes.md?", "Don't Save", never "buffer") and button order follows the platform.
-- **Context menus.** Native `popup-menu%` from the context registry (RM-055), items enabled per selection.
-- **Notifications.** Two channels, no floating toasts (they would need a second window; a later experiment).
-  *Info* goes to the status message. *Warning* and *error* that need an action raise the **InfoBar** row:
-  `message%` with the native `'caution` or `'stop` icon, one plain sentence, `Details` (opens Activity),
-  one action (`Disable extension`, `Reload`, `Keep mine`), `✕`. Several messages queue; the row hides when
-  empty. libadwaita's toast rule (one line, at most one action) is the content guideline.
-- **Start screen.** A `vertical-panel%` shown in the editor slot when no files are given: title "Rackmac",
-  subtitle "A modern editor you can program", three large `button%`s `New Document`, `Open…`, `Get Started`,
-  a `list-box%` "Recent" (RM-083; double-click opens), and a small "Scratch Pad" button for Racket users. It
-  leaves when the first document opens (`change-children`) and is a command, so it can come back from Help.
+### 2.1 Library sidebar
+
+_Changed 2026-09-25 (new)._
+
+- **What it is.** The Library is an ordered list of folders the person chose (`library-folders` setting). A folder is
+  a folder: `~/Documents/Notes`, a OneDrive folder, a SharePoint document library synced by the OneDrive client.
+  On macOS those live under `~/Library/CloudStorage/OneDrive-<Org>/` and
+  `~/Library/CloudStorage/OneDrive-SharedLibraries-<Org>/`; iCloud Drive under
+  `~/Library/Mobile Documents/com~apple~CloudDocs/`. **Add Folder…** (`get-directory`) lists those candidates
+  above the dialog button when they exist, with a cloud icon. That is the entire OneDrive/SharePoint integration:
+  the sync client does the syncing, Rackmac reads and writes files. No Graph API, no sign-in.
+- **Sections, top to bottom** (each a header `message%` in `ui-small` caps, `text-2`):
+  1. `text-field%` **Filter** (matches titles and paths; Enter opens the first hit; ⇧⌘O Quick Open is the same
+     search as a picker).
+  2. **Recent** (`list-box%`, last 10, from `recents.rktd`).
+  3. **Folders** (`mrlib/hierlist` `hierarchical-list%`: one root per Library folder, subfolders collapsible,
+     files `.md .markdown .txt .rkt .py .json .yaml .csv`; other files hidden by default, a setting shows all;
+     modified open documents get the "•" prefix as tabs do).
+  4. **Tags** (v0.4; `list-box%` of `#tags` and front-matter tags with counts; selecting filters Recent and Folders).
+  5. **Outline** (v0.4; `list-box%` of the current document's headings, indented by level; follows the caret;
+     click jumps).
+  6. **Backlinks** (v0.4; `list-box%` of notes linking here, one row per linking line; click opens at that line;
+     "Unlinked mentions" below).
+  Sections collapse by clicking their header; the state persists. Outline and Backlinks share the lower half.
+- **Actions.** Click opens (single tab per file, as today). Right-click (`popup-menu%` from the context registry,
+  group `library`): New Note Here, New Folder, Rename, Reveal in Finder, Copy Path, Move to Trash (uses the Finder
+  Trash through `/usr/bin/osascript`, **verify**; otherwise a confirm-then-delete with the file name). Drag a file
+  into the editor to insert a link to it (`on-drop-file` exists on the frame; per-widget drop **verify**).
+- **Toggle:** **View > Show Library** `⌥⌘S` (Apple Notes: Show Folders). `⌘B` cannot be the sidebar key any
+  more; it is Bold. Save All loses `⌥⌘S` and keeps its menu item.
+- **Refresh:** `filesystem-change-evt` per Library folder (v0.4) plus a rescan on `on-activate`; v0.3 rescans on
+  activate and after our own saves.
+- **Empty state:** "No folders yet. Add the folder where you keep your notes (OneDrive and SharePoint folders
+  work)." with an **Add Folder…** button.
+- **Keyboard:** Tab into the filter, Tab again to the tree; arrows move, Right/Left expand/collapse, Enter opens,
+  Space previews nothing (no preview pane in this iteration).
+
+### 2.2 The document area for notes (Markdown, WYSIWYM)
+
+_Changed 2026-09-25 (new)._
+
+The file on disk is plain Markdown. What you see is the same characters, styled: "what you see is what you
+mean". Markup characters stay in the text, drawn small and in `text-2`, so the caret never jumps and a colleague
+opening the file in another app sees ordinary Markdown. The rendering rules, all implementable with `text%`
+styles, paragraph margins and a few snips (§5.3):
+
+| Markdown | Rendering in the editor | Mechanism |
+|---|---|---|
+| `# Heading` … `###### ` | heading text in `heading` color, bold, 1.6× / 1.35× / 1.15× / 1.0×; the `#` marks in `text-2` at 0.8× | `change-style` with named styles "Heading 1..6", "Markup" |
+| paragraph | `prose` font, `text`, centered measure, line spacing 4 | Standard style + paragraph margins |
+| `**bold**` `*italic*` `` `code` `` | bold / italic / `mono` on `line-highlight` background; markers in "Markup" | style runs |
+| `- item`, `1. item` | hanging indent (first line −16 px, body +24 px per level); the bullet character stays (`-`, drawn in `text-2`); numbers stay | `set-paragraph-margins` |
+| `- [ ] task`, `- [x] task`, `- [-] task` | v0.3: `[ ]`/`[x]` in "Markup"; v0.4: a checkbox `snip%` drawn as a 14 px box with the OS accent check, clickable; done text in `text-2`, cancelled drawn with a line through it by the snip's paragraph decorator (`style-delta%` has no strikethrough) | snip whose `get-text` is `[ ]`, `[x]`, `[-]` |
+| `> quote` | left margin +24, `text-2`, the `>` in "Markup" | paragraph margins + style |
+| ```` ```lang ```` fenced code | `mono`, `line-highlight` background across the block, Racket/Python coloring inside (v0.5) | style runs; the block is a paragraph range |
+| `[text](url)`, `<https://…>`, `[[Note]]` | text in `accent`, underlined; `(url)` in "Markup"; hover shows the target in the status message; **⌘-click follows** (Word's convention); plain click places the caret | `set-clickback` on the span; modifier check in `buffer%` `on-event` |
+| `![alt](image.png)` | v0.5: the source line stays; an `image-snip%` preview (scaled to the measure) sits on its own line below, excluded from the file by `document-text` | image snip with `get-text` "" |
+| `\| a \| b \|` tables | `mono` block with columns aligned on Tab (v0.5); no table layout in `text%` | style runs + reformat command |
+| `---` | a thin `stroke` line drawn by a rule snip | snip with `get-text` `---` |
+| `#tag`, `2026-09-30`, `due 2026-09-30`, `TODO`/`WAITING`/`DONE` in a heading | v0.4: tag in `accent` tinted background; today's date `accent`, overdue `error`, done `success`; keyword bold in the state's color | style runs |
+| YAML front matter | collapsed to one dim line "title · tags" with a disclosure; open shows the block in `mono` | v0.4 fold snip |
+| markup hidden on inactive lines | **not in v0.3**; a v0.4 experiment (`md-hide-markup`) using zero-width snips; the owner decides the default (REPLAN §9) | — |
+
+Behavior: Enter continues lists and checklists; Enter on an empty item ends the list; Tab/Shift+Tab indent and
+outdent an item; typing `[[` opens the note picker (v0.4); a smart-typing setting is **off** (lawyers paste
+citations with straight quotes; the file is Markdown, not typography). The find row, selection, undo, zoom and
+word count work as today because nothing but styles changed.
+
+#### 2.2.1 Two views of one document: Formatted and Markdown Source
+
+_Changed 2026-09-25 (owner requirement)._ Every Markdown document has two views, switched per document at any time.
+Both edit the same `text%`; the file never changes shape.
+
+| | **Formatted** (default for notes) | **Markdown Source** |
+|---|---|---|
+| Looks like | a word-processor page: the table above (prose font, centered measure, sized headings, rendered bold/italic, lists and checkboxes, links as link text with the URL de-emphasized) | exactly today's Markdown mode: `mono`, unwrapped-at-window (80-column wrap), headings and inline code colored, every character the same size, no snips, no clickbacks, no centering |
+| Markup | de-emphasized (v0.3); optionally hidden on inactive lines (v0.4 setting, §5.3) | always visible, plain |
+| Who wants it | writing and reading notes | fixing a table, pasting a big block of raw Markdown, checking what a colleague will see in another tool, or when something renders unexpectedly |
+
+- **Default.** Formatted for `.md`/`.markdown`; a setting `markdown-default-view` (Formatted / Source). Documents
+  above the large-file threshold (500k characters, existing guard) open in Source with a status message, because
+  styling them is slow; the toggle still works on request.
+- **How to reach the toggle** (all run the one command `toggle-markdown-view`, so they never disagree):
+  1. **View > Show Markdown Source** as a `checkable-menu-item%` (checked when in Source; `#:when` Markdown).
+  2. The **Format group's last button**, whose icon and title swap between "Show Markdown Source" and "Show
+     Formatted" (`button%` has no pressed state; a swapped label is the native way to show a toggle).
+  3. A **status-bar segment** "Formatted" / "Markdown" next to the Language segment, clickable like the Language
+     segment (hint: "Click to switch between the formatted view and Markdown source").
+  4. Shortcut **⌥⌘U**: Chrome's and Safari's View Source key, which the owner's audience already knows; it is free in
+     the defaults, is a ⌘ combination with a letter (allowed by `shortcuts-test`), and does not touch ⌘/ (Toggle
+     Comment). Typora's ⌘/ and Obsidian's ⌘E were considered and rejected: ⌘/ is taken and ⌘E is Word's "center".
+- **Remembered per document.** The choice is stored with the document's recents entry (`recents.rktd`: path, last
+  view, cursor), so a note you keep in Source stays in Source across sessions; new documents follow the setting;
+  untitled documents follow the setting until first saved.
+- **Editing in Formatted view.**
+  - The caret moves over the real characters. With markup de-emphasized (v0.3 default) every character has width,
+    so Left/Right, Home/End, selection and Backspace behave exactly as in Source; nothing is hidden, only small.
+  - With **hidden markup** on (v0.4 setting), the paragraph that holds the caret always shows its markers (as
+    Obsidian's live preview does): entering a paragraph reveals them, leaving it hides them again. Markers in
+    other paragraphs are zero-width snips (§5.3); arrow keys treat a marker as one step, Backspace/Delete at a
+    hidden marker removes the whole marker, and a selection across hidden markers copies the source characters.
+  - **Bold, Italic, Link, Headings, lists** are the same commands in both views (§2.4): they edit the source
+    (`**` around the selection or the word at the caret; a `## ` prefix on the line; `- [ ] ` on the line) and the
+    region restyle renders the result at once. Toggling again removes the markup. In Source view the same keys
+    insert the same characters; they simply stay plain.
+  - **Checkboxes** in Formatted view are snips: click toggles, ⇧⌘U toggles at the caret; in Source view they are
+    the characters `[ ]` / `[x]` and ⇧⌘U still edits them.
+  - **Links**: Formatted shows the text in `accent` with the `(url)` small; ⌘-click follows in both views; ⌘K
+    inserts or edits the link either way. Pasting a URL onto a selection wraps it as a link (both views).
+- **Copy and paste.** Copy always yields the source Markdown (the `copy` command reads `document-text`, §5.3), so
+  a colleague receives readable Markdown and pasting back into a note re-renders. Copy as Rich Text (v0.4) is the
+  explicit way to hand Word formatted text.
+- **Switching** is a full restyle of the document (clear to Standard, then either render or the source coloring),
+  inside one edit sequence so it paints once; cursor and scroll position are kept; nothing enters undo. A 5,000-line
+  note switches in well under a second (acceptance in `md-view-toggle`).
+
+### 2.3 Format group and Format menu
+
+_Changed 2026-09-25 (new)._
+
+The toolbar is one row (as built). For prose Languages the registry adds a **Format** group via
+`add-toolbar-item! #:mode 'markdown-mode` (the same `#:mode` scoping that already shows Run only for Racket):
+
+`New Open Save | Undo Redo | Cut Copy Paste | Find | B I 🔗 | H▾ • 1. ☑ | Export▾ Source/Formatted ⟨spacer⟩ Search commands`
+
+`H▾` opens a `popup-menu%` (Heading 1, 2, 3, Body Text); `Export▾` opens PDF…, Word…, Markdown (copy); the last
+button toggles Formatted / Markdown Source (§2.2.1) and swaps its icon and title to name the other view. The menu
+bar gains **Format** between Edit and View, generated from `#:menu "Format"`, shown only when the current document
+is prose (`#:when`). Buttons dim from `#:when`; hover shows title and shortcut in the status message (as built).
+
+### 2.4 Shortcuts for notes
+
+_Changed 2026-09-25 (new). Every binding must pass `tests/shortcuts-test.rkt` (no Option+letter, no OS-reserved
+keys); all are ⌘ combinations with letters, digits or symbols._
+
+| Command | macOS | Precedent |
+|---|---|---|
+| Bold / Italic | ⌘B / ⌘I | Word, Pages, Outlook, Google Docs |
+| Inline Code | ⇧⌘C | Slack, Teams ("code" formatting) |
+| Insert Link… | ⌘K | Word, Outlook, Pages, Google Docs |
+| Heading 1 / 2 / 3 | ⌥⌘1 / 2 / 3 | Word for Mac (Apply Heading 1–3) |
+| Body Text | ⌥⌘0 | completes the Word pattern (Word's own ⇧⌘N is a browser New Window key elsewhere) |
+| Bulleted List / Numbered List | ⇧⌘8 / ⇧⌘7 | Google Docs |
+| Checklist | ⇧⌘L | Apple Notes |
+| Mark Done (toggle checkbox; cycle heading state) | ⇧⌘U | Apple Notes (Mark as Checked) |
+| Quote | ⇧⌘9 | next to the list keys; no strong precedent |
+| Show Markdown Source / Show Formatted (toggle) | ⌥⌘U | Chrome and Safari View Source; ⌘/ (Typora) is Toggle Comment here, ⌘E (Obsidian) is Word's Center |
+| Follow link | ⌘-click | Word (⌘-click to follow), Outlook |
+| Show Library | ⌥⌘S | Apple Notes (Show Folders) |
+| New Note | ⌘N | Notes, Word, Pages |
+| Quick Open (Library) | ⇧⌘O | as built |
+| Search Library | ⇧⌘F | Xcode, VS Code (find in project) |
+| Today | ⌃⌘T | free; ⇧⌘T is Reopen Closed Tab |
+| Collapse / Expand Section (v0.4) | ⌥⌘[ / ⌥⌘] | free in the defaults; ⌥⌘− / ⌥⌘= were rejected because macOS Accessibility Zoom reserves them (with ⌥⌘8) when enabled; Word uses Alt+Shift+−/+ |
+| Promote / Demote heading (on a heading line) | ⌘[ / ⌘] | reuse of Outdent/Indent Lines; Word outline uses Shift+Tab/Tab |
+| Move Section Up / Down (caret on a heading) | ⌥↑ / ⌥↓ | reuse of Move Line; Word outline Alt+Shift+↑/↓ |
+| Paste as Plain Text (v0.4) | ⇧⌥⌘V | Chrome, Word for Mac, Pages |
+| Settings… | ⌘, | every macOS app (Customize with Code moves to Tools > Extensions, unbound) |
+| Print… (Save as PDF in the dialog) | ⌘P | as built |
+| Export as PDF… / Export to Word… / Import Word Document… | menu (File > Export ▸, File > Import…) | Pages: File > Export To |
+| Run Selection / Run Document | ⌘↩ / ⇧⌘↩ **in code Languages only** | as built, rescoped |
+
+### 2.5 Outline and Backlinks
+
+_Changed 2026-09-25 (new)._ Both are `list-box%`es in the sidebar's lower half (§2.1), so they are native and
+keyboard-reachable. The Outline is rebuilt from the parser's heading spans when a restyle touches a heading, and
+its selection follows the caret's section. Backlinks come from the Library index (v0.4): each row is
+"Note title — the linking line", double-click opens the note at that line. Empty states: "No headings yet. Start a line
+with # to make one." and "Nothing links here yet. Type [[ in another note to link to this one." A **Today** entry at
+the top of the sidebar opens the generated Today document (REPLAN `today-view`).
+
+### 2.6 Clipboard with Word
+
+_Changed 2026-09-25 (new; the one part of the design that could not be verified headless)._ `text%` copies plain
+text (which is Markdown, so pasting into Word gives readable text). Two things depend on a spike (`clipboard-spike`,
+v0.3): whether `clipboard-client%` `add-type` and `get-clipboard-data` on the Cocoa backend can carry
+`public.html` / `public.rtf` (or Word's `HTML Format`) beside `TEXT`. If yes: **Paste** from Word converts the HTML
+through `pandoc -f html -t gfm --wrap=none` into Markdown, and **Copy as Rich Text** puts pandoc's HTML on the
+pasteboard so Word and Outlook receive headings and lists. If no: paste stays plain text (Word always supplies it)
+and Copy as Rich Text writes an HTML file and offers Reveal; both are documented in the issue's outcome.
+
+### 2.7 Code documents
+
+_Changed 2026-09-25 (revised from "editor" and "gutter")._ A document whose Language descends from `prog-mode`
+(Racket, Python, JSON, YAML, shell):
+
+- `mono` font, no wrapping, no centering, `line-highlight` on the current line, syntax coloring
+  (Racket through `syntax-color/module-lexer`, Python through a small lexer; v0.5).
+- **Gutter** (`ui-gutter`, v0.5): a 48 px `canvas%` left of the editor painting line numbers in `text-2`
+  (current line `text`, 2 px `accent` bar), synced through `position-location` and `after-scroll-to`.
+- **Run** appears in the toolbar (`#:mode 'racket-mode`, as built) and in Tools; ⌘↩ / ⇧⌘↩ are bound in the code
+  Languages' keymaps, not globally. Python gets **Run in Terminal** (opens Terminal.app), never an embedded terminal.
+- **Review (read-only)** toggle (v0.5): locks the text, shows a lock badge in the status bar, disables Save; **Add Note
+  About This Line** creates or appends to a note with a `file:` link `path#L12` that ⌘-click follows back.
+- Status bar shows Ln/Col, encoding, line ending, Language, zoom (all as built); prose hides the first three.
+- Toggle Comment, Indent/Outdent Lines, Go to Line stay as built and are `#:when` code.
+
+### 2.8 Start screen
+
+_Changed 2026-09-25 (revised)._ A `vertical-panel%` in the editor slot when nothing is open (and reopenable from
+Help): title "Rackmac", subtitle "Notes and documents you can trust to plain files", three large `button%`s **New
+Note**, **Add Folder…**, **Open…**, a `list-box%` **Recent** (double-click opens), and a text button **Get Started**
+that opens the bundled `Getting started.md` (a real note with checkboxes: "Make this line bold", "Add a folder",
+"Export this note to Word"). No Scratch Pad on the start screen; Tools > Scratch Pad exists for Racket users. A
+setting skips the screen and opens the last note instead.
+
+### 2.9 As built or as planned before
+
+_Unchanged._ **Title bar and menus** (native; title carries name and modified dot; items enable from `#:when`).
+**Tabs** (`tab-panel%` `'no-border 'flat-portable 'can-reorder 'can-close 'new-button`, right-click menu,
+"• " prefix). **Find row** (native, in-layout, between tabs and editor; count doubles as wrap indicator; Advanced
+discloses regex and In selection; Esc closes). **Status bar** (one `canvas%`; message segment left; clickable
+segments right; hover underline in `accent`; keyboard reachable). **Command palette** (`dialog%` 640 × 440 over the
+top third, Command · Category · Shortcut, recents first, `#:help` footer, empty-state row; the "Emacs:" footer line
+leaves the default product). **Dialogs** (native; plain wording, platform button order). **Context menus** (native
+`popup-menu%` from the registry). **Notifications** (status message for info; InfoBar row with native icon, one
+sentence, Details, one action, dismiss; no floating toasts).
 
 ## 3. Modern UX practices, applied
 
+_Unchanged, with two rows added at the end._
+
 | Practice | Rackmac |
 |---|---|
-| **Discoverability three ways** | every command: menu path, toolbar or palette, shortcut shown in all three (existing metadata); shortcut cheat sheet (RM-039); one-time "Tip: ⌘S" in the status message after a menu or palette run (RM-041); which-key popup for chords (RM-040) as a small captionless `dialog%` near the caret |
+| **Discoverability three ways** | every command: menu path, toolbar or palette, shortcut shown in all three (existing metadata); shortcut cheat sheet (RM-039); one-time "Tip: ⌘S" in the status message after a menu or palette run (RM-041); which-key popup for chords (RM-040) only with the v0.8 preset, since the default has no chords |
 | **Progressive disclosure** | Find shows two options, Advanced holds regex and scope; toolbar overflow when narrow; settings dialog with search and "Edit as code"; Activity has Details, not a backtrace |
 | **Non-modal feedback** | status message for info, InfoBar for actionable warnings and errors; file-changed banner (RM-080) is an InfoBar; no modal error dialogs anywhere; the only modals are Save/Open/Confirm |
-| **Empty states** | start screen; palette no-results with a next step; Activity "Nothing yet. Errors and messages appear here."; Recent "Files you open appear here." |
-| **Select, then act** | selection-first commands, `#:when` disables Cut/Copy without a selection so the toolbar teaches the rule |
-| **Safe by default** | autosave and Restore (E3) surfaced in an InfoBar on next launch; destructive confirmations name the file and offer Cancel |
+| **Empty states** | start screen; palette no-results with a next step; Activity "Nothing yet. Errors and messages appear here."; Recent "Files you open appear here."; Library "No folders yet…"; Outline "No headings yet…"; Backlinks "Nothing links here yet…" |
+| **Select, then act** | selection-first commands, `#:when` disables Cut/Copy without a selection so the toolbar teaches the rule; Bold/Italic act on the selection or the word at the caret |
+| **Safe by default** | autosave and Restore (E3) surfaced in an InfoBar on next launch; destructive confirmations name the file and offer Cancel; the recovery store never lives inside a synced folder |
 | **Keyboard and accessibility** | native controls give focus rings, Tab order and VoiceOver/Narrator; the two painted pieces (status bar, gutter) are focusable, arrow-navigable and announce via the status message; 4.5:1 text contrast enforced by test; `ui-scale`; no color-only state |
 | **Platform manners** | dialog button order, modifier glyphs, close-box side and Ctrl-click follow the OS (§4) |
+| **The file is the truth** | what is on disk is plain Markdown a colleague can open anywhere; every decoration is a style or a snip whose text is the source, and a round-trip test proves it |
+| **Office muscle memory** | ⌘B, ⌘I, ⌘K, ⌥⌘1–3, ⇧⌘L, ⌘-click follow, ⌘, Settings; nothing to unlearn from Word, Pages, Notes or Chrome |
 
 ## 4. Per-platform differences
+
+_Unchanged. macOS is the release target; the Windows column records intent and keeps code paths compiling._
 
 | Aspect | Windows | macOS | GNOME note (informative) |
 |---|---|---|---|
 | Title bar, menu bar | native in-window (light; Win32 controls do not follow dark mode) | native; menu in the system bar | header bar; not adopted |
 | Tab strip | `flat-portable` (forced anyway with `can-close`) | `flat-portable` set explicitly; same strip and "+" as Windows | libadwaita tab bar looks the same |
 | Chrome font | Segoe UI (auto) | SF Pro (auto) | Cantarell |
-| Editor font | Cascadia Mono → Consolas 12 | SF Mono → Menlo 14 | Source Code Pro → DejaVu Sans Mono |
+| Editor font | Cascadia Mono → Consolas 12; prose Segoe UI 11 pt | SF Mono → Menlo 14; prose system 15 | Source Code Pro → DejaVu Sans Mono |
 | Accent / selection | `get-highlight-background-color` (follows Windows accent) | same (follows macOS accent) | same |
 | Dark mode detection | registry `Personalize\AppsUseLightTheme` (0 = dark), polled on `on-activate`; today's panel-luminance heuristic cannot work there | `AppleInterfaceStyle` (existing), polled on `on-activate` | `color-scheme` |
 | Dark-mode result | editor, gutter, status bar dark; native chrome stays light until `racket/gui`'s Win32 backend supports it | everything dark | — |
@@ -205,190 +416,273 @@ frame% (native title: "• notes.md — Rackmac")
 | Undo / redo, find next | Ctrl+Z / Ctrl+Y, F3 | ⌘Z / ⇧⌘Z, ⌘G | as Windows |
 | Zoom gesture | Ctrl+wheel | pinch, ⌘+wheel | Ctrl+wheel |
 | Status bar height | 24 | 22 | 24 |
+| Synced folders | `%USERPROFILE%\OneDrive - <Org>` | `~/Library/CloudStorage/OneDrive-<Org>`, `OneDrive-SharedLibraries-<Org>`, `~/Library/Mobile Documents/com~apple~CloudDocs` | — |
 
 ## 5. Implementation strategy in Racket
 
 ### 5.1 Scope note on racket-skia
 
-Out of scope for this plan. `skia-natipkgs/` holds macOS-arm64 and iOS binaries only, its `gui/COVERAGE.md` lists
-`editor-canvas%` as missing (Rackmac's editor is `text%`), and its own `REVIEW.md` asks for a re-architecture.
-The one thing borrowed is a habit: its headless PNG tour is the model for our golden tests (§5.4).
+_Unchanged._ Out of scope for this plan. `skia-natipkgs/` holds macOS-arm64 and iOS binaries only, its
+`gui/COVERAGE.md` lists `editor-canvas%` as missing (Rackmac's editor is `text%`), and its own `REVIEW.md` asks for a
+re-architecture. The one thing borrowed is a habit: its headless PNG tour is the model for our golden tests (§5.4).
 
 ### 5.2 Modules
 
+_Changed 2026-09-25: notes modules added; the built ones are marked._
+
 ```
-rackmac/ui/tokens.rkt      (token 'surface) etc. for light/dark (+ high-contrast later); accent from the OS
-                           highlight color; ui-scale; fires 'theme-changed. theme.rkt keeps the faces and
-                           reads bg/fg from here, so editor and chrome cannot drift.
-rackmac/ui/icons.rkt       (icon-bitmap name size color scale) -> bitmap%, cached per (name size color scale);
-                           letter-tile fallback; (icon-names).
-rackmac/ui/layout.rkt      the metric constants (insets, spacing, row heights) and the frame row builder.
-rackmac/ui/appearance.rkt  detect dark mode per platform, poll on on-activate, swap tokens once per real change.
-rackmac/ui/toolbar.rkt     horizontal-panel% of button%s from the toolbar registry; enable from #:when.
-rackmac/ui/tabs.rkt        tab-panel% subclass: on-close-request / on-reorder / on-new-request -> commands.
-rackmac/ui/status-bar.rkt  canvas%: pure (layout w h) -> segments, (render dc w h); hit-test; keyboard.
-rackmac/ui/find-bar.rkt    today's find code, moved, with the count message% and Advanced disclosure.
-rackmac/ui/infobar.rkt     horizontal-panel% row with a message queue.
-rackmac/ui/palette.rkt     picker.rkt restyle (placement, columns, footer, empty state).
-rackmac/ui/start-view.rkt  vertical-panel% for the start screen.
-rackmac/ui/gutter.rkt      canvas% line numbers synced to the editor (optional, code Languages).
-rackmac/ui/dialogs.rkt     confirm helper with platform button order and plain wording.
-rackmac/ui/splitter.rkt    (E9) 6 px canvas% sash between panes; racket/gui has no splitter.
+rackmac/ui/tokens.rkt       built   roles, light/dark, accent from the OS; contrast test
+rackmac/ui/icons.rkt        built   (icon-bitmap name size color scale) -> bitmap%; letter-tile fallback
+rackmac/ui/layout.rkt       built   metric constants; gains prose-measure-inches, sidebar-width
+rackmac/ui/toolbar-panel.rkt built  button% row from the toolbar registry; #:mode groups
+rackmac/ui/status-bar.rkt   built   canvas%: pure layout/render; hit-test; keyboard
+rackmac/ui/find-bar.rkt     built   find/replace rows
+rackmac/ui/palette.rkt      built   picker restyle; loses the Emacs footer line by default
+rackmac/ui/context-menu.rkt built   popup-menu% from the registry
+rackmac/ui/appearance.rkt   v0.3    dark-mode re-check on activate (macOS part of #254)
+rackmac/ui/sidebar.rkt      v0.3    the Library panel: sections, hierarchical-list% tree, list-box%es, filter
+rackmac/ui/start-view.rkt   v0.3    start screen panel
+rackmac/ui/settings-dialog.rkt v0.3 rows generated from define-setting
+rackmac/ui/infobar.rkt      v0.4    message queue row
+rackmac/ui/gutter.rkt       v0.5    line numbers for code Languages
+rackmac/ui/splitter.rkt     v0.6    sash between panes
+rackmac/markdown/parser.rkt v0.3    pure scanner: blocks and inline spans with positions
+rackmac/markdown/render.rkt v0.3    spans -> styles, paragraph margins, clickbacks; region restyle
+rackmac/markdown/snips.rkt  v0.4    checkbox, rule, fold, image-preview snip classes (get-text = source)
+rackmac/markdown/edit.rkt   v0.3    formatting commands, list continuation, structure editing
+rackmac/library/folders.rkt v0.3    library-folders setting, scan, candidates (CloudStorage, iCloud)
+rackmac/library/recents.rkt v0.3    recents.rktd via put-preferences (filename argument)
+rackmac/library/watch.rkt   v0.4    filesystem-change-evt threads
+rackmac/library/index.rkt   v0.4    SQLite (db) index: titles, headings, tags, links, tasks, dates; FTS5
+rackmac/office/pandoc.rkt   v0.3    locate and run pandoc; docx import/export; html <-> gfm for the clipboard
+rackmac/office/pdf.rkt      v0.3    print-to-dc on pdf-dc%; page setup
+rackmac/settings.rkt        v0.3    define-setting, contracts, scope resolution, settings.rktd
 ```
 
-`rackmac/ui/*` is private at API version 1. Only the registries (`add-toolbar-item!`, `add-context-item!`,
-later `add-status-segment!`) are exported from `rackmac/api`, as ROADMAP says.
+`rackmac/ui/*` stays private at API version 1. The registries (`add-toolbar-item!`, `add-context-item!`,
+`add-status-segment!`) and, from v0.3, `define-setting`/`setting-ref` are exported from `rackmac/api`; the Markdown
+parser's span structs are exported so extensions can build on them.
 
-### 5.3 Techniques
+### 5.3 Techniques: what `text%` can do for a notes app, and where it stops
 
-- **frame.rkt refactor.** The editor leaves `tab-panel%`'s child area only conceptually: `tab-panel%` stays the
-  parent of the InfoBar/find/editor stack (it is a panel), gains the new styles, and `refresh-tabs!` keeps
-  syncing labels from `visible-buffers`. `status-panel` and its two `message%`s become `status-bar%`, fed by the
-  `echo` and `status-changed` hooks. Menus are untouched.
-- **Toolbar icons at HiDPI.** Render each icon into `(make-bitmap 16 16 #t #:backing-scale s)` where `s` is
-  the frame's display scale (2.0 measured here), stroked in `get-label-foreground-color`; re-render when that
-  color changes (macOS appearance switch), not when the editor theme does. `button%` draws the bitmap at
-  logical size.
-- **Gutter.** `on-paint` draws numbers for the visible paragraph range using the editor's `position-location`
-  and `get-view`; it refreshes from the buffer's `after-scroll-to` (an `editor<%>` method; `editor-canvas%` has
-  no scroll hook) and the change hooks. The current line number is in `text`, others `text-2`; a 2 px `accent`
-  bar marks the current line.
-- **Status bar.** `render` is a pure function of (segments, hover, focus, width), so tests draw it to a
-  `bitmap-dc%`; `on-event` maps x to a segment; Tab focuses the canvas, Left/Right move, Enter runs.
-- **Appearance.** On startup and every `on-activate`: read the OS (registry on Windows via `reg query`, or
-  `ffi/unsafe` later; `defaults` on macOS as today), compare with the current theme, and only then swap tokens
-  and run `theme-changed`; `theme.rkt` re-applies its style delta (existing), the status bar, gutter and icons
-  re-render. `RACKMAC_THEME` still forces a theme. On Windows the editor goes dark while the chrome stays light;
-  a setting "Editor theme: System / Light / Dark" lets people who dislike the mix pick.
-- **Text inputs.** `text-field%` everywhere (find, replace, palette, go-to-line). No placeholder API exists, so
-  labels sit to the left; the count `message%` gives the live feedback instead.
+_Changed 2026-09-25 (new). The API facts below come from the `racket/gui` and `racket/draw` references; items
+marked **verify** could not be run in this session and are the first things the maintainer's live session checks._
+
+**Capabilities we build on**
+
+1. **Style runs.** `change-style delta start end` with a `style-delta%`: face or family (`set-delta-face`,
+   `set-family 'system|'modern|'roman`), size (`set-size-add`, `set-size-mult`), weight and slant
+   (`set-weight-on 'bold`, `set-style-on 'italic`), underline (`set-underlined-on`), foreground and background
+   (`set-delta-foreground`, `set-delta-background`). Applied inside `begin-edit-sequence #f #f` with
+   `set-modified` restored afterwards, exactly as `highlight.rkt`'s `with-styling` does, so styling is never an
+   edit and never enters undo.
+2. **Named, derived styles.** The shared `style-list%` already has "Standard". Notes add "Heading 1..6", "Markup",
+   "Code", "Quote", "Link", "Done" as named styles created with `find-or-create-style` from Standard plus a
+   delta, so a zoom change on Standard restyles everything at once (this is how zoom already works).
+3. **Paragraph layout.** `set-paragraph-margins para first-left left right` (hanging indents for list items,
+   indented quotes, and the page-like centering by giving every paragraph equal left and right margins) and
+   `set-paragraph-alignment`. `set-line-spacing` for the whole editor. `set-max-width` and `auto-wrap` for the
+   measure. Margins are per paragraph and are re-applied by the region restyle whenever an edit splits or joins
+   paragraphs.
+4. **Clickable spans.** `set-clickback start end proc [hilite-delta call-on-down?]` and `remove-clickbacks`.
+   A clickback fires on a plain click; `buffer%`'s existing `on-event` override checks the ⌘ modifier
+   (`get-meta-down` on macOS) first and lets a plain click place the caret.
+5. **Snips.** Content is a sequence of snips; a `snip%` subclass overrides `get-extent`, `draw`, `on-event`,
+   `get-text`, `copy`. `text%` merges only adjacent snips of the same class, so our classes stay intact. The
+   rule for every decoration snip: **its `get-text` returns the source markup it replaces** (`[ ]`, `[x]`, `---`,
+   the folded lines), so `get-text` on the whole document still yields the file. Inserting and removing them
+   happens outside undo like styles; the user's own edits around them undo normally. Copy/Cut inside Rackmac
+   converts them to their text (our `copy` command is ours to define) so nothing depends on a registered
+   `snip-class%` for the clipboard.
+6. **Printing and PDF.** `print` opens the native dialog (macOS offers Save as PDF); `print-to-dc` renders the
+   editor into any `dc<%>`, and `racket/draw`'s `pdf-dc%` writes a PDF without pandoc or LaTeX. Page size comes from
+   the `pdf-dc%`; margins via the `ps-setup%` (**verify** margin handling and page breaks across a styled note).
+7. **Word count, find, undo, zoom** keep working because the document text is unchanged by rendering.
+8. **The tree widget.** `mrlib/hierlist`'s `hierarchical-list%` is in the standard distribution: collapsible items,
+   keyboard navigation, custom item snips for icons; no new dependency.
+
+**Limits, and what the design does about each**
+
+| Limit | Consequence | Design response |
+|---|---|---|
+| No invisible or zero-size text style | markup cannot be hidden by styling; `set-size-add`'s floor is 1 pt and still occupies width | v0.3 de-emphasizes markup (`text-2`, 0.8×); hiding is a v0.4 experiment with zero-width snips whose `get-text` is the characters, on inactive lines only |
+| No strikethrough in `style-delta%` or `font%` | done/cancelled tasks cannot be struck by a style | done tasks go `text-2`; cancelled ones are drawn through by the checkbox snip's paragraph decoration (or shown as `text-disabled`) |
+| No per-paragraph spacing before/after | headings cannot get "space above" | larger size and bold carry the hierarchy; a setting adds a blank line on Enter after a heading |
+| One caret per `text%` | two panes on one note share the cursor (#243) | panes (v0.6) save and restore the selection per pane |
+| `editor-canvas%` children cannot overlap; no popovers | no floating link preview or inline date picker | hover text in the status message; Heading▾ and Export▾ are `popup-menu%`s; the date picker is a small `dialog%` |
+| Whole-buffer restyle after each edit (as built, 120 ms timer; #244) | flicker and slowness on long notes; find highlights wiped | `md-restyle-region` (v0.3 prerequisite): restyle the edited paragraphs plus the enclosing block; other style sources survive |
+| `image-snip%` `get-text` is a placeholder, not the source | saving a note with previews would corrupt it | `document-text` (v0.4) walks snips; every save/export/search path uses it; round-trip test |
+| Images are drawn at bitmap size | huge photos blow the measure | scale into a bitmap at the measure width before making the snip |
+| No table layout | pipe tables cannot be grid-edited | mono block with Tab alignment (v0.5); pandoc handles export |
+| `find-string` and snips | search may or may not see snip text | **verify**; searching uses `document-text` offsets if not |
+| Rich clipboard types on Cocoa unconfirmed | paste from Word may be plain text only | `clipboard-spike` (v0.3) decides; plain text is the documented floor |
+| VoiceOver with `text%` and custom snips unknown | checkboxes may be silent to a screen reader | RM-148 investigation; the ⇧⌘U command always works without the mouse |
+
+**Snip positions, concretely.** Every decoration snip keeps the **character count of the source it replaces**
+(`set-count`: 3 for `[ ]`, 2 for `**`, the line count for a fold), so a `text%` position is always a source offset and
+the parser, find row, Go to Line, clickbacks and the index never need an offset map. The cost is that a snip spans
+several positions while drawing as one object; `buffer%` therefore treats a snip as **atomic**: Left/Right and
+Shift-selection step over the whole snip (an override of the caret motion in `on-local-char`/`move-position`), a
+click lands before or after it, and Backspace or Delete at its edge removes the whole snip, which removes the
+whole marker from the file. Partial deletion inside a snip would call `snip%`'s `split`, so the atomic caret is
+what keeps that path unreachable; a test asserts it. This policy is trialled first on checkboxes (v0.4
+`task-checkbox`) and only then extended to hidden markup (`md-hide-markup`) and folds (`outline-fold`).
+
+**Risks of the formatted view, and the test that covers each.** (a) *Undo:* styles and snip swaps run with
+`undoable?` off, user edits stay undoable; a test performs edit → render → undo → `document-text` and expects the
+pre-edit source. (b) *Copy/paste of rendered text:* `copy` reads `document-text`, so the clipboard always holds
+source; a test copies across a checkbox and a bold run. (c) *Caret over hidden characters:* atomic snips as above; a
+test walks a line with hidden markers key by key and checks positions. (d) *Large documents:* region restyle keeps
+typing under 10 ms in a 5,000-line note; above the 500k-character guard the document opens in Source; a timing test
+runs headless. (e) *Position drift:* count-preserving snips; a round-trip test over the corpus compares every
+parser span with the styled range.
+
+**Region restyle, concretely.** `after-insert`/`after-delete` record the touched paragraph range; the timer
+callback asks the parser for the enclosing block range (a fenced block or list can span many paragraphs), clears
+styles to "Standard" in that range only, re-applies spans, paragraph margins and clickbacks there, and leaves the
+rest alone. Full restyles happen on open, on Language change and on zoom. Find highlights are applied by the find
+row after the restyle (hook order), so they persist.
 
 ### 5.4 Headless testing
 
+_Unchanged, plus notes tests._
+
 - Native surfaces: as `picker-test.rkt` and `startup-test.rkt` do, build the frame unshown, drive controls with
   `set-value`/`command` and synthetic `key-event%`/`mouse-event%`, assert through hooks (`before-command`) and
-  control state (`is-enabled?` after a selection change tests `#:when`).
+  control state (`is-enabled?` after a selection change tests `#:when`). The sidebar tree and lists are driven the
+  same way.
 - Painted surfaces: `render` to a `bitmap-dc%` on a `make-bitmap` (verified: a 2× bitmap with the system font
   renders and pixels read back with no window); assert segment rects and pixel colors at segment centers
   (hover underline present, contrast of `text-2` on `status-bg`).
+- Notes: a corpus of Markdown files; for each, parse → style → `document-text` equals the file byte for byte;
+  golden bitmaps of a sample note at 1× and 2×, light and dark; a PDF written headless has the expected page count;
+  pandoc tests skip cleanly when pandoc is absent.
 - Goldens: a scripted tour writes PNGs of the status bar and gutter at 1× and 2×, light and dark; compared with a
-  small tolerance per platform in CI (RM-017). Whole-window screenshots stay manual (RM-068).
+  small tolerance per platform in CI (RM-017). Whole-window screenshots stay manual (RM-068 → #12).
 - Contrast test over every token column, as §1.2 states.
 
-## 6. Phased build plan
+## 6. Build plan
 
-Sizes follow ROADMAP (S under half a day, M 1–2 days, L 3–5). New issues are in `roadmap.rktd` shape with a
-`ui-` prefix (unused today) so they can be pasted; the owner adds them and runs `racket tools/roadmap.rkt`
-(`roadmap-test.rkt` enforces the sync).
-
-### E2.M0 UI foundation (new; v0.2, before E2.M1)
-
-```
-(milestone E2.M0 "UI foundation"
- (sub E2.M0.S1 "Tokens and layout"
-  (issue ui-tokens "Token module for painted surfaces: roles, light/dark, accent from the OS highlight color" S todo
-    "rackmac/ui/tokens.rkt | theme.rkt reads bg and fg from it | contrast test passes for every column | ui-scale parameter" ())
-  (issue ui-layout "Layout constants and frame rows on the 4 px grid; editor insets 16/12; prose measure" S todo
-    "border 0 spacing 0 rows | insets applied | set-max-width for prose Languages | tests pass" (ui-tokens))
-  (issue ui-tabs "Document tabs with close boxes, reordering and a new-tab button via tab-panel% styles" S todo
-    "no-border flat-portable can-reorder can-close new-button | close box runs close-tab | + runs new-document on both OSes | order change updates the buffer list" (ui-layout))
-  (issue meta-icon-assign "Assign #:icon names to every built-in command with a menu entry" S todo
-    "names from the documented set | test lists commands without one" (meta-icon)))
- (sub E2.M0.S2 "Appearance and tests"
-  (issue ui-appearance "Detect dark mode on Windows (registry) and macOS; poll on activate; fire theme-changed once per change" M todo
-    "AppsUseLightTheme read on Windows | AppleInterfaceStyle on macOS | icons and painted surfaces re-render | RACKMAC_THEME still forces | Editor theme setting System/Light/Dark" (ui-tokens))
-  (issue ui-tests "Headless harness: render painted widgets to bitmap-dc%, pixel and geometry asserts, golden PNGs at 1x and 2x" S todo
-    "runs in raco test | tolerance diff | contrast test included" (ui-tokens))))
-```
-
-### Existing epics, mapped
-
-| Epic / milestone | What changes | New issues and dependency edits |
-|---|---|---|
-| **E2.M1 Toolbar** (v0.2) | RM-046 `tb-icons`: vectors rendered to `bitmap%` at the display scale (depends `ui-tokens`); RM-047 `tb-button`: native `button%` with bitmap label, hover title to status message; RM-048 `tb-frame`: `horizontal-panel%` row with group spacers and View > Show Toolbar; RM-049 enable from `#:when` on hooks | `tb-icons → ui-tokens`, `tb-frame → ui-layout`; add `(issue tb-overflow "Overflow: hide trailing groups when the window is narrow; a ⋯ button lists them in a popup-menu%" S todo "no clipping at 640 px | items still reachable" (tb-frame))` |
-| **E2.M3 Context menu** | native `popup-menu%`; unchanged | — |
-| **E2.M4 Status bar** (v0.2) | RM-059 `sb-widget` is the `canvas%` in §5.3 with keyboard access; message segment carries severity icons | `sb-widget → ui-tokens ui-tests` |
-| **E2.M5 Mouse** | RM-070 `mouse-tabs` is mostly delivered by `ui-tabs` (close box, reorder); middle-click and RM-071 use `on-subwindow-event` on the tab panel | `mouse-tabs → ui-tabs`, `mouse-tab-menu → ui-tabs` |
-| **E1.M2 Palette** (v0.2) | `(issue ui-palette "Palette placement over the top third, Category column, #:help footer, no-caption where accepted, empty state" M todo "picker-test passes | recents first | footer shows help and Emacs alias | no-results row" (ui-layout))` | `palette-category → ui-palette`, `palette-empty → ui-palette` |
-| **E6.M1 Find bar** (row restyle can land in v0.2) | `(issue ui-findbar "Find row: count message, Match case, Whole word, Advanced disclosure, icon buttons, Esc refocuses" M todo "count doubles as wrap indicator | No matches in error color | Advanced reveals regex and In selection | replace row toggles" (ui-layout tb-icons))` | `find-count`, `find-word`, `find-regex`, `findall-selection` depend on it |
-| **E8.M1 Activity** (v0.3) | `(issue ui-infobar "InfoBar row: native caution/stop icon, one sentence, Details, one action, dismiss; message queue" M todo "hidden when empty | keyboard reachable | error stays until dismissed | info never uses it" (ui-layout))`; RM-130 `act-levels` routes info to the status message and warning/error to the InfoBar; RM-080 `ext-banner` is an InfoBar | `act-levels → ui-infobar`, `ext-banner → ui-infobar` |
-| **E5.M1 Start screen** (v0.4) | `(issue ui-start-view "Start view panel: title, New, Open, Get Started, Recent list, Scratch Pad; command to reopen" M todo "shown with no file arguments | leaves when a document opens | Recent from recent-files | keyboard reachable" (ui-layout recent-files))` | `start-view → ui-start-view` |
-| **Editor** (v0.3, optional) | `(issue ui-gutter "Line-number gutter canvas synced to the editor; on for code Languages, off for prose" M todo "numbers align with lines at 1x and 2x | current line in text color with accent bar | mode local gutter? | zoom follows" (ui-tokens ui-tests))` | `a11y-scale` scales it |
-| **E4.M2 Settings** (v0.3) | native `dialog%` with `check-box%`, `choice%`, `text-field%` rows generated from `define-setting`; a `text-field%` search filters rows; "Edit as code" button | `settings-dialog → ui-layout` |
-| **E9 Panes** (v0.5) | `(issue ui-splitter "6 px canvas% sash between panes: drag, cursor, min size, double-click resets, keyboard resize" M todo "two editor-canvas% resize live | no native panel pixel exposed" (ui-layout))` | `pane-commands → ui-splitter` |
-| **E10** (v0.6) | `a11y-keyboard` audits status bar and gutter; `a11y-contrast` adds the high-contrast columns; `a11y-scale` exposes `ui-scale` | depend on `ui-tokens` |
-
-Suggested order in v0.2: `ui-tokens` → `ui-layout` → `ui-tabs` → `meta-icon-assign` → `tb-icons` →
-`tb-button` → `tb-frame` → `sb-widget` → `ui-palette` → `ui-findbar` → `ui-appearance` → `ui-tests` alongside.
-The foundation is about a week; nothing in it is throwaway.
+_Changed 2026-09-25._ The phased plan, issue keys, sizes and acceptance criteria now live in [REPLAN.md](REPLAN.md).
+The E2.M0 UI foundation from the first version of this document (tokens, layout, tabs, icons, appearance, harness)
+is built except #254 (appearance re-check) and #255 (harness), which REPLAN places in v0.3 and v0.4.
 
 ## 7. Wireframes
 
-### 7.1 Main window, Windows (light)
+### 7.1 Notes window, macOS (light): Library, a rendered note, outline and backlinks
+
+_Changed 2026-09-25._
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────────┐
-│ ▣  • notes.md — Rackmac                                                  ─   ▢   ✕  │  native caption
-├──────────────────────────────────────────────────────────────────────────────────────┤
-│ File   Edit   View   Tools   Help                                                    │  native menu bar
-├──────────────────────────────────────────────────────────────────────────────────────┤
-│ [＋] [▭] [💾]   [↶] [↷]   [✂] [⧉] [📋]   [🔍]   [▷]                 [🔍 Search commands…] │  button% row, 4 px + 8 px gaps
-├──────────────────────────────────────────────────────────────────────────────────────┤
-│ • notes.md ✕ │ init.rkt ✕ │ Scratch Pad ✕ │ +                                        │  tab-panel% flat-portable
-├──────────────────────────────────────────────────────────────────────────────────────┤
-│ ⚠  init.rkt could not load: unbound identifier `shout` (line 12).  [Details] [Disable extension] [✕] │  InfoBar (when needed)
-├──────────────────────────────────────────────────────────────────────────────────────┤
-│ Find [ renewal            ] 3 of 12  ☐ Match case ☐ Whole word [Advanced ▾] [↑] [↓] [✕] │  find row (when open)
-├──────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│    # Weekly notes                                                                    │  editor, inset 16 / 12
-│                                                                                      │
-│    - call the vendor about the renewal                                               │  ← match highlighted
-│    - draft the summary|                                                              │
-│                                                                                      │
-├──────────────────────────────────────────────────────────────────────────────────────┤
-│ Saved notes.md                   Ln 5, Col 22   84 words   UTF-8   LF   Markdown  100% │  status canvas 24
-└──────────────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ ● ● ●                          • Weekly notes.md — Rackmac                                     │  native title; menus in the system bar
+├────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ [＋] [▭] [💾]  [↶] [↷]  [✂] [⧉] [📋]  [🔍]  [B] [I] [🔗]  [H▾] [•] [1.] [☑]  [⇪▾] [</>]  [🔍 Search commands…] │  Format group: prose only; </> = Show Markdown Source
+├──────────────────────┬─────────────────────────────────────────────────────────────────────────┤
+│ [ filter…          ] │ • Weekly notes.md ✕ │ Acme SPA — turn 4.md ✕ │ +                         │  tab-panel% flat-portable
+│ RECENT               ├─────────────────────────────────────────────────────────────────────────┤
+│  Weekly notes        │                                                                         │
+│  Acme SPA — turn 4   │            # Weekly notes                          ← H1: heading color,  │  markup "#" small, text-2
+│  Call with J. Roe    │                                                    1.6×, bold            │
+│ FOLDERS              │            Monday                                                       │  prose 15 pt, centered 6.5 in
+│  ▾ Notes             │                                                                         │
+│    ▾ Matters         │            - ☑ Call the vendor about the **renewal**   ← checkbox snip, │  bold run; markers small
+│       Acme SPA       │            - ☐ Draft the summary · due 2026-09-30      ← date in accent │  hanging indent
+│       Roe v. Doe     │            - ☐ Send [[Acme SPA — turn 4]] to counsel   ← link: accent,  │  ⌘-click follows
+│    Weekly notes      │                                                        underlined       │
+│  ▸ OneDrive - Firm ☁ │            > Counsel asked for the redline by Friday.  ← quote: indent, │  text-2
+│ TAGS                 │                                                                         │
+│  #acme 12  #todo 4   │            ## Next week|                                                │  caret line; no line highlight in prose
+│ OUTLINE              │                                                                         │
+│  Weekly notes        │                                                                         │
+│    Monday            │                                                                         │
+│  ▸ Next week         │                                                                         │
+│ BACKLINKS            │                                                                         │
+│  Acme SPA — turn 4   │                                                                         │
+│   "…see Weekly notes"│                                                                         │
+├──────────────────────┴─────────────────────────────────────────────────────────────────────────┤
+│ Saved Weekly notes.md                                  212 words   Formatted   Markdown   100%  │  prose: no Ln/Col, encoding, EOL; view segment clickable
+└────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 7.2 Main window, macOS (dark), code document with gutter
+### 7.2 Code window, macOS (dark): a Python script under review, with gutter
+
+_Changed 2026-09-25._
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────────┐
-│ ● ● ●                          • init.rkt — Rackmac                                  │  native title bar; menus in the system bar
-├──────────────────────────────────────────────────────────────────────────────────────┤
-│ [＋] [▭] [💾]   [↶] [↷]   [✂] [⧉] [📋]   [🔍]   [▷ Run]             [🔍 Search commands…] │  Racket adds Run Selection
-├──────────────────────────────────────────────────────────────────────────────────────┤
-│ notes.md ✕ │ • init.rkt ✕ │ Scratch Pad ✕ │ +                                        │
-├──────┬───────────────────────────────────────────────────────────────────────────────┤
-│  10  │ (define-command (shout)                                                       │  gutter: text-2, current line text
-│  11  │   #:title "Shout" #:keys ("Mod-Shift-u")                                      │  surface #1E1E1E
-│▌ 12  │   (replace-selection! (string-upcase (selection-string))))|                   │  ▌ accent bar on the current line
-│  13  │                                                                               │
-├──────┴───────────────────────────────────────────────────────────────────────────────┤
-│ Tip: ⌘S saves                    Ln 12, Col 62   UTF-8   LF   Racket   100%          │  one-time shortcut tip (RM-041)
-└──────────────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ ● ● ●                          rename_exhibits.py — Rackmac                                    │
+├────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ [＋] [▭] [💾]  [↶] [↷]  [✂] [⧉] [📋]  [🔍]  [🔒 Reviewing]  [▷ Run in Terminal]   [🔍 Search commands…] │  no Format group; code items
+├──────────────────────┬─────────────────────────────────────────────────────────────────────────┤
+│ [ filter…          ] │ Weekly notes.md ✕ │ rename_exhibits.py ✕ │ +                            │
+│ RECENT               ├──────┬──────────────────────────────────────────────────────────────────┤
+│  rename_exhibits.py  │  10  │ import pathlib                                                   │  mono 14, unwrapped
+│  Weekly notes        │  11  │                                                                  │  gutter: text-2, current line text
+│ FOLDERS              │▌ 12  │ for p in pathlib.Path("Exhibits").glob("*.pdf"):|                │  ▌ accent bar; line-highlight on
+│  ▾ Scripts           │  13  │     new = p.with_name(p.stem.upper() + p.suffix)                 │  keywords, strings colored
+│    rename_exhibits   │  14  │     p.rename(new)   # TODO: dry run first                        │  comment italic
+│  ▾ Notes             │  15  │                                                                  │
+│ OUTLINE              │      │                                                                  │
+│  (no headings)       │      │                                                                  │
+├──────────────────────┴──────┴──────────────────────────────────────────────────────────────────┤
+│ Read-only while reviewing · Add Note About This Line          Ln 12, Col 49   UTF-8   LF   Python   100% │
+└────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 7.3 Command palette (dialog%, 640 × 440, over the top third of the window)
+### 7.3 Start screen (nothing open)
+
+_Changed 2026-09-25._
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ ● ● ●                                Rackmac                                                   │
+├────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ [＋] [▭] [💾]  [↶] [↷]  [✂] [⧉] [📋]  [🔍]                                    [🔍 Search commands…] │
+├──────────────────────┬─────────────────────────────────────────────────────────────────────────┤
+│ [ filter…          ] │                                                                         │
+│ RECENT               │                         Rackmac                                         │  title 22 bold
+│  Weekly notes        │          Notes and documents you can trust to plain files              │  subtitle 15
+│  Acme SPA — turn 4   │                                                                         │
+│ FOLDERS              │        [   New Note   ]   [  Add Folder…  ]   [    Open…    ]           │  three button%s
+│  ▾ Notes             │                                                                         │
+│  ▸ OneDrive - Firm ☁ │        Recent                                                           │
+│                      │        ┌───────────────────────────────────────────────────────┐        │  list-box%, double-click opens
+│                      │        │ Weekly notes.md               Notes           today   │        │
+│                      │        │ Acme SPA — turn 4.md          Matters/Acme    Mon     │        │
+│                      │        │ Call with J. Roe.md           Matters/Roe     Fri     │        │
+│                      │        └───────────────────────────────────────────────────────┘        │
+│                      │        Get Started  ·  a short note that shows what Rackmac does        │  opens Getting started.md
+├──────────────────────┴─────────────────────────────────────────────────────────────────────────┤
+│                                                                                  Markdown  100% │
+└────────────────────────────────────────────────────────────────────────────────────────────────┘
+   Empty Library: the sidebar shows "No folders yet. Add the folder where you keep your notes (OneDrive and
+   SharePoint folders work)." with an Add Folder… button; the Recent list says "Notes you open appear here."
+```
+
+### 7.4 Command palette (dialog%, 640 × 440, over the top third of the window)
+
+_Unchanged, except the footer no longer shows an Emacs name by default._
 
 ```
           ┌──────────────────────────────────────────────────────────────────┐
-          │ [ pas|                                                         ] │  text-field%
+          │ [ bol|                                                         ] │  text-field%
           ├──────────────────────────────────────────────────────────────────┤
           │ Command                          Category          Shortcut      │  list-box% with columns
-          │ ▶ Paste                          Edit              ⌘V            │  selected row = OS highlight
-          │   Paste from History             Clipboard         ⇧⌘V           │
-          │   Open Recent…                   File                            │
-          │   Change Case…                   Text                            │
+          │ ▶ Bold                           Format            ⌘B            │  selected row = OS highlight
+          │   Body Text                      Format            ⌥⌘0           │
+          │   Bulleted List                  Format            ⇧⌘8           │
+          │   Backlinks                      View                            │
           │                                                                  │
           ├──────────────────────────────────────────────────────────────────┤
-          │ Paste the clipboard at the cursor.   Emacs: yank     ↑↓ move · ⏎ run · esc close │  message% footer
+          │ Make the selection bold.                        ↑↓ move · ⏎ run · esc close │  message% footer (#:help)
           └──────────────────────────────────────────────────────────────────┘
    Empty state row: "No commands match 'xyz'. Check the spelling or open Help > Keyboard Shortcuts."
 ```
 
-### 7.4 Find and Replace rows (native controls, between the tabs and the editor)
+### 7.5 Find and Replace rows (native controls, between the tabs and the editor)
+
+_Unchanged (built in v0.2.0)._
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────┐
@@ -400,20 +694,12 @@ The foundation is about a week; nothing in it is throwaway.
    Count states: "12 matches" while typing · "3 of 12" after stepping · "Wrapped · 1 of 12" · "No matches" (error color).
 ```
 
-## Decisions (defaults taken 2026-09-25; the owner can change any of them)
+## Decisions
 
-Adopted as recommended below: (1) the `flat-portable` tab strip on both OSes, (2) one row of icon-only native
-buttons with overflow, (3) on Windows the editor follows the system theme with an "Editor theme" setting, (4) the
-gutter ships for code Languages in v0.3. Issues: GitHub #250–#262 (milestone "E2.M0 UI foundation" and others).
+_Taken 2026-09-25 (v0.2.0 layer), unchanged:_ (1) the `flat-portable` tab strip on both OSes, (2) one row of
+icon-only native buttons with overflow, (3) on Windows the editor follows the system theme with an "Editor theme"
+setting, (4) the gutter ships for code Languages (now v0.5, code documents only).
 
-## Decisions that were asked of the owner
-
-1. **Tabs:** the built-in `flat-portable` strip (close boxes, drag to reorder, "+", identical on both OSes;
-   recommended), or Cocoa's own no-border strip on macOS (close boxes and reorder, native look, but no "+"
-   button and a different drawing from Windows)?
-2. **Toolbar:** confirm one row of icon-only native buttons with an overflow menu; labels under icons as an
-   off-by-default setting.
-3. **Windows dark mode:** when the system is dark, should the editor and status bar go dark even though the
-   native chrome stays light (recommended, with an "Editor theme" setting), or should Windows default to light?
-4. **Gutter:** ship line numbers for code Languages in v0.3 (`ui-gutter`, M), or leave the gutter deferred as
-   README lists it today?
+_Open for the owner (notes layer):_ the four decisions at the end of [REPLAN.md](REPLAN.md) §9: in-house Markdown
+scanner or a package; markup de-emphasized (default) or hidden on inactive lines; ⌘, → Settings and ⌥⌘S → Show
+Library; the metadata convention (front matter plus inline tokens).
