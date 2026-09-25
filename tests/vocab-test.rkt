@@ -4,7 +4,9 @@
 ;; a user's init.rkt refers to them (bind-key!, run-command), and must never break.
 (require rackunit racket/class racket/list racket/string
          "../rackmac/command.rkt" "../rackmac/commands.rkt" "../rackmac/mode.rkt"
-         "../rackmac/keymap.rkt" "../rackmac/editor.rkt" "../rackmac/picker.rkt")
+         "../rackmac/keymap.rkt" "../rackmac/editor.rkt" "../rackmac/picker.rkt"
+         "../rackmac/glossary.rkt" racket/file racket/runtime-path)
+(define-runtime-path readme "../README.md")
 
 (define golden-names
   '(about close-buffer command-palette copy cut delete-line delete-to-line-start delete-word-back
@@ -13,7 +15,7 @@
     line-start list-extensions list-keybindings move-line-down move-line-up new-buffer
     newline-and-indent next-buffer open-file open-init-file outdent-lines page-down page-up paste
     previous-buffer quick-open quit redo reload-init replace save save-as select-all select-line
-    set-major-mode show-messages toggle-comment toggle-theme toggle-word-wrap undo word-left
+    set-major-mode show-glossary show-messages toggle-comment toggle-theme toggle-word-wrap undo word-left
     word-right zoom-in zoom-out zoom-reset))
 
 (test-case "built-in command names are stable (relabeling never renames a symbol)"
@@ -106,3 +108,34 @@
   (check-equal? (command-icon c) "play")
   (check-regexp-match #rx"frobnicate" (command-search-text c))
   (check-eq? (top "twiddle") 'vocab-meta))
+
+(test-case "renamed titles (display only) and old names still find them"
+  (for ([p '((eval-selection "Run Selection") (eval-buffer "Run Document")
+             (show-messages "Show Activity Log") (set-major-mode "Set Language…")
+             (open-init-file "Customize with Code") (reload-init "Reload Extensions")
+             (list-keybindings "Keyboard Shortcuts") (new-buffer "New Document")
+             (describe-command "Explain a Command…"))])
+    (check-equal? (command-title (find-command (car p))) (cadr p)))
+  (check-eq? (top "Run Selection") 'eval-selection)
+  (check-eq? (top "eval-region") 'eval-selection)
+  (check-eq? (top "evaluate selection") 'eval-selection "the old title still finds it")
+  (check-eq? (top "reload init file") 'reload-init)
+  (check-eq? (top "*Messages*") 'show-messages)
+  (check-eq? (top "describe-function") 'describe-command)
+  (check-eq? (top "glossary") 'show-glossary))
+
+(test-case "buffer display names have no Emacs stars"
+  (check-equal? (send (messages-buffer) get-name) "Activity")
+  (run-command 'list-keybindings)
+  (check-equal? (send (current-buffer) get-name) "Keyboard Shortcuts")
+  (run-command 'show-glossary)
+  (check-equal? (send (current-buffer) get-name) "Glossary")
+  (check-regexp-match #rx"kill ring +Clipboard History" (send (current-buffer) get-text)))
+
+(test-case "the README glossary table matches the code"
+  (check-true (regexp-match? (regexp-quote (glossary-markdown)) (file->string readme))
+              "regenerate the README table from rackmac/glossary.rkt"))
+
+(test-case "Emacs terms for commands that exist find them in the palette (kill ring waits for Clipboard History)"
+  (for ([g glossary] #:when (member (car g) '("kill / yank" "M-x" "describe-key" "describe-function" "*Messages*")))
+    (check-true (pair? (palette-matches (car (regexp-split #rx" / |, " (car g))))) (car g))))

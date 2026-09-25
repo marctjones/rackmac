@@ -7,13 +7,13 @@ Issues are tracked on GitHub: <https://github.com/marctjones/rackmac/issues>. Is
 milestones are the milestones below, and each epic has a tracking issue. **This file is the initial plan**, kept as an
 overview; from the first filing onward, GitHub is the source of truth for status.
 
-**Progress:** 24 of 217 active issues done (8 in the icebox).
+**Progress:** 27 of 217 active issues done (8 in the icebox).
 
 ## Releases
 
 | Release | Theme | Epics | Done |
 |---|---|---|---|
-| v0.2 Friendly | Office vocabulary, toolbar, context menu, clickable status bar. | E0, E1, E2 | 24/72 |
+| v0.2 Friendly | Office vocabulary, toolbar, context menu, clickable status bar. | E0, E1, E2 | 27/72 |
 | v0.3 Safe | Never lose work; settings you can click; calm errors. | E3, E4, E8 | 0/31 |
 | v0.4 Welcome | Start screen, tutorial, better find, clipboard history, macros. | E5, E6, E7 | 0/31 |
 | v0.5 Workspace | Split panes and sidebar. | E9 | 0/8 |
@@ -25,7 +25,7 @@ overview; from the first filing onward, GitHub is the source of truth for status
 | Epic | Title | Done |
 |---|---|---|
 | E0 | Foundation and verification | 11/19 |
-| E1 | Vocabulary and discoverability | 13/22 |
+| E1 | Vocabulary and discoverability | 16/22 |
 | E2 | Toolbar and direct manipulation | 0/31 |
 | E3 | Never lose work | 0/16 |
 | E4 | Settings you can click | 0/9 |
@@ -122,14 +122,14 @@ overview; from the first filing onward, GitHub is the source of truth for status
 - [x] **RM-032** Describe shows both names and aliases `S` — _accept:_ Title, internal name, Also known as, shortcut, help, doc. _Depends on: RM-021, RM-022._
 - [x] **RM-033** Rename Describe Key to What Does This Key Do? `S` — _accept:_ alias describe-key kept.
 
-### E1.M3: Apply the vocabulary  (2/5)
+### E1.M3: Apply the vocabulary  (5/5)
 
 #### E1.M3.S1: Display names
 
-- [ ] **RM-034** Rename built-in titles per the vocabulary table `M` — _accept:_ Run Selection, Show Activity Log, Set Language, Customize with Code, Reload Extensions; no command name symbol changes.
-- [ ] **RM-035** Scratch Pad and Activity replace *scratch* and *Messages* `S` — _accept:_ display names only; tests updated.
+- [x] **RM-034** Rename built-in titles per the vocabulary table `M` — _accept:_ Run Selection, Show Activity Log, Set Language, Customize with Code, Reload Extensions; no command name symbol changes.
+- [x] **RM-035** Scratch Pad and Activity replace *scratch* and *Messages* `S` — _accept:_ display names only; tests updated.
 - [x] **RM-036** Status bar shows Language labels not mode symbols `S` — _accept:_ uses mode-label. _Depends on: RM-027._
-- [ ] **RM-037** Glossary page mapping Emacs terms to Rackmac terms `S` — _accept:_ in README and Help.
+- [x] **RM-037** Glossary page mapping Emacs terms to Rackmac terms `S` — _accept:_ in README and Help.
 - [x] **RM-038** Test that every command name still resolves after relabeling `S` — _accept:_ init.rkt files referencing names keep working. _Depends on: RM-034._
 
 ### E1.M4: Shortcut discoverability  (0/4)

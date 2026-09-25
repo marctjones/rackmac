@@ -4,7 +4,7 @@
 ;; and Windows differ (#:keys/mac, #:keys/windows).
 (require racket/class racket/gui/base racket/list racket/string racket/file racket/path
          "command.rkt" "keymap.rkt" "mode.rkt" "hook.rkt" "editor.rkt" "input.rkt"
-         "theme.rkt" "picker.rkt" "frame.rkt" "eval.rkt" "platform.rkt" "modes.rkt" "owner.rkt" "fuzzy.rkt")
+         "theme.rkt" "picker.rkt" "frame.rkt" "eval.rkt" "platform.rkt" "modes.rkt" "owner.rkt" "fuzzy.rkt" "glossary.rkt")
 (provide save-buffer! confirm-quit? palette-items palette-matches command-description
          builtin-command-names)
 
@@ -66,7 +66,7 @@
 (define-command (new-buffer)
   #:aliases ("new document" "new file" "create buffer" "new tab")
   #:help "Start a new empty document in a new tab."
-  #:title "New File" #:menu "File" #:menu-order 10 #:keys ("Mod-n" "Mod-t")
+  #:title "New Document" #:menu "File" #:menu-order 10 #:keys ("Mod-n" "Mod-t")
   #:doc "Create an empty buffer."
   (set-current-buffer! (new-buffer! "untitled")))
 
@@ -178,9 +178,9 @@ TEMPLATE
   )
 
 (define-command (open-init-file)
-  #:aliases ("init file" "init.el" "config" "settings file" "customize")
+  #:aliases ("init file" "init.el" "open init file" "config" "settings file" "customize")
   #:help "Open the file that customizes Rackmac with Racket code."
-  #:title "Open Init File" #:menu "File" #:menu-order 40 #:keys ("Mod-,")
+  #:title "Customize with Code" #:menu "File" #:menu-order 40 #:keys ("Mod-,")
   #:doc "Open (creating from a template if needed) the init file that customizes Rackmac."
   (define p (init-file-path))
   (unless (file-exists? p)
@@ -189,9 +189,9 @@ TEMPLATE
   (set-current-buffer! (open-file! p)))
 
 (define-command (reload-init)
-  #:aliases ("reload init" "load-file init" "reload config")
+  #:aliases ("reload init" "reload init file" "load-file init" "reload config")
   #:help "Run your customization files again, replacing what they registered before."
-  #:title "Reload Init File" #:menu "File" #:menu-order 41
+  #:title "Reload Extensions" #:menu "File" #:menu-order 41
   (load-init!))
 
 (define-command (list-extensions)
@@ -201,7 +201,7 @@ TEMPLATE
   #:doc "Show the loaded extension files and what each registered."
   (define exts (loaded-extensions))
   (show-text-buffer!
-   "*Extensions*"
+   "Extensions"
    (if (null? exts)
        (format "No extensions loaded.\n\nPut Racket files in ~a (init.rkt) or its ext/ folder.\n"
                (path->string (config-dir)))
@@ -566,10 +566,10 @@ TEMPLATE
   (toggle-theme!) (restyle!))
 
 (define-command (show-messages)
-  #:aliases ("view-echo-area-messages" "messages" "log" "errors")
+  #:aliases ("view-echo-area-messages" "messages" "*Messages*" "show messages" "log" "errors")
   #:help "Open the log of messages and errors."
-  #:title "Show Messages" #:menu "View" #:menu-order 30
-  #:doc "Open the *Messages* log (errors from commands, hooks and the init file land here)."
+  #:title "Show Activity Log" #:menu "View" #:menu-order 30
+  #:doc "Open the Activity log (Emacs: *Messages*). Errors from commands, hooks and extensions land here."
   (show-messages!))
 
 (define (palette-items)
@@ -593,9 +593,9 @@ TEMPLATE
   (when choice (run-command/safe choice)))
 
 (define-command (set-major-mode)
-  #:aliases ("major mode" "language mode" "change language" "syntax")
+  #:aliases ("major mode" "set-major-mode" "language mode" "change language" "syntax")
   #:help "Choose what kind of document this is, for coloring and shortcuts."
-  #:title "Set Language Mode…" #:menu "View" #:menu-order 41
+  #:title "Set Language…" #:menu "View" #:menu-order 41
   (define items (for/list ([m (all-modes 'major)])
                   (list (mode-display-name (mode-name m)) (mode-doc m) (mode-name m)
                         (symbol->string (mode-name m)))))
@@ -608,9 +608,9 @@ TEMPLATE
   (line-text b (send b position-paragraph (send b get-start-position))))
 
 (define-command (eval-selection)
-  #:aliases ("eval-region" "evaluate" "eval-last-sexp" "run code")
+  #:aliases ("eval-region" "evaluate selection" "evaluate" "eval-last-sexp" "run code")
   #:help "Run the selected Racket code, or the current line."
-  #:title "Evaluate Selection" #:menu "Tools" #:menu-order 10 #:keys ("Mod-Enter")
+  #:title "Run Selection" #:menu "Tools" #:menu-order 10 #:keys ("Mod-Enter")
   #:doc "Evaluate the selected Racket code (or the current line) in the running editor."
   (define b (t))
   (define code (let ([s (selection-string b)]) (if (string=? s "") (current-line-text b) s)))
@@ -618,9 +618,9 @@ TEMPLATE
   (message "~a" (if (string=? r "") "(no output)" r)))
 
 (define-command (eval-buffer)
-  #:aliases ("eval-buffer" "evaluate document" "run file")
+  #:aliases ("eval-buffer" "evaluate buffer" "evaluate document" "run file")
   #:help "Run the whole document as Racket code."
-  #:title "Evaluate Buffer" #:menu "Tools" #:menu-order 11 #:keys ("Mod-Shift-Enter")
+  #:title "Run Document" #:menu "Tools" #:menu-order 11 #:keys ("Mod-Shift-Enter")
   (define r (eval-string (buffer-string)))
   (message "~a" (if (string=? r "") "Evaluated buffer" r)))
 
@@ -646,16 +646,17 @@ TEMPLATE
   (request-describe-key!))
 
 (define-command (list-keybindings)
-  #:aliases ("describe-bindings" "keybindings" "shortcuts" "key map")
+  #:aliases ("describe-bindings" "list keybindings" "keybindings" "shortcuts" "key map" "cheat sheet")
   #:help "List every shortcut."
-  #:title "List Keybindings" #:menu "Help" #:menu-order 11
+  #:title "Keyboard Shortcuts" #:menu "Help" #:menu-order 11
+  (define (title-of name) (let ([c (find-command name)]) (if c (command-title c) (symbol->string name))))
   (define rows
     (sort (for/list ([b (keymap-bindings global-keymap)])
             (cons (key-sequence->string (car b)) (cadr b)))
-          string<? #:key cdr))
+          string-ci<? #:key (lambda (r) (title-of (cdr r)))))
   (show-text-buffer!
-   "*Keybindings*"
-   (string-append "Global keybindings\n\n"
+   "Keyboard Shortcuts"
+   (string-append "Keyboard shortcuts\n\n"
                   (string-join (for/list ([r rows])
                                  (format "~a  ~a" (~pad (car r) 16)
                                          (let ([c (find-command (cdr r))]) (if c (command-title c) (cdr r)))))
@@ -674,11 +675,17 @@ TEMPLATE
    (if (string=? (command-doc c) "") "" (string-append "\n" (command-doc c) "\n"))))
 
 (define-command (describe-command)
-  #:aliases ("describe-function" "explain command" "help command" "apropos")
+  #:aliases ("describe-function" "describe command" "explain command" "help command" "apropos")
   #:help "Read what a command does."
-  #:title "Describe Command…" #:menu "Help" #:menu-order 12
+  #:title "Explain a Command…" #:menu "Help" #:menu-order 12
   (define choice (pick "Describe Command" (palette-items) #:detail-heading "Shortcut"))
-  (when choice (show-text-buffer! "*Help*" (command-description choice))))
+  (when choice (show-text-buffer! "Help" (command-description choice))))
+
+(define-command (show-glossary)
+  #:aliases ("glossary" "emacs terms" "vocabulary" "what is a buffer")
+  #:help "Show what Rackmac calls each Emacs term."
+  #:title "Glossary: Emacs Terms" #:menu "Help" #:menu-order 14
+  (show-text-buffer! "Glossary" (glossary-text)))
 
 (define-command (about)
   #:aliases ("about-emacs" "version")

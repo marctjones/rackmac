@@ -1,6 +1,6 @@
 #lang racket/base
 ;; Global editor state: the buffer list, the current buffer, the echo area and the
-;; *Messages* log, plus small text helpers that user code can call.
+;; Activity log (Emacs: *Messages*), plus small text helpers that user code can call.
 (require racket/class racket/list racket/string racket/path
          "buffer.rkt" "hook.rkt" "mode.rkt" "modes.rkt")
 (provide current-buffer set-current-buffer! all-buffers visible-buffers
@@ -37,8 +37,8 @@
 (define (current-buffer)
   (unless current
     (set! current (or (and (pair? buffers) (car buffers))
-                      (let ([b (new-buffer! "*scratch*" #:mode 'racket-mode)])
-                        (send b insert ";; Rackmac scratch buffer.\n;; Select some Racket and press Mod-Enter to evaluate it.\n\n")
+                      (let ([b (new-buffer! "Scratch Pad" #:mode 'racket-mode)])
+                        (send b insert ";; Scratch Pad: a place to try Racket code.\n;; Select some code and press Mod-Enter to run it.\n\n")
                         (send b set-modified #f)
                         b))))
   current)
@@ -73,7 +73,7 @@
 (define messages #f)
 (define (messages-buffer)
   (unless messages
-    (set! messages (new-buffer! "*Messages*" #:shown? #f)))
+    (set! messages (new-buffer! "Activity" #:shown? #f)))
   messages)
 
 (define (message fmt . args)
@@ -91,7 +91,7 @@
   (send mb set-shown! #t)
   (set-current-buffer! mb))
 
-;; Errors from hooks, commands and the init file land in *Messages* and the echo area.
+;; Errors from hooks, commands and the init file land in the Activity log and the echo area.
 (error-reporter
  (lambda (who e)
    (message "~a: ~a" who (if (exn? e) (exn-message e) e))))

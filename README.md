@@ -64,7 +64,7 @@ plus `#:doc`, `#:keys`, `#:menu`. A command's symbol name never changes when its
 ### How extensions work
 
 - **Files.** `init.rkt` loads first, then every `ext/*.rkt` next to it in name order. Each file is its
-  own extension; one that fails is reported in `*Messages*` and skipped, and the others still load.
+  own extension; one that fails is reported in the Activity log and skipped, and the others still load.
 - **Ownership and reload.** Everything a file registers (commands, key bindings, hooks, modes) is
   recorded against it. **Reload Init File** unloads all of it first, so reloading replaces instead of
   duplicating. An extension that redefines a built-in command restores the original when unloaded,
@@ -82,6 +82,32 @@ plus `#:doc`, `#:keys`, `#:menu`. A command's symbol name never changes when its
 
 Known limits: `unbind-key!` is not undone on unload, live-evaluated code (`Mod-Enter`) is not tracked
 as an extension, and the API restriction applies at load time only.
+
+## Glossary: Emacs terms
+
+Rackmac shows office-style names; the command palette also understands the Emacs ones.
+
+| Emacs | Rackmac |
+|---|---|
+| buffer | Document, Tab |
+| window / frame | Pane / Window |
+| point, mark, region | Cursor, Selection |
+| kill / yank | Cut / Paste |
+| kill ring | Clipboard History |
+| M-x | Command Palette |
+| minibuffer, echo area | Command bar, Status message |
+| mode line | Status bar |
+| major mode | Language |
+| minor mode | Option |
+| keymap, key binding | Shortcut |
+| hook | Trigger |
+| init file | Customize with Code |
+| evaluate | Run |
+| *scratch* | Scratch Pad |
+| *Messages* | Activity log |
+| describe-key | What Does This Key Do? |
+| describe-function | Explain a Command |
+| package | Extension |
 
 ## Shortcuts
 

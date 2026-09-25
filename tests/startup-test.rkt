@@ -13,7 +13,7 @@
                       (semaphore-post done))))
   (check-not-false (sync/timeout 10 done) "make-main-frame returned instead of looping")
   (when result
-    (check-equal? (send (current-buffer) get-name) "*scratch*")
+    (check-equal? (send (current-buffer) get-name) "Scratch Pad")
     (check-equal? (length (all-buffers)) 1 "exactly one buffer was created")
     (send result show #f))
   (kill-thread t))

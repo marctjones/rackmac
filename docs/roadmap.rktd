@@ -68,10 +68,10 @@
     (issue describe-key-friendly "Rename Describe Key to What Does This Key Do?" S done "alias describe-key kept" ())))
   (milestone E1.M3 "Apply the vocabulary"
    (sub E1.M3.S1 "Display names"
-    (issue vocab-titles "Rename built-in titles per the vocabulary table" M todo "Run Selection, Show Activity Log, Set Language, Customize with Code, Reload Extensions | no command name symbol changes" ())
-    (issue vocab-buffers "Scratch Pad and Activity replace *scratch* and *Messages*" S todo "display names only | tests updated" ())
+    (issue vocab-titles "Rename built-in titles per the vocabulary table" M done "Run Selection, Show Activity Log, Set Language, Customize with Code, Reload Extensions | no command name symbol changes" ())
+    (issue vocab-buffers "Scratch Pad and Activity replace *scratch* and *Messages*" S done "display names only | tests updated" ())
     (issue vocab-status "Status bar shows Language labels not mode symbols" S done "uses mode-label" (mode-label))
-    (issue vocab-glossary "Glossary page mapping Emacs terms to Rackmac terms" S todo "in README and Help" ())
+    (issue vocab-glossary "Glossary page mapping Emacs terms to Rackmac terms" S done "in README and Help" ())
     (issue vocab-guard "Test that every command name still resolves after relabeling" S done "init.rkt files referencing names keep working" (vocab-titles))))
   (milestone E1.M4 "Shortcut discoverability"
    (sub E1.M4.S1 "Cheat sheet and hints"
