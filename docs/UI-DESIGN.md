@@ -43,16 +43,19 @@ selection color, which follows the Windows accent and the macOS accent setting) 
 |---|---|---|---|
 | `surface` | #FFFFFF | #1E1E1E | editor background (`canvas-background`) |
 | `text` | #1F2328 | #D4D4D4 | editor text (`fg`) |
-| `text-2` | #6E7781 | #9DA5AD | gutter numbers, status segments, placeholders |
+| `text-2` | #636C76 | #9DA5AD | gutter numbers, status segments, placeholders |
 | `text-disabled` | #A6A6A6 | #6E6E6E | dimmed segments |
-| `stroke` | #E3E3E3 | #3A3A3A | 1 px line above the status bar, gutter edge |
+| `stroke` | #D0D7DE | #3A3A3A | 1 px line above the status bar, gutter edge |
 | `line-highlight` | #F6F8FA | #262626 | current line (prose Languages off, code on) |
 | `selection` | OS highlight (fallback #B3D7FF) | OS highlight (fallback #264F78) | text selection; `text%` uses the OS color itself |
 | `accent` | OS highlight, fallback #0067C0 / macOS #007AFF | fallback #60CDFF / macOS #0A84FF | status-bar hover underline, gutter marker for the current line, find count when matches exist |
-| `match` / `match-current` | #FFE08A / #FFB000 | #6B5900 / #B58900 | Find All highlights (RM-109), 35% alpha |
-| `info` / `success` / `warning` / `error` | #0067C0 / #0F7B0F / #9D5D00 / #C42B1C | #60CDFF / #6CCB5F / #FCE100 / #FF99A4 | status-bar icons, find "No matches", InfoBar text |
+| `match` / `match-current` | #FFE08A / #FFB000 | #6B5900 / #7A4000 | Find All highlights (RM-109), 35% alpha |
+| `info` / `success` / `warning` / `error` | #0067C0 / #0F7B0F / #8A5100 / #C42B1C | #60CDFF / #6CCB5F / #FCE100 / #FF99A4 | status-bar icons, find "No matches", InfoBar text |
 | `status-bg` | #F3F3F3 (macOS #ECECEC) | #202020 (macOS #282828) | status bar; sits visually with the OS window color |
 | faces `comment string constant keyword heading` | as `theme.rkt` | as `theme.rkt` | syntax coloring, unchanged |
+
+As built (`rackmac/ui/tokens.rkt`): the contrast test adjusted light `warning`, dark `match-current` and the dark
+`comment` face; the OS highlight is used as `accent` only when it reaches 3:1 on the surface.
 
 Rules: `text` and `text-2` on `surface`, and every status token on `status-bg`, meet 4.5:1 (a test computes
 it); `stroke` and `accent` on their surfaces meet 3:1; nothing is conveyed by color alone (the current find match

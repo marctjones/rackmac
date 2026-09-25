@@ -1,15 +1,10 @@
 #lang racket/base
 ;; Light/dark colors, the editor font, and applying them to the shared style list.
-(require racket/class racket/gui/base racket/list racket/port racket/system)
+(require racket/class racket/gui/base racket/list racket/port racket/system "ui/tokens.rkt")
 (provide theme-color current-theme-name set-theme! toggle-theme! detect-theme
          font-size set-font-size! apply-base-style! canvas-background editor-style-list)
 
-(define themes
-  (hash 'light (hash 'bg "#FFFFFF" 'fg "#1F2328" 'comment "#6E7781" 'string "#0A7B34"
-                     'constant "#0550AE" 'keyword "#8250DF" 'error "#CF222E" 'heading "#0550AE")
-        'dark  (hash 'bg "#1E1E1E" 'fg "#D4D4D4" 'comment "#7C8B91" 'string "#CE9178"
-                     'constant "#B5CEA8" 'keyword "#C586C0" 'error "#F44747" 'heading "#4FC1FF")))
-
+; Colors come from ui/tokens.rkt (roles); this module keeps the editor font and style list.
 (define (mac-dark-mode?)
   ;; `AppleInterfaceStyle` is "Dark" in dark mode and absent in light mode.
   (with-handlers ([exn:fail? (lambda (e) #f)])        ; no `defaults` command: assume light
@@ -25,16 +20,16 @@
          (define c (get-panel-background))
          (if (< (+ (send c red) (send c green) (send c blue)) 384) 'dark 'light)]))
 
-(define current-theme-name (detect-theme))
-(define (set-theme! name) (set! current-theme-name name) (apply-base-style!))
-(define (toggle-theme!) (set-theme! (if (eq? current-theme-name 'dark) 'light 'dark)))
+(set-appearance! (let ([d (detect-theme)]) (if (memq d '(light dark)) d 'light)))
+(define (current-theme-name) current-appearance)
+(define (set-theme! name) (set-appearance! name) (apply-base-style!))
+(define (toggle-theme!) (set-theme! (if (eq? current-appearance 'dark) 'light 'dark)))
 
+;; Old names used by the highlighter: bg/fg are the surface/text roles, error is a face.
 (define (theme-color key)
-  (define hex (hash-ref (hash-ref themes current-theme-name) key))
-  (define n (string->number (substring hex 1) 16))
-  (make-object color% (quotient n 65536) (modulo (quotient n 256) 256) (modulo n 256)))
+  (token (case key [(bg) 'surface] [(fg) 'text] [(error) 'face-error] [else key])))
 
-(define (canvas-background) (theme-color 'bg))
+(define (canvas-background) (token 'surface))
 
 (define font-size (if (eq? (system-type 'os) 'macosx) 14 12))
 (define (set-font-size! n) (set! font-size (max 8 (min 48 n))) (apply-base-style!))

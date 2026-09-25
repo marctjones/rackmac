@@ -8,7 +8,7 @@
 (define (refresh-system-theme!)
   (unless (getenv "RACKMAC_THEME")
     (define detected (detect-theme))
-    (unless (eq? detected current-theme-name)
+    (unless (eq? detected (current-theme-name))
       (set-theme! detected)
       (for ([b (in-list (all-buffers))]) (send b rehighlight!))
       (run-hook 'theme-changed))))
