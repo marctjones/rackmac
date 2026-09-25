@@ -377,6 +377,12 @@ and the GitHub `release:` labels need the new numbers; DESIGN §9–§10 should 
 
 ## 9. Decisions for the owner
 
+**Answered 2026-09-25:** (2) markup: **hidden in the Formatted view once it works** — v0.3 ships markup
+de-emphasized, the v0.4 experiment builds hiding, and hiding becomes the default when it passes its tests;
+(3) shortcuts: **both accepted** (⌘, = Settings…, ⌥⌘S = Show Library); (4) metadata: recommended convention
+taken by default (front matter + inline tokens). (1) parser: open — the owner asked about licenses and
+leveraging/forking the `commonmark` package; see the maintainer's analysis in the conversation / issue.
+
 1. **Markdown parser.** Write the scanner in-house (`racket/base`, roughly 400 lines, positions for every span,
    exactly the constructs the UI needs; recommended, no new dependency), or add the `markdown` or `commonmark`
    package from the catalog (full CommonMark, but a dependency `DEVELOPMENT.md` says to ask about, and neither
