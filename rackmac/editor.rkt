@@ -4,6 +4,7 @@
 (require racket/class racket/list racket/string racket/path
          "buffer.rkt" "hook.rkt" "mode.rkt" "modes.rkt")
 (provide current-buffer set-current-buffer! all-buffers visible-buffers messages-buffer?
+         reopen-closed-tab! closed-tab-paths
          new-buffer! open-file! kill-buffer! find-buffer-by-path unique-name
          message messages-buffer show-messages!
          ui-parent set-ui-parent!
@@ -62,6 +63,16 @@
         (send b set-path! p)
         b)))
 
+;; Paths of closed tabs, most recent first, for Reopen Closed Tab (as in Chrome).
+(define closed '())
+(define (closed-tab-paths) closed)
+(define (reopen-closed-tab!)
+  (let loop ()
+    (cond [(null? closed) #f]
+          [else (define p (car closed))
+                (set! closed (cdr closed))
+                (if (file-exists? p) (let ([b (open-file! p)]) (set-current-buffer! b) b) (loop))])))
+
 ;; Closing picks the nearest visible neighbour, never a hidden buffer. The Activity log is
 ;; only hidden, never destroyed, so messages keep going somewhere.
 (define (kill-buffer! b)
@@ -70,6 +81,7 @@
      (send b set-shown! #f)
      (when (eq? b current) (set! current #f) (set-current-buffer! (current-buffer)))]
     [else
+     (when (send b get-path) (set! closed (cons (send b get-path) (remove (send b get-path) closed))))
      (define vs (visible-buffers))
      (define i (or (index-of vs b) 0))
      (define rest (remq b vs))

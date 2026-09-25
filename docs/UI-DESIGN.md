@@ -1,421 +1,400 @@
-# Rackmac UI design: a modern desktop editor, not an Emacs clone
+# Rackmac UI design: a modern desktop editor on native controls
 
-_Status: proposal for the owner. Targets macOS and Windows 11. GNOME/libadwaita is cited only where it
-informs a cross-platform choice; Linux is not an official target. Nothing here changes the core: command
-registry, keymaps, modes, hooks, buffers on `text%`, `#lang rackmac` with ownership and unload. Every surface
-below is generated from command metadata (`#:title #:help #:icon #:when #:aliases`, mode `#:label`) and, where
-ROADMAP says so, is an extension on the public API (toolbar, context menu)._
+_Status: proposal for the owner. Targets macOS and Windows. Scope, in the owner's words: use the existing
+Windows and macOS `racket/gui` controls; make the **window layout and coloring** modern and follow modern UX
+practice; do not make it look like old Emacs. So: no custom widget toolkit, no Skia layer, no custom title bar,
+no restyled buttons or text fields. Custom painting is limited to areas that are ours anyway (editor surface,
+gutter, selection, status bar) and to small `canvas%` pieces where `racket/gui` has no control at all. GNOME
+(libadwaita) is cited only where it informs a cross-platform choice; Linux is not a target. Nothing here changes
+the core: command registry, keymaps, modes, hooks, buffers on `text%`, `#lang rackmac` with ownership and unload.
+Every surface reads command metadata (`#:title #:help #:icon #:when #:aliases`, mode `#:label`), and the toolbar
+and context menu are extensions on the public API as ROADMAP E2 says._
 
 ## 0. The short version
 
-- **Look:** Fluent 2 on Windows, HIG on macOS, one shared token set with per-platform overrides. Flat tinted
-  surfaces, 4 px grid, small radii, accent from the OS, system fonts for chrome, monospace for text.
-- **Build:** a small custom-drawn widget layer on `canvas%` + `racket/draw` for every chrome row (command bar,
-  tab strip, status bar, InfoBar, palette results, start screen). Native `racket/gui` stays for the menu bar,
-  the editor (`editor-canvas%` on `text%`), single-line inputs (a one-line `text%`), context menus, file and
-  message dialogs, and the window title bar.
-- **racket-skia:** port its *design* (Fluent token values, `widget%` model, headless PNG tour), not the code,
-  and keep a ten-function `gfx` interface so Skia can become a backend later. Reasons in §4.1.
-- **Order:** a UI foundation milestone (E2.M0) lands *before* the toolbar; E2's toolbar, tabs, status bar and
-  the palette restyle build on it in v0.2; InfoBar (E8), start screen (E5) and panes (E9) follow.
+- **Layout:** title bar (native) → menu bar (native) → one-row toolbar of native icon buttons → document tabs
+  (`tab-panel%` with close boxes, reordering and a "+" button, all built in) → optional InfoBar row → optional
+  find row → editor → status bar. Everything on a 4 px grid with real margins.
+- **Color:** one token module for the surfaces we paint (editor, gutter, selection, find highlight, status bar,
+  syntax faces), light and dark, with the accent taken from the OS highlight color. Native chrome keeps the OS look.
+- **UX:** discover by menu, toolbar, palette and shortcut hints; progressive disclosure (Advanced in Find,
+  overflow, settings search); non-modal feedback (status message and InfoBar, never a modal error box);
+  designed empty states; keyboard everything, which native controls give us for free with the screen reader.
+- **Order:** a small UI foundation milestone (tokens, layout constants, appearance detection, headless tests)
+  lands before the toolbar; E2 builds on it in v0.2; InfoBar (E8), start screen (E5) and panes (E9) follow.
+- **racket-skia:** out of scope for now (§4.1, one paragraph).
 
 ## 1. Visual language
 
-### 1.1 Color roles (`rackmac/ui/tokens.rkt`)
+### 1.1 What is native and what we paint
 
-Roles, not colors, are what widgets ask for. Seed values are Avalonia's Fluent set (already proven in
-`racket-skia/gallery/ui.rkt`); macOS overrides a few roles to match HIG. `accent` is replaced by the OS accent
-when it can be read (§4.5). "Mica-like" is an approximation: opaque canvases cannot show the desktop through the
-window, so the window surface is a flat tint one step from the card color.
+| Native `racket/gui` (OS look, OS accessibility) | Painted by Rackmac (`racket/draw`) |
+|---|---|
+| title bar, menu bar, `button%` (toolbar, dialogs), `text-field%`, `check-box%`, `choice%`, `list-box%`, `tab-panel%`, `message%`, `dialog%`, `popup-menu%`, file and message dialogs | editor surface (`editor-canvas%` on `text%`): background, text, selection, caret, current line, find matches, syntax faces; gutter; status bar (`canvas%`); toolbar icons (vectors rendered to `bitmap%` labels); pane splitters (E9) |
 
-| Role | Light (Win) | Dark (Win) | macOS light / dark | Use |
-|---|---|---|---|---|
-| `window` | #F3F3F3 | #202020 | #ECECEC / #282828 | frame rows, command bar, tab strip (Mica-like tint) |
-| `surface` | #FFFFFF | #2B2B2B | #FFFFFF / #1E1E1E | editor, active tab, cards, palette |
-| `surface-alt` | #FAFAFA | #2C2C2C | #F6F6F6 / #262626 | menus, flyouts, InfoBar body |
-| `stroke` | #E3E3E3 | #3A3A3A | #DCDCDC / #3C3C3C | 1 px dividers, card borders |
-| `stroke-strong` | #868686 | #9A9A9A | same | unchecked box borders |
-| `control` / `-hover` / `-press` / `-disabled` | #FDFDFD / #F6F6F6 / #EEEEEE / #F4F4F4 | #343434 / #3B3B3B / #2A2A2A / #2A2A2A | same | button fills |
-| `subtle-hover` / `subtle-press` | 5% / 9% black | 7% / 12% white | same | icon buttons, tabs, segments |
-| `text` / `text-2` / `text-disabled` | #1B1B1B / #606060 / #A6A6A6 | #FFFFFF / #C6C6C6 / #777777 | #1D1D1F / #6E6E73 / #B0B0B5 (dark: #F5F5F7 / #A1A1A6 / #6E6E73) | 4.5:1 minimum for `text` and `text-2` |
-| `accent` / `-hover` / `-press` / `on-accent` | #0067C0 / #1975C5 / #3185CC / #FFF | #60CDFF / #52B9E6 / #47A5CC / #000 | #007AFF / #0A84FF (dark), on-accent #FFF | default button, selection, focused underline, dirty dot |
-| `selection` | 33% accent | 40% accent | 30% accent | list and text selection |
-| `focus` | #1B1B1B (+1 px #FFF inner) | #FFFFFF (+1 px #000 inner) | accent at 60%, 3 px | keyboard focus ring |
-| `info` / `success` / `warning` / `error` | #0067C0 / #0F7B0F / #9D5D00 / #C42B1C | #60CDFF / #6CCB5F / #FCE100 / #FF99A4 | same | InfoBar, status icons |
-| `scrim` | 33% black | 47% black | same | behind in-canvas modal cards |
+### 1.2 Color tokens (`rackmac/ui/tokens.rkt`)
 
-Editor faces (`comment`, `string`, `keyword`, ...) stay in `theme.rkt`; it reads `bg`/`fg` from `surface`/`text`
-so the editor and chrome cannot drift apart. High-contrast variants (RM-145) are a third and fourth column of
-the same table, not new roles.
+Roles, not colors. `theme.rkt` already holds `bg fg comment string constant keyword error heading`; this table
+extends it and moves it behind `(token 'name)`. Seeds: GitHub-light/VS-dark values already in `theme.rkt` for
+faces; Fluent 2 and HIG neutrals for surfaces. `accent` comes from `get-highlight-background-color` (the OS
+selection color, which follows the Windows accent and the macOS accent setting) and is only used where we paint.
 
-### 1.2 Typography
-
-Chrome uses the system UI font; `normal-control-font` already resolves to `.AppleSystemUIFont` 13 on macOS
-(measured) and Segoe UI on Windows. Faces are resolved once at startup with `get-face-list` and the first hit
-wins.
-
-| Slot | Windows (px/line, weight) | macOS | Fallback chain |
+| Role | Light | Dark | Used for |
 |---|---|---|---|
-| `caption` | 12/16 400 | 11/13 400 | — |
-| `body` | 14/20 400 | 13/16 400 | Segoe UI Variable Text → Segoe UI; SF Pro Text (`.AppleSystemUIFont`) → Helvetica Neue |
-| `body-strong` | 14/20 600 | 13/16 600 (semibold) | same |
-| `subtitle` | 20/28 600 | 17/22 600 | Segoe UI Variable Display → Segoe UI |
-| `title` | 28/36 600 | 22/26 700 | same |
-| `mono` (editor, status Ln/Col) | 12 Cascadia Mono → Consolas | 14 SF Mono → Menlo | current `theme.rkt` sizes; `font-size` zoom applies |
+| `surface` | #FFFFFF | #1E1E1E | editor background (`canvas-background`) |
+| `text` | #1F2328 | #D4D4D4 | editor text (`fg`) |
+| `text-2` | #6E7781 | #9DA5AD | gutter numbers, status segments, placeholders |
+| `text-disabled` | #A6A6A6 | #6E6E6E | dimmed segments |
+| `stroke` | #E3E3E3 | #3A3A3A | 1 px line above the status bar, gutter edge |
+| `line-highlight` | #F6F8FA | #262626 | current line (prose Languages off, code on) |
+| `selection` | OS highlight (fallback #B3D7FF) | OS highlight (fallback #264F78) | text selection; `text%` uses the OS color itself |
+| `accent` | OS highlight, fallback #0067C0 / macOS #007AFF | fallback #60CDFF / macOS #0A84FF | status-bar hover underline, gutter marker for the current line, find count when matches exist |
+| `match` / `match-current` | #FFE08A / #FFB000 | #6B5900 / #B58900 | Find All highlights (RM-109), 35% alpha |
+| `info` / `success` / `warning` / `error` | #0067C0 / #0F7B0F / #9D5D00 / #C42B1C | #60CDFF / #6CCB5F / #FCE100 / #FF99A4 | status-bar icons, find "No matches", InfoBar text |
+| `status-bg` | #F3F3F3 (macOS #ECECEC) | #202020 (macOS #282828) | status bar; sits visually with the OS window color |
+| faces `comment string constant keyword heading` | as `theme.rkt` | as `theme.rkt` | syntax coloring, unchanged |
 
-Text scaling (RM-146): every metric below is multiplied by a `ui-scale` parameter (1.0–2.0) that the settings
-dialog exposes; fonts scale with it, icons scale in steps of 16/20/24.
+Rules: `text` and `text-2` on `surface`, and every status token on `status-bg`, meet 4.5:1 (a test computes
+it); `stroke` and `accent` on their surfaces meet 3:1; nothing is conveyed by color alone (the current find match
+also gets a thicker outline, the modified tab also has "•" and the window title). High-contrast variants
+(RM-145) are two more columns of this table.
 
-### 1.3 Spacing, shape, elevation, focus, motion
+### 1.3 Typography
 
-- **Grid:** 4 px. Paddings 4/8/12/16; row heights are multiples of 4.
-- **Control heights:** Windows 32, macOS 28 (`control-h`). Command bar row 40, tab strip 36, status bar 24,
-  InfoBar 40 (single line) growing with wrapped text, palette input 36 and rows 32.
-- **Corner radii:** Windows control 4, overlay 8 (flyout, palette, in-canvas dialog card), tab top 4.
-  macOS control 6, overlay 10. Top-level windows get the OS's own corners; we draw none.
-- **Elevation:** only *inside* a canvas (find card, which-key popup, in-canvas dialog): 1 px `stroke` border plus
-  a 2-layer soft shadow (0 2 4 @ 8% and 0 8 16 @ 14% black; halve on macOS). Top-level windows and native menus
-  get the OS shadow.
-- **Focus ring:** drawn only for keyboard focus (a `kb-focus?` flag set by Tab/arrow navigation, cleared by a
-  click, as in `ui.rkt`). Windows: 2 px `focus` stroke 2 px outside the control plus 1 px inner contrast line.
-  macOS: 3 px accent ring at 60% alpha. Never the dotted Win32 rectangle.
-- **Motion:** state changes are instant; caret blink 530 ms; the palette and find bar appear without animation.
-  `timer%`-driven repaints make short fades possible later, but nothing in the plan depends on them, and a
-  reduced-motion setting turns them off when they arrive.
+Native controls use the OS control font automatically (`normal-control-font` is `.AppleSystemUIFont` 13 on
+macOS and Segoe UI on Windows; nothing to do). We choose fonts only for what we paint and for the start screen.
 
-### 1.4 Icons
+| Slot | macOS | Windows | Where |
+|---|---|---|---|
+| `mono` | SF Mono → Menlo, 14 | Cascadia Mono → Consolas, 12 | editor, gutter; resolved once with `get-face-list` (SF Mono and Cascadia are not on a base install; Menlo and Consolas are) |
+| `ui` | `normal-control-font` (13) | `normal-control-font` (Segoe UI 9 pt) | status bar, InfoBar text |
+| `ui-small` | `small-control-font` (11) | `small-control-font` | status segments when the window is narrow |
+| `title` | `ui` face at 22 bold | `ui` face at 20 bold | start screen heading (`message%` with `font`) |
+| `subtitle` | `ui` face at 15 | `ui` face at 14 | start screen card titles |
 
-Fluent System Icons style: single-weight line icons on a 16-unit grid, 1 px stroke at 16 px (1.5 at 20/24),
-round caps and joins, filled only for state glyphs (dirty dot, check). Drawn as vectors (`racket/draw` paths in
-logical units, so HiDPI is free), colored with `text`, `text-2` or `on-accent`, never baked bitmaps. Commands
-without `#:icon` get a generated letter tile (initial on `subtle-hover` fill), which is what RM-052 needs.
+Zoom (`font-size`, existing) scales the editor only; a `ui-scale` setting (RM-146) scales gutter and status
+bar fonts and metrics in the same step.
 
-Set required (name = `#:icon` value): `new`, `open`, `save`, `save-as`, `close`, `undo`, `redo`, `cut`, `copy`,
-`paste`, `select-all`, `find`, `replace`, `goto`, `comment`, `duplicate`, `delete-line`, `arrow-up`,
-`arrow-down`, `indent`, `outdent`, `zoom-in`, `zoom-out`, `zoom-reset`, `wrap`, `theme`, `activity`, `palette`,
-`language`, `run`, `run-all`, `keyboard`, `help`, `book`, `info`, `settings`, `extensions`, `history`,
-`chevron-down`, `chevron-right`, `chevron-left`, `more`, `x`, `dot`, `check`, `warning`, `error`, `search`,
-`case-sensitive`, `regex`, `whole-word`, `split-right`, `split-down`, `sidebar`. About 55; `#:icon` is set on
-0 of 61 built-ins today, so assigning names is its own small issue (`meta-icon-assign`).
+### 1.4 Spacing, metrics, motion
+
+- **4 px grid** through `panel%` `border`, `spacing`, `horiz-margin`, `vert-margin`: window rows `border 0`,
+  toolbar `spacing 4` with an 8 px gap (a `pane%` spacer) between groups, InfoBar and find row `border 8 spacing 8`,
+  dialogs `border 16 spacing 12`.
+- **Editor margins:** `horizontal-inset` 16 (today 12), `vertical-inset` 12; prose Languages wrap at a readable
+  measure (`set-max-width` at ~80 columns of the mono font) with the text left-aligned, code Languages unwrapped.
+- **Row heights** follow the controls: toolbar = button height + 8; tab strip as `tab-panel%` draws it; status
+  bar 24 (macOS 22); InfoBar one line of `ui` + 16.
+- **Motion:** none required. State changes are instant; caret blink is the editor's own. A reduced-motion
+  setting exists from day one so anything added later (a status message fade) has an off switch.
+
+### 1.5 Icons
+
+Fluent System Icons style: single-weight line icons on a 16-unit grid, 1 px stroke at 16 px, 1.5 at 20 px,
+round caps. Each icon is a small `racket/draw` path program in `rackmac/ui/icons.rkt`, rendered on demand into a
+`bitmap%` at the display's backing scale (`make-bitmap #:backing-scale`) in the `text` color, and handed to
+`button%` as a bitmap label, so `#:icon` drives native buttons directly. Commands without `#:icon` get a
+letter tile (their initial in a rounded square), which RM-052 "Add to Toolbar" needs. Set: `new open save
+save-as close undo redo cut copy paste select-all find replace goto comment duplicate delete-line arrow-up
+arrow-down indent outdent zoom-in zoom-out zoom-reset wrap theme activity palette language run run-all keyboard
+help book info settings extensions history search chevron-down chevron-right chevron-left more x check warning
+error split-right split-down sidebar record stop play` (about 55). `#:icon` is set on 0 of 61 built-ins today;
+assigning names is its own small issue.
 
 ## 2. Window layout
 
-Two hard `racket/gui` facts shape everything here: children never overlap (no z-order, so no true overlays
-inside the window), and `panel%` has no background setter while Win32 controls ignore dark mode. So the frame is
-a `vertical-panel%` with `border 0 spacing 0` whose rows are *all* canvases that paint their own background;
-no native panel pixel is ever visible.
-
 ```
-frame%  (native title bar)
+frame% (native title: "• notes.md — Rackmac")
 └─ vertical-panel% border 0 spacing 0
-   ├─ command-bar   canvas%  40   (hideable: View > Show Toolbar)
-   ├─ tab-strip     canvas%  36
-   ├─ infobar       canvas%  0|40+ (hidden unless a message is pending)
-   ├─ find-bar      canvas% + textbox row, 0|44 (hidden)
-   ├─ editor slot   editor-canvas% | start-view canvas% | (E9) pane tree
-   └─ status-bar    canvas%  24
+   ├─ menu-bar%                        native, generated from #:menu (unchanged)
+   ├─ toolbar   horizontal-panel%      button% per toolbar item, bitmap labels, group spacers, hideable
+   ├─ tabs      tab-panel%             '(no-border can-reorder can-close new-button) → close box, drag, "+"
+   │  ├─ infobar  horizontal-panel%    hidden unless a message is pending
+   │  ├─ find     vertical-panel%      hidden; one or two rows
+   │  ├─ gutter   canvas% (optional)   line numbers, code Languages
+   │  └─ editor   editor-canvas%       or the start view panel when no documents are open
+   └─ status   canvas%                 message segment left, clickable segments right
 ```
 
-- **Title bar: native on both.** On Windows the caption is tinted through `DwmSetWindowAttribute` on the HWND
-  from `(send frame get-handle)` via `ffi/unsafe`: `DWMWA_USE_IMMERSIVE_DARK_MODE`, `DWMWA_CAPTION_COLOR`,
-  `DWMWA_TEXT_COLOR`, and `DWMWA_SYSTEMBACKDROP_TYPE` for Mica where available (verify numeric ids against
-  `dwmapi.h`; Windows 11 only). This keeps snap layouts, the system menu and accessibility of the caption
-  buttons, which a `'no-caption` custom title bar (as in racket-skia's gallery) would lose. On macOS the traffic
-  lights stay; a unified title/toolbar (transparent titlebar through `ffi/unsafe/objc` on the `NSWindow` handle)
-  is optional polish, not in the plan.
-- **Command bar: a single row, not a ribbon.** 61 commands do not justify tabs and groups; Office's own
-  Simplified Ribbon is one row. Layout: `[New] [Open] [Save] | [Undo] [Redo] | [Cut] [Copy] [Paste] | [Find] | mode
-  items (Racket: Run Selection) ... [⋯ overflow]  [Search commands…]`. Items come from the toolbar registry
-  (RM-043) which reads `#:icon #:title #:help #:when`; icon-only 32×32 buttons with `subtle-hover`, tooltip
-  text in the status bar (there is no tooltip API), overflow menu when the window is narrow, the whole row
-  hideable. macOS shows the same row; labels under icons are a setting, off by default.
-- **Tabs: browser/Office document tabs.** Custom strip replacing `tab-panel%`: active tab in `surface` with a 1 px
-  `stroke` outline open at the bottom (merges into the editor), inactive tabs on `window` with hover; title in
-  `body`; a 6 px accent `dot` when modified that turns into `x` on hover; close button on the right (Windows) or
-  left (macOS); middle-click closes; drag to reorder; `+` at the end runs New Document; right-click opens the tab
-  context menu (RM-071). Overflow scrolls with chevrons.
-- **Editor surface.** `editor-canvas%` with `horizontal-inset` 16 (prose: a readable measure of ~80 columns when
-  the window is wide, via `set-max-width`), `vertical-inset` 8, no border. An optional gutter (line numbers,
-  wrap markers) is drawn by a sibling 48 px canvas kept in sync with the editor's scroll position; off for prose
-  Languages, on for code, per mode local `gutter?`.
-- **Find bar.** A card at the top-right of the editor slot, in-layout (not a true overlay): `[search icon]
-  [textbox ..... 3 of 12] [Aa] [.*] [ab] | [↑] [↓] [x]`, with a second row for Replace. The textbox is a one-line
-  `text%` (§4.3), so IME, undo and selection keep working. Esc closes and returns focus, Enter/Shift+Enter
-  step, and the match count doubles as the "wrapped" indicator (RM-110).
-- **Status bar.** Left: message segment (the echo area; errors get an `error` icon and stay until clicked, which
-  opens Activity). Right: clickable segments `Ln 12, Col 8`, `12 words`, `UTF-8`, `LF`, `Racket`, `100%`, each
-  with `subtle-hover`, underline on hover, arrow keys between them when focused, and a hint in the message
-  segment. Clicks run commands exactly as ROADMAP E2.M4 lists.
-- **Command palette.** A centered flyout 640×440 opening 96 px below the top of the window, as VS Code and
-  PowerToys Run do: input 36 px, rows 32 px with icon, title, category (`text-2`) and shortcut; the highlighted
-  row shows its `#:help` sentence in a footer (RM-030). Recents first when empty; a friendly empty state
-  (RM-031). Built on a captionless `dialog%` so `picker-test.rkt` keeps finding it.
-- **Dialogs.** Native `message-box`/`get-file`/`put-file` everywhere. App-specific confirmations use one helper
-  that fixes platform button order (macOS: `Cancel` left of the default; Windows: default first) and plain
-  language ("Save changes to notes.md?"), never "buffer".
-- **Context menus.** Native `popup-menu%` from the context registry (RM-055); Windows 11 already renders Win32
-  popup menus with rounded corners and dark mode, and macOS menus are native anyway.
-- **Toasts and InfoBar.** No floating toasts (overlapping is impossible in-window; a floating `frame%` is a later
-  experiment). Info-level messages go to the status message segment; warnings and errors that need an action
-  (extension failed, file changed on disk) raise a Fluent **InfoBar** row: severity icon, one sentence,
-  `Details`, an action button, and `x`. libadwaita's toast rule (one line, at most one action) is the content
-  guideline.
-- **Start screen.** A canvas in the editor slot when no files are given: title "Rackmac", three cards `New
-  Document`, `Open…`, `Get Started`, a Recent list (RM-083) with paths in `text-2`, and a small "Scratch Pad"
-  link for Racket users. Disappears when the first document opens.
+- **Title bar and menus:** native, unchanged. The title carries the document name and the modified dot; the
+  menu bar keeps its metadata generation. Menu items enable from `#:when` on open (RM-065).
+- **Toolbar (one row, not a ribbon).** 61 commands do not justify tabs and groups; Office's Simplified Ribbon is
+  one row too. Default layout: `New Open Save | Undo Redo | Cut Copy Paste | Find | ⟨Language items: Run
+  Selection for Racket⟩ ... ⟨spacer⟩ Search commands` where the last is a `button%` that opens the palette.
+  Items come from the toolbar registry (RM-043, `add-toolbar-item!`), enable from `#:when` on the
+  `after-command`, `status-changed` and `buffer-modified-changed` hooks (RM-049), and the whole row hides from
+  View > Show Toolbar. Icon-only by default; `button%` accepts `(list bitmap "Save" 'bottom)` so labels under
+  icons are a setting. There is no tooltip API, so the hovered button's title and shortcut go to the status
+  message (`on-subwindow-event` on the toolbar panel sees motion events).
+- **Tabs.** `tab-panel%` with `'no-border 'can-reorder 'can-close 'new-button` (the styles DrRacket uses):
+  close boxes call `on-close-request` → `close-tab` on that buffer; dragging calls `on-reorder`; "+" calls
+  `on-new-request` → `new-document`. Labels keep the "• " modified prefix. `'flat-portable` (forced on Windows
+  when closing is enabled) draws the same strip on both OSes, which is what we want. Right-click on the strip
+  (`on-subwindow-event`) opens the tab context menu (RM-071); middle-click closes (RM-070). Keyboard: Ctrl+Tab
+  as today.
+- **Editor.** `editor-canvas%` with the margins above and `set-canvas-background` from `surface`. The optional
+  gutter is a 48 px `canvas%` to the left that paints line numbers in `text-2` (current line in `text`) using
+  the editor's `position-location` and scroll offset; it is on for code Languages, off for prose, per mode local
+  `gutter?` (RM-146-adjacent; new issue `ui-gutter`).
+- **Find row.** Native and in-layout, appearing between the tabs and the editor (a real overlay is impossible:
+  `racket/gui` children never overlap). Row 1: `[ find text-field% ] 3 of 12  [☐ Match case] [☐ Whole word]
+  [Advanced ▾] [Previous] [Next] [✕]`; row 2 (Find and Replace): `[ replace text-field% ] [Replace] [Replace All]`.
+  `Advanced ▾` discloses `[☐ Regular expression] [☐ In selection]` inline (RM-107, RM-112). Esc closes and
+  refocuses the editor, Enter and Shift+Enter step, the count doubles as the wrap indicator ("Wrapped · 1 of 12")
+  and turns `error` at "No matches" (RM-110). Buttons take icon labels from the same set.
+- **Status bar.** One `canvas%` (a clickable native equivalent does not exist). Left: the message segment (the
+  echo area). Errors get an `error` icon and stay until clicked, which opens Activity. Right: segments `Ln 12,
+  Col 8 · 84 words · UTF-8 · LF · Markdown · 100%`, each hit-tested, underlined in `accent` on hover, with a hint
+  in the message segment ("Click to change the Language"), and reachable by Tab then Left/Right/Enter. Clicks
+  run the commands E2.M4 lists.
+- **Command palette.** The existing `dialog%` + `text-field%` + `list-box%`, restyled: 640 × 440, placed over
+  the top third of the main window (`move` after `center`), `'no-caption` when the platform accepts it (titled
+  "Command Palette" otherwise), columns `Command · Category · Shortcut`, recents first when empty (done), the
+  highlighted command's `#:help` and Emacs alias in a `message%` footer (RM-030), and an empty state row
+  "No commands match 'xyz'. Check the spelling or open Help > Keyboard Shortcuts." (RM-031).
+- **Dialogs.** Native `message-box`, `get-file`, `put-file`. One helper wraps app confirmations so wording is
+  plain ("Save changes to notes.md?", "Don't Save", never "buffer") and button order follows the platform.
+- **Context menus.** Native `popup-menu%` from the context registry (RM-055), items enabled per selection.
+- **Notifications.** Two channels, no floating toasts (they would need a second window; a later experiment).
+  *Info* goes to the status message. *Warning* and *error* that need an action raise the **InfoBar** row:
+  `message%` with the native `'caution` or `'stop` icon, one plain sentence, `Details` (opens Activity),
+  one action (`Disable extension`, `Reload`, `Keep mine`), `✕`. Several messages queue; the row hides when
+  empty. libadwaita's toast rule (one line, at most one action) is the content guideline.
+- **Start screen.** A `vertical-panel%` shown in the editor slot when no files are given: title "Rackmac",
+  subtitle "A modern editor you can program", three large `button%`s `New Document`, `Open…`, `Get Started`,
+  a `list-box%` "Recent" (RM-083; double-click opens), and a small "Scratch Pad" button for Racket users. It
+  leaves when the first document opens (`change-children`) and is a command, so it can come back from Help.
 
-## 3. Per-platform differences
+## 3. Modern UX practices, applied
 
-| Aspect | Windows 11 | macOS | GNOME note (informative only) |
+| Practice | Rackmac |
+|---|---|
+| **Discoverability three ways** | every command: menu path, toolbar or palette, shortcut shown in all three (existing metadata); shortcut cheat sheet (RM-039); one-time "Tip: ⌘S" in the status message after a menu or palette run (RM-041); which-key popup for chords (RM-040) as a small captionless `dialog%` near the caret |
+| **Progressive disclosure** | Find shows two options, Advanced holds regex and scope; toolbar overflow when narrow; settings dialog with search and "Edit as code"; Activity has Details, not a backtrace |
+| **Non-modal feedback** | status message for info, InfoBar for actionable warnings and errors; file-changed banner (RM-080) is an InfoBar; no modal error dialogs anywhere; the only modals are Save/Open/Confirm |
+| **Empty states** | start screen; palette no-results with a next step; Activity "Nothing yet. Errors and messages appear here."; Recent "Files you open appear here." |
+| **Select, then act** | selection-first commands, `#:when` disables Cut/Copy without a selection so the toolbar teaches the rule |
+| **Safe by default** | autosave and Restore (E3) surfaced in an InfoBar on next launch; destructive confirmations name the file and offer Cancel |
+| **Keyboard and accessibility** | native controls give focus rings, Tab order and VoiceOver/Narrator; the two painted pieces (status bar, gutter) are focusable, arrow-navigable and announce via the status message; 4.5:1 text contrast enforced by test; `ui-scale`; no color-only state |
+| **Platform manners** | dialog button order, modifier glyphs, close-box side and Ctrl-click follow the OS (§4) |
+
+## 4. Per-platform differences
+
+| Aspect | Windows | macOS | GNOME note (informative) |
 |---|---|---|---|
-| Title bar | native, DWM-tinted caption, Mica where supported | native traffic lights, title from `set-label` | libadwaita header bar merges title and toolbar; not adopted |
-| Menu bar | native Win32 in-window (light, not themed; accepted for now) | native, generated from `#:menu` | — |
-| Chrome font | Segoe UI Variable Text → Segoe UI, 14/12 | SF Pro (`.AppleSystemUIFont`) 13/11 | Cantarell would follow the same slot table |
+| Title bar, menu bar | native in-window (light; Win32 controls do not follow dark mode) | native; menu in the system bar | header bar; not adopted |
+| Tab strip | `flat-portable` (forced with `can-close`) | `flat-portable` via `no-border`, same strip | libadwaita tab bar looks the same |
+| Chrome font | Segoe UI (auto) | SF Pro (auto) | Cantarell |
 | Editor font | Cascadia Mono → Consolas 12 | SF Mono → Menlo 14 | Source Code Pro → DejaVu Sans Mono |
-| Control height / radius | 32 / 4 (overlay 8) | 28 / 6 (overlay 10) | 34 / 6 (cards 12) |
-| Focus ring | 2 px `text` + 1 px inner contrast | 3 px accent at 60% | accent 2 px offset 2 px, closest to macOS |
-| Accent | registry `HKCU\...\DWM\AccentColor` | `defaults read -g AppleAccentColor` (-1..6, absent = blue) | gsettings `accent-color` |
-| Dark mode | registry `Personalize\AppsUseLightTheme` (0 = dark), polled on activate | `AppleInterfaceStyle` (existing) polled on activate | `color-scheme` |
-| Modifier glyphs | `Ctrl+Shift+P` | `⇧⌘P` (existing `key-sequence->string`) | `Ctrl+Shift+P` |
-| Menu shortcut hints | `\t` column | spaces (Cocoa ignores `\t`; existing workaround) | — |
-| Tab close button | right | left | right |
-| Dialog button order | default first (`Save` `Don't Save` `Cancel`) | `Don't Save` ... `Cancel` `Save` | like macOS |
-| Context menu trigger | right-click, Shift+F10, Menu key | right-click and Ctrl-click | right-click |
-| Undo/redo, find keys | Ctrl+Z / Ctrl+Y, F3 | ⌘Z / ⇧⌘Z, ⌘G | as Windows |
+| Accent / selection | `get-highlight-background-color` (follows Windows accent) | same (follows macOS accent) | same |
+| Dark mode detection | registry `Personalize\AppsUseLightTheme` (0 = dark), polled on `on-activate`; today's panel-luminance heuristic cannot work there | `AppleInterfaceStyle` (existing), polled on `on-activate` | `color-scheme` |
+| Dark-mode result | editor, gutter, status bar dark; native chrome stays light until `racket/gui`'s Win32 backend supports it | everything dark | — |
+| Modifier glyphs | `Ctrl+Shift+P` | `⇧⌘P` | `Ctrl+Shift+P` |
+| Menu shortcut hints | `\t` column | spaces (Cocoa ignores `\t`; existing) | — |
+| Dialog button order | default first (`Save` `Don't Save` `Cancel`) | `Don't Save` … `Cancel` `Save` | like macOS |
+| Context menu | right-click, Shift+F10, Menu key | right-click and Ctrl-click | right-click |
+| Undo / redo, find next | Ctrl+Z / Ctrl+Y, F3 | ⌘Z / ⇧⌘Z, ⌘G | as Windows |
 | Zoom gesture | Ctrl+wheel | pinch, ⌘+wheel | Ctrl+wheel |
-| Palette placement | centered, 96 px from top | same | same |
+| Status bar height | 24 | 22 | 24 |
 
-## 4. Implementation strategy in Racket
+## 5. Implementation strategy in Racket
 
-### 4.1 Native vs custom vs racket-skia
+### 5.1 Scope note on racket-skia
 
-| Surface | Choice | Why |
-|---|---|---|
-| Menu bar, file/message dialogs, context menus, clipboard, title bar | native `racket/gui` | already modern on both OSes; accessibility comes free |
-| Editor | `editor-canvas%` on `text%` | the buffer *is* `text%`; Cairo draws it identically on both OSes |
-| Single-line inputs (find, replace, palette, go-to-line) | one-line `text%` in an `editor-canvas%` with custom border | keeps IME/undo/selection, drops the classic Win32 edit control (§4.3) |
-| Command bar, tab strip, status bar, InfoBar, palette list, start view, gutter, which-key, splitters | custom `canvas%` + `racket/draw` | the only way to get Fluent/HIG visuals and dark mode on Windows; verified headless (a 2× `bitmap%`, system font, pixel readback) |
+Out of scope for this plan. `skia-natipkgs/` holds macOS-arm64 and iOS binaries only, its `gui/COVERAGE.md` lists
+`editor-canvas%` as missing (Rackmac's editor is `text%`), and its own `REVIEW.md` asks for a re-architecture.
+The one thing borrowed is a habit: its headless PNG tour is the model for our golden tests (§5.4).
 
-**racket-skia, honestly.** It should not be a dependency in v0.2–v0.4:
-
-1. `skia-natipkgs/` holds `macos-arm64` and `ios` only; Windows is Phase 4 of its own plan. A macOS+Windows
-   editor cannot depend on it today.
-2. Its `gui/COVERAGE.md` lists `editor-canvas%` as missing and says `gui/` needs the real `racket/gui/base` at
-   run time. Rackmac's editor is `text%`, so Skia could only ever draw chrome, and chrome is exactly what
-   `racket/draw` on `canvas%` already draws (the experiment above).
-3. The owner's own `REVIEW.md` says to retire the toolkit's layout/focus/event plumbing, keep only its drawing as
-   "the look", and remove the module-level singletons (`the-root`, `the-gfx-v`, `redraw-hook`) before they
-   spread. Rackmac should not inherit them.
-4. It bundles Inter; the brief asks for Segoe UI / SF Pro.
-
-What transfers: the Fluent token values (§1.1 seeds), the `widget%`/`panel%` model with `preferred-size`,
-`find`, `mouse`, `key`, `focusable?`, the `kb-focus?` rule for focus rings, and the headless PNG tour as a
-test style. `rackmac/ui/gfx.rkt` exposes the same ten verbs `ui.rkt` uses (`fill-rrect!`, `stroke-rrect!`,
-`fill-rect!`, `line!`, `polyline!`, `path!`, `text!`, `text-width`, `clip!`, `push!/pop!`) over a `dc<%>`, so a
-Skia `dc` is a swap when a Windows binary exists.
-
-### 4.2 Modules
+### 5.2 Modules
 
 ```
-rackmac/ui/tokens.rkt      color roles, metrics, fonts; (token 'accent) (metric 'control-h) (ui-font 'body);
-                           current appearance ('light|'dark, later 'hc-light|'hc-dark); ui-scale parameter;
-                           accent override; fires 'theme-changed. theme.rkt reads surface/text from here.
-rackmac/ui/gfx.rkt         drawing verbs over dc<%>, 0.5 px alignment for 1 px strokes, HiDPI via the dc's
-                           backing scale, text measured with the slot fonts.
-rackmac/ui/icons.rkt       (draw-icon dc name x y size color); icons as path data on a 16-unit grid;
-                           (icon-names); letter-tile fallback.
-rackmac/ui/widget.rkt      ui-canvas%: canvas% subclass ('no-autoclear) holding a list of `item`s
-                           (id rect label icon enabled? tooltip on-click). Pure (layout w h) -> items and
-                           (render dc w h) so tests draw to a bitmap-dc%. Hover/press/focus/kb-focus state;
-                           Tab in/out, arrows between items, Enter/Space, Esc; tooltip -> status message.
-rackmac/ui/textbox.rkt     one-line text% in an editor-canvas%; placeholder, on-change, on-enter, on-escape.
-rackmac/ui/appearance.rkt  detect dark/accent per platform; poll on frame on-activate; update tokens.
-rackmac/ui/dwm.rkt         Windows only: caption color, dark mode, backdrop via ffi/unsafe on the HWND.
-rackmac/ui/command-bar.rkt tab-strip.rkt  status-bar.rkt  infobar.rkt  flyout.rkt (palette shell + results)
-rackmac/ui/find-bar.rkt    start-view.rkt  dialogs.rkt (button-order helper)  splitter.rkt (E9)
+rackmac/ui/tokens.rkt      (token 'surface) etc. for light/dark (+ high-contrast later); accent from the OS
+                           highlight color; ui-scale; fires 'theme-changed. theme.rkt keeps the faces and
+                           reads bg/fg from here, so editor and chrome cannot drift.
+rackmac/ui/icons.rkt       (icon-bitmap name size color scale) -> bitmap%, cached per (name size color scale);
+                           letter-tile fallback; (icon-names).
+rackmac/ui/layout.rkt      the metric constants (insets, spacing, row heights) and the frame row builder.
+rackmac/ui/appearance.rkt  detect dark mode per platform, poll on on-activate, swap tokens once per real change.
+rackmac/ui/toolbar.rkt     horizontal-panel% of button%s from the toolbar registry; enable from #:when.
+rackmac/ui/tabs.rkt        tab-panel% subclass: on-close-request / on-reorder / on-new-request -> commands.
+rackmac/ui/status-bar.rkt  canvas%: pure (layout w h) -> segments, (render dc w h); hit-test; keyboard.
+rackmac/ui/find-bar.rkt    today's find code, moved, with the count message% and Advanced disclosure.
+rackmac/ui/infobar.rkt     horizontal-panel% row with a message queue.
+rackmac/ui/palette.rkt     picker.rkt restyle (placement, columns, footer, empty state).
+rackmac/ui/start-view.rkt  vertical-panel% for the start screen.
+rackmac/ui/gutter.rkt      canvas% line numbers synced to the editor (optional, code Languages).
+rackmac/ui/dialogs.rkt     confirm helper with platform button order and plain wording.
+rackmac/ui/splitter.rkt    (E9) 6 px canvas% sash between panes; racket/gui has no splitter.
 ```
 
-`rackmac/ui/*` is private at API version 1; only the registries (`add-toolbar-item!`, `add-context-item!`,
-later `add-status-segment!`) are exported from `rackmac/api`, as ROADMAP already says.
+`rackmac/ui/*` is private at API version 1. Only the registries (`add-toolbar-item!`, `add-context-item!`,
+later `add-status-segment!`) are exported from `rackmac/api`, as ROADMAP says.
 
-### 4.3 Key techniques
+### 5.3 Techniques
 
-- **Textbox.** `editor-canvas%` with style `'(no-border hide-hscroll hide-vscroll)`, `set-line-count 1`, a
-  `text%` subclass that swallows newline and reports Enter/Esc, `set-canvas-background` from `control`, and an
-  `on-paint` override (confirmed present on `editor-canvas%`) that calls `super` then strokes the 1 px border and
-  the 2 px accent focus underline inside the inset area. If a platform clips that paint, the fallback is a
-  plain-canvas textbox as in `ui.rkt`.
-- **Palette shell.** `dialog%` with `'no-caption`, one textbox and one results `ui-canvas%`; `on-subwindow-char`
-  routing as today. A spike tries `frame%` `'(no-caption float)` for a shadowed flyout, with the explicit check
-  that it takes keyboard focus on both OSes; the dialog is the shipping default until then.
-- **Frame refactor.** `frame.rkt` moves the editor out of `tab-panel%` into the row panel above; `tabs` becomes
-  `tab-strip%` driven by the same `buffers-changed` hooks; `find-bar` and `infobar` toggle via `change-children`
-  as the find bar does today; `status-panel`/`message%` become `status-bar%` fed by the `echo` and
-  `status-changed` hooks. Menus are untouched.
-- **HiDPI.** All geometry in logical pixels; the canvas dc carries the backing scale (2.0 measured here);
-  strokes at `.5` offsets, icons as paths, bitmaps only as `make-bitmap #:backing-scale` caches. RM-054 renders
-  the tour at 1× and 2×.
-- **Dark mode and accent.** `appearance.rkt` reads the OS on startup and on every `on-activate`, swaps the token
-  table, and runs `theme-changed`; each `ui-canvas%` refreshes, `theme.rkt` re-applies the style delta (already
-  implemented), and `dwm.rkt` retints the caption. `RACKMAC_THEME` still forces a theme.
-- **Accessibility.** Custom canvases are invisible to VoiceOver and Narrator; that is RM-148's investigation and
-  the reason menus, the editor and all text inputs stay native. What the widget layer guarantees now: every
-  item reachable by Tab and arrows, activated by Enter/Space, a visible focus ring, 4.5:1 text contrast in
-  every token column (a test computes it), icons always paired with a title in tooltips and menus, and no
-  state carried by color alone (the dirty dot is also in the tab title's tooltip and the window title).
+- **frame.rkt refactor.** The editor leaves `tab-panel%`'s child area only conceptually: `tab-panel%` stays the
+  parent of the InfoBar/find/editor stack (it is a panel), gains the new styles, and `refresh-tabs!` keeps
+  syncing labels from `visible-buffers`. `status-panel` and its two `message%`s become `status-bar%`, fed by the
+  `echo` and `status-changed` hooks. Menus are untouched.
+- **Toolbar icons at HiDPI.** Render each icon into `(make-bitmap 16 16 #t #:backing-scale s)` where `s` is
+  the frame's display scale (2.0 measured here), and re-render on `theme-changed` because the stroke color is a
+  token. `button%` draws the bitmap at logical size.
+- **Gutter.** `on-paint` draws numbers for the visible paragraph range using the editor's `position-location`
+  and `get-view`; it refreshes from the canvas's `on-scroll` and the buffer's change hooks. The current line
+  number is in `text`, others `text-2`; a 2 px `accent` bar marks the current line.
+- **Status bar.** `render` is a pure function of (segments, hover, focus, width), so tests draw it to a
+  `bitmap-dc%`; `on-event` maps x to a segment; Tab focuses the canvas, Left/Right move, Enter runs.
+- **Appearance.** On startup and every `on-activate`: read the OS (registry on Windows via `reg query`, or
+  `ffi/unsafe` later; `defaults` on macOS as today), compare with the current theme, and only then swap tokens
+  and run `theme-changed`; `theme.rkt` re-applies its style delta (existing), the status bar, gutter and icons
+  re-render. `RACKMAC_THEME` still forces a theme. On Windows the editor goes dark while the chrome stays light;
+  a setting "Editor theme: System / Light / Dark" lets people who dislike the mix pick.
+- **Text inputs.** `text-field%` everywhere (find, replace, palette, go-to-line). No placeholder API exists, so
+  labels sit to the left; the count `message%` gives the live feedback instead.
 
-### 4.4 Testing headlessly
+### 5.4 Headless testing
 
-- **Unit:** `(layout w h)` returns item rects; tests assert geometry (close button inside its tab, overflow
-  appears below 640 px). `(render dc w h)` draws into a `bitmap-dc%` on a `make-bitmap` (no window); tests read
-  pixels (`get-argb-pixels`) at item centers to assert `control-hover` after a synthetic `mouse-event%`, the
-  accent underline when focused, and `text-disabled` when `#:when` is false.
-- **Interaction:** as `startup-test.rkt` and `picker-test.rkt` do today, build the frame unshown and deliver
-  `mouse-event%`/`key-event%` through `on-event`/`on-char`; assert the command ran via the `before-command` hook.
-- **Goldens:** a scripted tour (main window light/dark at 1× and 2×, palette, find bar, InfoBar) saved as PNGs
-  per platform with a tolerance for anti-aliased edges (racket-skia measured ~3% edge pixels differing between
-  rasterizers), diffed in CI (RM-017).
-- **Contrast:** a test walks every token column and fails below 4.5:1 for text roles and 3:1 for `stroke-strong`
-  and `focus` against their surfaces.
+- Native surfaces: as `picker-test.rkt` and `startup-test.rkt` do, build the frame unshown, drive controls with
+  `set-value`/`command` and synthetic `key-event%`/`mouse-event%`, assert through hooks (`before-command`) and
+  control state (`is-enabled?` after a selection change tests `#:when`).
+- Painted surfaces: `render` to a `bitmap-dc%` on a `make-bitmap` (verified: a 2× bitmap with the system font
+  renders and pixels read back with no window); assert segment rects and pixel colors at segment centers
+  (hover underline present, contrast of `text-2` on `status-bg`).
+- Goldens: a scripted tour writes PNGs of the status bar and gutter at 1× and 2×, light and dark; compared with a
+  small tolerance per platform in CI (RM-017). Whole-window screenshots stay manual (RM-068).
+- Contrast test over every token column, as §1.2 states.
 
-## 5. Phased build plan
+## 6. Phased build plan
 
-Sizes follow ROADMAP (S under half a day, M 1–2 days, L 3–5). Issues are given in the `roadmap.rktd` shape so
-they can be pasted; the owner adds them and runs `racket tools/roadmap.rkt` (`roadmap-test.rkt` enforces the sync).
-Keys use a `ui-` prefix, unused today.
+Sizes follow ROADMAP (S under half a day, M 1–2 days, L 3–5). New issues are in `roadmap.rktd` shape with a
+`ui-` prefix (unused today) so they can be pasted; the owner adds them and runs `racket tools/roadmap.rkt`
+(`roadmap-test.rkt` enforces the sync).
 
-### E2.M0 UI foundation (new; v0.2, before E2.M1 rendering)
+### E2.M0 UI foundation (new; v0.2, before E2.M1)
 
 ```
 (milestone E2.M0 "UI foundation"
- (sub E2.M0.S1 "Tokens and drawing"
-  (issue ui-tokens "Design tokens module: color roles, metrics, fonts, light/dark, per-platform overrides" M todo
-    "rackmac/ui/tokens.rkt | theme.rkt reads surface and text from it | contrast test passes for every column | ui-scale parameter" ())
-  (issue ui-gfx "Drawing verbs over dc<%> with HiDPI-safe strokes and slot fonts" S todo
-    "fill/stroke rrect, line, path, text, clip, push/pop | 1 px lines crisp at 1x and 2x | headless bitmap test" (ui-tokens))
-  (issue meta-icon-assign "Assign #:icon names to every built-in command" S todo
-    "every command with a menu entry has an icon name from the documented set | test lists commands without one" (meta-icon)))
- (sub E2.M0.S2 "Widgets"
-  (issue ui-widget "ui-canvas% base widget: items, layout, render, hover/press/focus, keyboard, tooltip-to-status" M todo
-    "pure layout and render testable on a bitmap-dc% | Tab, arrows, Enter, Space, Esc | focus ring only for keyboard focus | disabled items skip focus" (ui-gfx))
-  (issue ui-textbox "One-line text% input with Fluent border and accent focus underline" M todo
-    "IME and undo work | placeholder | Enter, Shift+Enter, Esc callbacks | on-paint override verified on macOS; Windows verified under win-run" (ui-tokens))
-  (issue ui-frame-rows "Refactor frame.rkt into canvas rows with border 0 spacing 0" M todo
-    "editor no longer inside tab-panel% | no native panel pixel visible in light or dark | existing tests pass" (ui-widget))
-  (issue ui-tabstrip "Document tab strip: dirty dot, close on hover, middle-click, plus button, overflow" M todo
-    "replaces tab-panel% | dot becomes x on hover | keyboard: Ctrl+Tab unchanged, Left/Right when focused | tests for layout and click" (ui-frame-rows)))
- (sub E2.M0.S3 "Appearance"
-  (issue ui-appearance "Detect dark mode and accent on macOS and Windows; poll on activate" M todo
-    "Windows reads AppsUseLightTheme and AccentColor | macOS reads AppleInterfaceStyle and AppleAccentColor | theme-changed fires once per real change | RACKMAC_THEME still forces" (ui-tokens))
-  (issue ui-dwm-caption "Windows 11: tint the native caption via DwmSetWindowAttribute" S todo
-    "dark caption in dark mode | caption color matches window token | no-op below Windows 11 | verified under win-run" (ui-appearance win-run))
-  (issue ui-tests "Headless UI test harness and golden tour" M todo
-    "render main window, palette, find bar to PNG at 1x and 2x light and dark | pixel tolerance diff | runs in raco test" (ui-widget))))
+ (sub E2.M0.S1 "Tokens and layout"
+  (issue ui-tokens "Token module for painted surfaces: roles, light/dark, accent from the OS highlight color" S todo
+    "rackmac/ui/tokens.rkt | theme.rkt reads bg and fg from it | contrast test passes for every column | ui-scale parameter" ())
+  (issue ui-layout "Layout constants and frame rows on the 4 px grid; editor insets 16/12; prose measure" S todo
+    "border 0 spacing 0 rows | insets applied | set-max-width for prose Languages | tests pass" (ui-tokens))
+  (issue ui-tabs "Document tabs with close boxes, reordering and a new-tab button via tab-panel% styles" S todo
+    "no-border can-reorder can-close new-button | close box runs close-tab | + runs new-document | order change updates the buffer list" (ui-layout))
+  (issue meta-icon-assign "Assign #:icon names to every built-in command with a menu entry" S todo
+    "names from the documented set | test lists commands without one" (meta-icon)))
+ (sub E2.M0.S2 "Appearance and tests"
+  (issue ui-appearance "Detect dark mode on Windows (registry) and macOS; poll on activate; fire theme-changed once per change" M todo
+    "AppsUseLightTheme read on Windows | AppleInterfaceStyle on macOS | icons and painted surfaces re-render | RACKMAC_THEME still forces | Editor theme setting System/Light/Dark" (ui-tokens))
+  (issue ui-tests "Headless harness: render painted widgets to bitmap-dc%, pixel and geometry asserts, golden PNGs at 1x and 2x" S todo
+    "runs in raco test | tolerance diff | contrast test included" (ui-tokens))))
 ```
 
 ### Existing epics, mapped
 
-| Epic / milestone | What changes | New or amended issues |
+| Epic / milestone | What changes | New issues and dependency edits |
 |---|---|---|
-| **E2.M1 Toolbar** (v0.2) | RM-046 `tb-icons` stays "drawn with racket/draw" and depends on `ui-gfx`; RM-047 `tb-button` becomes the icon-button item type of `ui-widget`; RM-048 `tb-frame` is the command bar row with overflow; RM-049 enable state via `#:when` refreshed on `after-command`, `status-changed` and selection hooks. | add deps: `tb-icons → ui-gfx`, `tb-button → ui-widget`, `tb-frame → ui-frame-rows` |
+| **E2.M1 Toolbar** (v0.2) | RM-046 `tb-icons`: vectors rendered to `bitmap%` at the display scale (depends `ui-tokens`); RM-047 `tb-button`: native `button%` with bitmap label, hover title to status message; RM-048 `tb-frame`: `horizontal-panel%` row with group spacers and View > Show Toolbar; RM-049 enable from `#:when` on hooks | `tb-icons → ui-tokens`, `tb-frame → ui-layout`; add `(issue tb-overflow "Overflow: hide trailing groups when the window is narrow; a ⋯ button lists them in a popup-menu%" S todo "no clipping at 640 px | items still reachable" (tb-frame))` |
 | **E2.M3 Context menu** | native `popup-menu%`; unchanged | — |
-| **E2.M4 Status bar** | RM-059 `sb-widget` is a `ui-canvas%` with segments; message segment carries severity icon | add dep `sb-widget → ui-widget` |
-| **E2.M5 Mouse** | RM-070 `mouse-tabs` is finished by `ui-tabstrip` plus drag-to-reorder | add dep `mouse-tabs → ui-tabstrip` |
-| **E1.M2 Palette** (v0.2) | `(issue ui-palette "Command palette as a centered captionless flyout with icon, category, shortcut and help footer" M todo "captionless dialog% | recents first | help sentence for the highlighted row | picker-test passes | spike note on float frame" (ui-widget ui-textbox))` | `palette-category`, `palette-empty` depend on it |
-| **E6.M1 Find bar** (restyle can land in v0.2) | `(issue ui-findbar "Find and replace as a Fluent card with one-line text% inputs, option toggles and match count" M todo "Esc returns focus | Enter and Shift+Enter step | count doubles as wrap indicator | replace row toggles" (ui-textbox ui-widget))` | `find-count`, `find-word`, `find-regex` toggles live in it |
-| **E8.M1 Activity** (v0.3) | `(issue ui-infobar "InfoBar row: severity, sentence, Details, one action, dismiss" M todo "hidden when empty | queue of messages | keyboard reachable | error stays until dismissed" (ui-widget))`; RM-130 `act-levels` routes info to the status segment and warning/error to the InfoBar; the file-changed banner (RM-080) is an InfoBar. | add deps `act-levels → ui-infobar`, `ext-banner → ui-infobar` |
-| **E5.M1 Start screen** (v0.4) | `(issue ui-start-view "Start view canvas: New, Open, Get Started cards, Recent list, Scratch Pad link" M todo "shown when no files are given | cards keyboard reachable | Recent from recent-files | leaves when a document opens" (ui-widget recent-files))` | `start-view` depends on it |
-| **E4.M2 Settings dialog** (v0.3) | native `dialog%` shell; rows drawn with `ui-widget` items (toggle, choice, number) so Windows gets themed controls. `(issue ui-settings-rows "Toggle, choice and number rows for the settings dialog" M todo "generated from define-setting types | keyboard operable | dark mode" (ui-widget))` | `settings-dialog` depends on it |
-| **E9 Panes** (v0.5) | `(issue ui-splitter "Draggable splitter canvas between panes, 4 px hit area 8 px, keyboard resize" M todo "cursor changes | min pane size | double-click resets" (ui-widget))`; `pane-model` renders each leaf as an `editor-canvas%` in the editor slot | `pane-commands` depends on it |
-| **E10** (v0.6) | `a11y-keyboard` audits `ui-widget` items; `a11y-contrast` adds the two high-contrast token columns; `a11y-scale` exposes `ui-scale`; `a11y-sr` writes the plan for custom canvases | add deps to `ui-widget`, `ui-tokens` |
+| **E2.M4 Status bar** (v0.2) | RM-059 `sb-widget` is the `canvas%` in §5.3 with keyboard access; message segment carries severity icons | `sb-widget → ui-tokens ui-tests` |
+| **E2.M5 Mouse** | RM-070 `mouse-tabs` is mostly delivered by `ui-tabs` (close box, reorder); middle-click and RM-071 use `on-subwindow-event` on the tab panel | `mouse-tabs → ui-tabs`, `mouse-tab-menu → ui-tabs` |
+| **E1.M2 Palette** (v0.2) | `(issue ui-palette "Palette placement over the top third, Category column, #:help footer, no-caption where accepted, empty state" M todo "picker-test passes | recents first | footer shows help and Emacs alias | no-results row" (ui-layout))` | `palette-category → ui-palette`, `palette-empty → ui-palette` |
+| **E6.M1 Find bar** (row restyle can land in v0.2) | `(issue ui-findbar "Find row: count message, Match case, Whole word, Advanced disclosure, icon buttons, Esc refocuses" M todo "count doubles as wrap indicator | No matches in error color | Advanced reveals regex and In selection | replace row toggles" (ui-layout tb-icons))` | `find-count`, `find-word`, `find-regex`, `findall-selection` depend on it |
+| **E8.M1 Activity** (v0.3) | `(issue ui-infobar "InfoBar row: native caution/stop icon, one sentence, Details, one action, dismiss; message queue" M todo "hidden when empty | keyboard reachable | error stays until dismissed | info never uses it" (ui-layout))`; RM-130 `act-levels` routes info to the status message and warning/error to the InfoBar; RM-080 `ext-banner` is an InfoBar | `act-levels → ui-infobar`, `ext-banner → ui-infobar` |
+| **E5.M1 Start screen** (v0.4) | `(issue ui-start-view "Start view panel: title, New, Open, Get Started, Recent list, Scratch Pad; command to reopen" M todo "shown with no file arguments | leaves when a document opens | Recent from recent-files | keyboard reachable" (ui-layout recent-files))` | `start-view → ui-start-view` |
+| **Editor** (v0.3, optional) | `(issue ui-gutter "Line-number gutter canvas synced to the editor; on for code Languages, off for prose" M todo "numbers align with lines at 1x and 2x | current line in text color with accent bar | mode local gutter? | zoom follows" (ui-tokens ui-tests))` | `a11y-scale` scales it |
+| **E4.M2 Settings** (v0.3) | native `dialog%` with `check-box%`, `choice%`, `text-field%` rows generated from `define-setting`; a `text-field%` search filters rows; "Edit as code" button | `settings-dialog → ui-layout` |
+| **E9 Panes** (v0.5) | `(issue ui-splitter "6 px canvas% sash between panes: drag, cursor, min size, double-click resets, keyboard resize" M todo "two editor-canvas% resize live | no native panel pixel exposed" (ui-layout))` | `pane-commands → ui-splitter` |
+| **E10** (v0.6) | `a11y-keyboard` audits status bar and gutter; `a11y-contrast` adds the high-contrast columns; `a11y-scale` exposes `ui-scale` | depend on `ui-tokens` |
 
-Suggested order inside v0.2: `ui-tokens` → `ui-gfx` → `ui-widget` → `ui-frame-rows` → `ui-tabstrip` → `tb-icons`
-→ `tb-button` → `tb-frame` → `sb-widget` → `ui-textbox` → `ui-palette` → `ui-findbar` → `ui-appearance`
-(`ui-dwm-caption` waits for `win-run`). That is roughly three extra weeks before the first toolbar button is
-visible, in exchange for never re-doing the toolbar when the tabs and status bar arrive.
+Suggested order in v0.2: `ui-tokens` → `ui-layout` → `ui-tabs` → `meta-icon-assign` → `tb-icons` →
+`tb-button` → `tb-frame` → `sb-widget` → `ui-palette` → `ui-findbar` → `ui-appearance` → `ui-tests` alongside.
+The foundation is about a week; nothing in it is throwaway.
 
-## 6. Wireframes
+## 7. Wireframes
 
-### 6.1 Main window, Windows 11 (light)
-
-```
-┌──────────────────────────────────────────────────────────────────────────────────────────┐
-│ ▣ notes.md — Rackmac                                                        ─   ▢   ✕   │  native caption, DWM-tinted
-├──────────────────────────────────────────────────────────────────────────────────────────┤
-│ File   Edit   View   Tools   Help                                                        │  native menu bar
-├──────────────────────────────────────────────────────────────────────────────────────────┤
-│ [+] [▭] [💾] │ [↶] [↷] │ [✂] [⧉] [📋] │ [🔍] │ [▷ Run]                  [⋯]   [ 🔍 Search commands… ] │  command bar 40
-├──────────────────────────────────────────────────────────────────────────────────────────┤
-│ ╭───────────────╮ ┌─────────────┐ ┌──────────────┐  +                                    │  tab strip 36
-│ │ ● notes.md  ✕ │ │  init.rkt   │ │ Scratch Pad  │                                       │  ● dirty dot → ✕ on hover
-├─┴───────────────┴─┴─────────────┴─┴──────────────┴───────────────────────────────────────┤
-│ ⚠  init.rkt failed to load: unbound identifier `shout` at line 12.   Details   Disable extension   ✕ │  InfoBar 40 (when needed)
-├──────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                          │
-│   # Weekly notes                                                                         │  editor: surface, inset 16/8
-│                                                                                          │
-│   - call the vendor about the renewal                                                    │
-│   - draft the summary|                                                                   │
-│                                                                                          │
-├──────────────────────────────────────────────────────────────────────────────────────────┤
-│ Saved notes.md              Ln 5, Col 22   84 words   UTF-8   LF   Markdown   100%      │  status bar 24, segments clickable
-└──────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 6.2 Main window, macOS (dark)
+### 7.1 Main window, Windows (light)
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────────────┐
-│ ● ● ●                          ● notes.md — Rackmac                                      │  native title bar; menu bar is in the system bar
-├──────────────────────────────────────────────────────────────────────────────────────────┤
-│ [+] [▭] [💾] │ [↶] [↷] │ [✂] [⧉] [📋] │ [🔍] │ [▷ Run]                  [⋯]   [ 🔍 Search commands… ] │  command bar 40, radius 6, height 28
-├──────────────────────────────────────────────────────────────────────────────────────────┤
-│ ╭───────────────╮ ┌─────────────┐ ┌──────────────┐  +                                    │  close button on the LEFT of the tab
-│ │ ✕ notes.md  ● │ │  init.rkt   │ │ Scratch Pad  │                                       │
-├─┴───────────────┴─┴─────────────┴─┴──────────────┴───────────────────────────────────────┤
-│                                                                                          │
-│   # Weekly notes                                                                         │  surface #1E1E1E, text #F5F5F7
-│   - draft the summary|                                                                   │
-│                                                                                          │
-├──────────────────────────────────────────────────────────────────────────────────────────┤
-│ Tip: ⌘S saves                Ln 5, Col 22   84 words   UTF-8   LF   Markdown   100%      │  shortcut tip (RM-041) in the message segment
-└──────────────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│ ▣  • notes.md — Rackmac                                                  ─   ▢   ✕  │  native caption
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│ File   Edit   View   Tools   Help                                                    │  native menu bar
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│ [＋] [▭] [💾]   [↶] [↷]   [✂] [⧉] [📋]   [🔍]   [▷]                 [🔍 Search commands…] │  button% row, 4 px + 8 px gaps
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│ • notes.md ✕ │ init.rkt ✕ │ Scratch Pad ✕ │ +                                        │  tab-panel% flat-portable
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│ ⚠  init.rkt could not load: unbound identifier `shout` (line 12).  [Details] [Disable extension] [✕] │  InfoBar (when needed)
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│ Find [ renewal            ] 3 of 12  ☐ Match case ☐ Whole word [Advanced ▾] [↑] [↓] [✕] │  find row (when open)
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│    # Weekly notes                                                                    │  editor, inset 16 / 12
+│                                                                                      │
+│    - call the vendor about the renewal                                               │  ← match highlighted
+│    - draft the summary|                                                              │
+│                                                                                      │
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│ Saved notes.md                   Ln 5, Col 22   84 words   UTF-8   LF   Markdown  100% │  status canvas 24
+└──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 6.3 Command palette (centered flyout, 640 × 440, 96 px from the window top)
+### 7.2 Main window, macOS (dark), code document with gutter
 
 ```
-            ╭──────────────────────────────────────────────────────────────────╮
-            │ 🔍  pas|                                                        │  textbox 36, accent underline when focused
-            ├──────────────────────────────────────────────────────────────────┤
-            │ ▌📋  Paste                              Edit             ⌘V     │  highlighted: selection tint + 3 px accent bar
-            │  🕘  Paste from History                 Clipboard      ⇧⌘V      │  icon · title · category (text-2) · shortcut
-            │  ▭   Open Recent…                       File                    │
-            │  A   Change Case…                       Text                    │  letter tile: command without #:icon
-            │                                                                  │
-            ├──────────────────────────────────────────────────────────────────┤
-            │ Paste the clipboard at the cursor.  (Emacs: yank)      ↑↓ move · ⏎ run · esc close │  #:help footer
-            ╰──────────────────────────────────────────────────────────────────╯
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│ ● ● ●                          • init.rkt — Rackmac                                  │  native title bar; menus in the system bar
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│ [＋] [▭] [💾]   [↶] [↷]   [✂] [⧉] [📋]   [🔍]   [▷ Run]             [🔍 Search commands…] │  Racket adds Run Selection
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│ notes.md ✕ │ • init.rkt ✕ │ Scratch Pad ✕ │ +                                        │
+├──────┬───────────────────────────────────────────────────────────────────────────────┤
+│  10  │ (define-command (shout)                                                       │  gutter: text-2, current line text
+│  11  │   #:title "Shout" #:keys ("Mod-Shift-u")                                      │  surface #1E1E1E
+│▌ 12  │   (replace-selection! (string-upcase (selection-string))))|                   │  ▌ accent bar on the current line
+│  13  │                                                                               │
+├──────┴───────────────────────────────────────────────────────────────────────────────┤
+│ Tip: ⌘S saves                    Ln 12, Col 62   UTF-8   LF   Racket   100%          │  one-time shortcut tip (RM-041)
+└──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 6.4 Find bar (card at the top-right of the editor slot, in-layout)
+### 7.3 Command palette (dialog%, 640 × 440, over the top third of the window)
 
 ```
-                                   ╭────────────────────────────────────────────────────────────╮
-                                   │ 🔍 [ renewal                       3 of 12 ] [Aa] [ab] [.*] │ [↑] [↓] [✕] │
-                                   │ ⇄  [ contract                               ] [Replace] [Replace All]      │  row 2 only for Find and Replace
-                                   ╰────────────────────────────────────────────────────────────╯
-   Toggles: Aa match case · ab whole word · .* regex (Advanced). Enter = next, Shift+Enter = previous, Esc = close and refocus editor.
-   "3 of 12" becomes "12 matches" while typing and "Wrapped · 1 of 12" after wrap-around; "No matches" turns the count `error`.
+          ┌──────────────────────────────────────────────────────────────────┐
+          │ [ pas|                                                         ] │  text-field%
+          ├──────────────────────────────────────────────────────────────────┤
+          │ Command                          Category          Shortcut      │  list-box% with columns
+          │ ▶ Paste                          Edit              ⌘V            │  selected row = OS highlight
+          │   Paste from History             Clipboard         ⇧⌘V           │
+          │   Open Recent…                   File                            │
+          │   Change Case…                   Text                            │
+          │                                                                  │
+          ├──────────────────────────────────────────────────────────────────┤
+          │ Paste the clipboard at the cursor.   Emacs: yank     ↑↓ move · ⏎ run · esc close │  message% footer
+          └──────────────────────────────────────────────────────────────────┘
+   Empty state row: "No commands match 'xyz'. Check the spelling or open Help > Keyboard Shortcuts."
+```
+
+### 7.4 Find and Replace rows (native controls, between the tabs and the editor)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│ Find    [ renewal                  ]  3 of 12   ☐ Match case  ☐ Whole word  [Advanced ▾]  [↑] [↓] [✕] │
+│ Replace [ contract                 ]            [Replace] [Replace All]                                 │
+│         ☐ Regular expression  ☐ In selection                     ← shown only after Advanced ▾          │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+   Enter = next, Shift+Enter = previous, Esc = close and refocus the editor.
+   Count states: "12 matches" while typing · "3 of 12" after stepping · "Wrapped · 1 of 12" · "No matches" (error color).
 ```
 
 ## Decisions needed from the owner
 
-1. **Title bar:** native caption with DWM tinting on Windows and native traffic lights on macOS (recommended),
-   or a custom `'no-caption` title bar like the racket-skia gallery (loses snap layouts and the system menu)?
-2. **Command bar:** confirm a single row with icon-only buttons and an overflow menu, labels-under-icons as an
-   off-by-default setting; no ribbon.
-3. **racket-skia:** agree to defer it until a Windows binary and the REVIEW.md refactor exist, and to keep the
-   `gfx` interface as the seam; or should Rackmac be the driver that forces those to happen sooner?
-4. **Windows 10:** supported or not? It decides whether `ui-dwm-caption` and Segoe UI Variable are must-have or
-   best-effort, and whether the Win32 menu bar's light-only look is acceptable in dark mode for v0.2.
+1. **Tabs:** adopt the built-in `flat-portable` tab strip (close boxes, drag to reorder, "+", identical on both
+   OSes) as recommended, or keep the native macOS tab view (no close boxes; closing stays ⌘W and the menu)?
+2. **Toolbar:** confirm one row of icon-only native buttons with an overflow menu; labels under icons as an
+   off-by-default setting.
+3. **Windows dark mode:** when the system is dark, should the editor and status bar go dark even though the
+   native chrome stays light (recommended, with an "Editor theme" setting), or should Windows default to light?
+4. **Gutter:** ship line numbers for code Languages in v0.3 (`ui-gutter`, M), or leave the gutter deferred as
+   README lists it today?

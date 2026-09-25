@@ -99,3 +99,24 @@
   (check-equal? (kind (list minor global) "Ctrl-F7") '(prefix #f))
   (check-equal? (kind (list minor global) "Ctrl-F7 Ctrl-x") '(command minor-chord))
   (check-equal? (kind (list global) "Ctrl-F7") '(command global-cmd) "without the minor mode"))
+
+(test-case "Reopen Closed Tab brings back the most recently closed file (Chrome's Cmd/Ctrl+Shift+T)"
+  (define f1 (build-path dir "one.txt")) (define f2 (build-path dir "two.txt"))
+  (display-to-file "1" f1 #:exists 'truncate) (display-to-file "2" f2 #:exists 'truncate)
+  (define b1 (open-file! f1)) (define b2 (open-file! f2))
+  (kill-buffer! b1) (kill-buffer! b2)
+  (run-command 'reopen-closed-tab)
+  (check-equal? (send (current-buffer) get-text) "2" "most recent first")
+  (run-command 'reopen-closed-tab)
+  (check-equal? (send (current-buffer) get-text) "1"))
+
+(test-case "Go to Tab N and Go to Last Tab"
+  (define bs (for/list ([n '("t1" "t2" "t3")]) (new-buffer! n)))
+  (for ([b (all-buffers)] #:unless (or (memq b bs) (messages-buffer? b))) (kill-buffer! b))
+  (check-equal? (visible-buffers) bs)
+  (run-command 'go-to-tab-2)
+  (check-eq? (current-buffer) (cadr bs))
+  (run-command 'go-to-tab-9)
+  (check-eq? (current-buffer) (last bs))
+  (run-command 'go-to-tab-7)
+  (check-eq? (current-buffer) (last bs) "past the end goes to the last tab"))

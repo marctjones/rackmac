@@ -111,29 +111,75 @@ Rackmac shows office-style names; the command palette also understands the Emacs
 
 ## Shortcuts
 
-`Mod` = Cmd (macOS) / Ctrl (Windows). The command palette lists everything with its binding.
+Defaults follow macOS, Windows, Microsoft Office and Chrome conventions (see `tests/shortcuts-test.rkt`,
+which also rejects Emacs-style key sequences, Option+letter on macOS, Ctrl+Alt+letter on Windows and
+OS-reserved keys). This table is generated from the command registry; the command palette lists
+everything, including commands without a shortcut.
 
-| Action | macOS | Windows |
-|---|---|---|
-| Command palette / Quick open | Cmd+Shift+P / Cmd+P | Ctrl+Shift+P / Ctrl+P |
-| New / Open / Save / Save As / Close tab | Cmd+N / O / S / Shift+S / W | Ctrl+N / O / S / Shift+S / W |
-| Next / previous tab | Ctrl+Tab, Ctrl+Shift+Tab, Cmd+Opt+→/← | Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+PgDn/PgUp |
-| Undo / Redo | Cmd+Z / Cmd+Shift+Z | Ctrl+Z / Ctrl+Y |
-| Cut / Copy / Paste / Select all | Cmd+X / C / V / A | Ctrl+X / C / V / A |
-| Find / Replace / Next / Previous | Cmd+F / Cmd+Opt+F / Cmd+G / Cmd+Shift+G | Ctrl+F / Ctrl+H / F3 / Shift+F3 |
-| Go to line | Ctrl+G | Ctrl+G |
-| Toggle comment | Cmd+/ | Ctrl+/ |
-| Duplicate / delete line | Cmd+Shift+D / Cmd+Shift+K | Ctrl+Shift+D / Ctrl+Shift+K |
-| Move line up / down | Opt+↑ / Opt+↓ | Alt+↑ / Alt+↓ |
-| Indent / outdent | Tab, Cmd+] / Shift+Tab, Cmd+[ | Tab, Ctrl+] / Shift+Tab, Ctrl+[ |
-| Word left / right (Shift selects) | Opt+←/→ | Ctrl+←/→ |
-| Line start / end | Cmd+←/→, Home/End | Home/End |
-| Document start / end | Cmd+↑/↓ | Ctrl+Home/End |
-| Delete word back / forward | Opt+Backspace / Opt+Delete | Ctrl+Backspace / Ctrl+Delete |
-| Zoom in / out / reset | Cmd+= / Cmd+- / Cmd+0 | Ctrl+= / Ctrl+- / Ctrl+0 |
-| Word wrap | Opt+Z | Alt+Z |
-| Evaluate selection / buffer | Cmd+Enter / Cmd+Shift+Enter | Ctrl+Enter / Ctrl+Shift+Enter |
-| Quit | Cmd+Q | Ctrl+Q |
+| Menu | Command | macOS | Windows |
+|---|---|---|---|
+| File | New Document | ⌘N, ⌘T | Ctrl+N, Ctrl+T |
+| File | Open… | ⌘O | Ctrl+O |
+| File | Quick Open… | ⇧⌘O | Ctrl+Shift+O |
+| File | Save | ⌘S | Ctrl+S |
+| File | Save As… | ⇧⌘S | Ctrl+Shift+S, F12 |
+| File | Close Tab | ⌘W | Ctrl+W, Ctrl+F4 |
+| File | Reopen Closed Tab | ⇧⌘T | Ctrl+Shift+T |
+| File | Print… | ⌘P | Ctrl+P |
+| File | Next Tab | ⌃⇥, ⌥⌘→, ⇧⌘] | Ctrl+Tab, Ctrl+PgDn |
+| File | Previous Tab | ⌃⇧⇥, ⌥⌘←, ⇧⌘[ | Ctrl+Shift+Tab, Ctrl+PgUp |
+| File | Customize with Code | ⌘, | Ctrl+, |
+| File | Quit | ⌘Q | Alt+F4 |
+| Edit | Undo | ⌘Z | Ctrl+Z |
+| Edit | Redo | ⇧⌘Z | Ctrl+Y, Ctrl+Shift+Z |
+| Edit | Cut | ⌘X | Ctrl+X |
+| Edit | Copy | ⌘C | Ctrl+C |
+| Edit | Paste | ⌘V | Ctrl+V |
+| Edit | Select All | ⌘A | Ctrl+A |
+| Edit | Select Line | ⌘L | Ctrl+L |
+| Edit | Find… | ⌘F | Ctrl+F |
+| Edit | Find and Replace… | ⌥⌘F | Ctrl+H |
+| Edit | Find Next | ⌘G | F3 |
+| Edit | Find Previous | ⇧⌘G | Shift+F3 |
+| Edit | Go to Line… | ⌃G | Ctrl+G |
+| Edit | Toggle Comment | ⌘/ | Ctrl+/ |
+| Edit | Duplicate Line | ⇧⌘D | Ctrl+Shift+D |
+| Edit | Delete Line | ⇧⌘K | Ctrl+Shift+K |
+| Edit | Move Line Up | ⌥↑ | Alt+Up |
+| Edit | Move Line Down | ⌥↓ | Alt+Down |
+| Edit | Indent Lines | ⌘] | Ctrl+] |
+| Edit | Outdent Lines | ⌘[, ⇧⇥ | Ctrl+[, Shift+Tab |
+| View | Zoom In | ⌘=, ⇧⌘= | Ctrl+=, Ctrl+Shift+= |
+| View | Zoom Out | ⌘- | Ctrl+- |
+| View | Actual Size | ⌘0 | Ctrl+0 |
+| View | Toggle Word Wrap | — | Alt+Z |
+| View | Toggle Full Screen | ⌃⌘F | F11 |
+| View | Command Palette… | ⇧⌘P | Ctrl+Shift+P, Alt+Q |
+| Tools | Run Selection | ⌘↩ | Ctrl+Enter |
+| Tools | Run Document | ⇧⌘↩ | Ctrl+Shift+Enter |
+| Help | Keyboard Shortcuts | — | F1 |
+| Editing | Go to Tab 1 | ⌘1 | Ctrl+1 |
+| Editing | Go to Tab 2 | ⌘2 | Ctrl+2 |
+| Editing | Go to Tab 3 | ⌘3 | Ctrl+3 |
+| Editing | Go to Tab 4 | ⌘4 | Ctrl+4 |
+| Editing | Go to Tab 5 | ⌘5 | Ctrl+5 |
+| Editing | Go to Tab 6 | ⌘6 | Ctrl+6 |
+| Editing | Go to Tab 7 | ⌘7 | Ctrl+7 |
+| Editing | Go to Tab 8 | ⌘8 | Ctrl+8 |
+| Editing | Go to Last Tab | ⌘9 | Ctrl+9 |
+| Editing | Insert Indent | ⇥ | Tab |
+| Editing | Newline and Indent | ↩ | Enter |
+| Editing | Word Left | ⌥← | Ctrl+Left |
+| Editing | Word Right | ⌥→ | Ctrl+Right |
+| Editing | Line Start | HOME, ⌘← | Home |
+| Editing | Line End | END, ⌘→ | End |
+| Editing | Document Start | ⌘↑ | Ctrl+Home |
+| Editing | Document End | ⌘↓ | Ctrl+End |
+| Editing | Page Up | PgUp | PgUp |
+| Editing | Page Down | PgDn | PgDn |
+| Editing | Delete Word Back | ⌥⌫ | Ctrl+Backspace |
+| Editing | Delete Word Forward | ⌥⌦ | Ctrl+Delete |
+| Editing | Delete to Line Start | ⌘⌫ | — |
 
 Native macOS text navigation (Ctrl+A/E/K/F/B/N/P) is left alone on Mac. On Windows, unbound
 Ctrl/Alt combinations do nothing rather than falling into Racket's built-in Emacs bindings.

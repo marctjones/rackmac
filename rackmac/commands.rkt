@@ -95,7 +95,7 @@
 (define-command (quick-open)
   #:aliases ("find file in project" "projectile" "fuzzy open" "go to file")
   #:help "Type part of a file name to open it from the current project."
-  #:title "Quick Open…" #:menu "File" #:menu-order 12 #:keys ("Mod-p")
+  #:title "Quick Open…" #:menu "File" #:menu-order 12 #:keys ("Mod-Shift-o")
   #:doc "Fuzzy-find a file under the project root (the enclosing git repo, or the file's folder)."
   (define root (project-root))
   (cond
@@ -122,13 +122,13 @@
 (define-command (save-as)
   #:aliases ("write-file" "save a copy" "rename file")
   #:help "Save the document under a new name or location."
-  #:title "Save As…" #:menu "File" #:menu-order 21 #:keys ("Mod-Shift-s")
+  #:title "Save As…" #:menu "File" #:menu-order 21 #:keys ("Mod-Shift-s") #:keys/windows ("F12")
   (save-buffer-as! (t)))
 
 (define-command (close-buffer)
   #:aliases ("kill-buffer" "close document" "close file")
   #:help "Close this tab, asking to save unsaved changes first."
-  #:title "Close Tab" #:menu "File" #:menu-order 22 #:keys ("Mod-w")
+  #:title "Close Tab" #:menu "File" #:menu-order 22 #:keys ("Mod-w") #:keys/windows ("Ctrl-F4")
   #:doc "Close the current buffer, offering to save unsaved changes."
   (define b (t))
   (when (confirm-close-buffer? b) (kill-buffer! b)))
@@ -142,15 +142,40 @@
   #:aliases ("next-buffer" "switch tab" "other-buffer" "next document")
   #:help "Switch to the next tab."
   #:title "Next Tab" #:menu "File" #:menu-order 30
-  #:keys ("Ctrl-Tab") #:keys/mac ("Mod-Alt-Right") #:keys/windows ("Ctrl-PageDown")
+  #:keys ("Ctrl-Tab") #:keys/mac ("Mod-Alt-Right" "Mod-Shift-]") #:keys/windows ("Ctrl-PageDown")
   (cycle-buffer 1))
 
 (define-command (previous-buffer)
   #:aliases ("previous-buffer" "prev tab" "previous document")
   #:help "Switch to the previous tab."
   #:title "Previous Tab" #:menu "File" #:menu-order 31
-  #:keys ("Ctrl-Shift-Tab") #:keys/mac ("Mod-Alt-Left") #:keys/windows ("Ctrl-PageUp")
+  #:keys ("Ctrl-Shift-Tab") #:keys/mac ("Mod-Alt-Left" "Mod-Shift-[") #:keys/windows ("Ctrl-PageUp")
   (cycle-buffer -1))
+
+(define-command (reopen-closed-tab)
+  #:aliases ("undo close tab" "restore tab" "reopen tab")
+  #:help "Open the tab you closed most recently again."
+  #:title "Reopen Closed Tab" #:menu "File" #:menu-order 23 #:keys ("Mod-Shift-t")
+  (unless (reopen-closed-tab!) (message "No closed tabs to reopen.")))
+
+;; Cmd/Ctrl+1 ... 8 go to that tab, and 9 to the last one, as in Chrome.
+(for ([n (in-range 1 10)])
+  (define name (string->symbol (format "go-to-tab-~a" n)))
+  (register-command! name
+                     (lambda ()
+                       (define bs (visible-buffers))
+                       (when (pair? bs)
+                         (set-current-buffer! (if (= n 9) (last bs) (list-ref bs (min (sub1 n) (sub1 (length bs))))))))
+                     #:title (if (= n 9) "Go to Last Tab" (format "Go to Tab ~a" n))
+                     #:aliases (list (format "tab ~a" n) "switch tab")
+                     #:help (if (= n 9) "Switch to the last tab." (format "Switch to tab number ~a." n))
+                     #:keys (list (format "Mod-~a" n))))
+
+(define-command (print-document)
+  #:aliases ("print" "print-buffer" "printout")
+  #:help "Print the document."
+  #:title "Print…" #:menu "File" #:menu-order 25 #:keys ("Mod-p")
+  (send (t) print #t #t 'standard (ui-parent)))
 
 (define init-template #<<TEMPLATE
 #lang rackmac
@@ -225,7 +250,7 @@ TEMPLATE
 (define-command (quit)
   #:aliases ("exit" "kill-emacs" "close app" "quit application")
   #:help "Close Rackmac, asking to save unsaved changes first."
-  #:title "Quit" #:menu "File" #:menu-order 50 #:keys/mac ("Mod-q") #:keys/windows ("Ctrl-q")
+  #:title "Quit" #:menu "File" #:menu-order 50 #:keys/mac ("Mod-q") #:keys/windows ("Alt-F4")
   (when (confirm-quit?) (exit 0)))
 
 ;; ---- editing -------------------------------------------------------------
@@ -555,9 +580,17 @@ TEMPLATE
 (define-command (toggle-word-wrap)
   #:aliases ("visual-line-mode" "truncate-lines" "line wrap")
   #:help "Wrap long lines to fit the window, or let them run off the edge."
-  #:title "Toggle Word Wrap" #:menu "View" #:menu-order 20 #:keys ("Alt-z")
+  #:title "Toggle Word Wrap" #:menu "View" #:menu-order 20 #:keys/windows ("Alt-z")
   (define b (t))
   (send b auto-wrap (not (send b auto-wrap))))
+
+(define-command (toggle-full-screen)
+  #:aliases ("fullscreen" "toggle-frame-fullscreen" "maximize")
+  #:help "Fill the whole screen with the window, or return to normal."
+  #:title "Toggle Full Screen" #:menu "View" #:menu-order 22
+  #:keys/mac ("Ctrl-Mod-f") #:keys/windows ("F11")
+  (define f (main-frame))
+  (when f (send f fullscreen (not (send f is-fullscreened?)))))
 
 (define-command (toggle-theme)
   #:aliases ("load-theme" "dark mode" "light mode" "appearance")
@@ -586,7 +619,7 @@ TEMPLATE
 (define-command (command-palette)
   #:aliases ("M-x" "execute-extended-command" "run command" "search commands")
   #:help "Search every command by name and run it."
-  #:title "Command Palette…" #:menu "View" #:menu-order 40 #:keys ("Mod-Shift-p")
+  #:title "Command Palette…" #:menu "View" #:menu-order 40 #:keys ("Mod-Shift-p") #:keys/windows ("Alt-q")
   #:doc "Search every command by its name, an alias (including its Emacs name) or its shortcut. Recently used commands come first."
   (define choice (pick "Command Palette" (palette-items) #:detail-heading "Shortcut"))
   (run-hook 'focus-editor)
@@ -648,7 +681,7 @@ TEMPLATE
 (define-command (list-keybindings)
   #:aliases ("describe-bindings" "list keybindings" "keybindings" "shortcuts" "key map" "cheat sheet")
   #:help "List every shortcut."
-  #:title "Keyboard Shortcuts" #:menu "Help" #:menu-order 11
+  #:keys/windows ("F1") #:title "Keyboard Shortcuts" #:menu "Help" #:menu-order 11
   (define (title-of name) (let ([c (find-command name)]) (if c (command-title c) (symbol->string name))))
   (define rows
     (sort (for/list ([b (keymap-bindings global-keymap)])

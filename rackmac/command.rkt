@@ -7,7 +7,8 @@
 (provide (struct-out command) define-command register-command!
          find-command all-commands run-command run-command/safe
          default-title command-shortcut extending-selection?
-         command-enabled? command-search-text command-search-fields recent-commands)
+         command-enabled? command-search-text command-search-fields recent-commands
+         default-key-strings)
 
 ;; title is the name users see; name is the stable symbol used by keymaps and scripts.
 ;; aliases are extra search terms (including the Emacs name); help is one plain sentence;
@@ -16,6 +17,9 @@
 (struct command (name title doc category menu menu-order proc aliases help icon when))
 
 (define registry (make-hasheq))
+;; name -> (list keys keys/mac keys/windows), as declared, so the defaults for EITHER
+;; platform can be listed (cheat sheets, tests) regardless of which one we are running on.
+(define key-specs (make-hasheq))
 (define definition-order (make-hasheq))
 (define counter 0)
 
@@ -51,6 +55,7 @@
                   (lambda ()
                     (if old (hash-set! registry name old) (hash-remove! registry name))
                     (run-hook 'command-registered name)))
+  (hash-set! key-specs name (list keys keys/mac keys/windows))
   (for ([k (in-list (append keys (if (mac?) keys/mac keys/windows)))])
     (keymap-bind! global-keymap k name))
   (run-hook 'command-registered name))
@@ -139,6 +144,11 @@
 (define (run-command/safe name)
   (with-handlers ([exn:fail? (lambda (e) (report-error! name e))])
     (run-command name)))
+
+;; The key strings a command gets by default on `platform` ('mac or 'windows).
+(define (default-key-strings name platform)
+  (define spec (hash-ref key-specs name #f))
+  (if spec (append (car spec) (if (eq? platform 'mac) (cadr spec) (caddr spec))) '()))
 
 ;; First global binding for a command as display text ("⌘S"), or #f.
 (define (command-shortcut name)
