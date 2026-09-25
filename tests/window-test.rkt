@@ -2,7 +2,7 @@
 ;; The real main window, built but never shown: keys delivered to its editor canvas reach
 ;; the buffer's key dispatch, and find/replace behave. (The OS -> window step still needs a
 ;; person or CI with a display; see issue "Verify real keystrokes".)
-(require rackunit racket/class racket/gui/base
+(require rackunit racket/class racket/gui/base racket/string racket/list
          "../rackmac/commands.rkt" "../rackmac/editor.rkt" "../rackmac/frame.rkt"
          "../rackmac/command.rkt" "../rackmac/platform.rkt")
 
@@ -96,6 +96,84 @@
   (check-equal? (send b get-text) "one two one")
   (replace-current!)                         ; now "one" at 8 is selected: replaced
   (check-equal? (send b get-text) "one two 1"))
+
+;; ---- find row: count, Advanced, whole word, regex, in-selection, Esc (docs/UI-DESIGN.md 7.4) --
+
+(define (fb) (main-find-bar))
+(define (fire ctl type) (send ctl command (new control-event% [event-type type])))
+
+(test-case "find bar: typing updates the count live, colored, never 'K of N' until a step"
+  (doc "cat dog cat")
+  (set-find-options! "")                     ; clears query and every option from earlier tests
+  (send (send (fb) get-find-field) set-value "cat")
+  (fire (send (fb) get-find-field) 'text-field)
+  (check-equal? (send (fb) count-text) "2 matches"))
+
+(test-case "find bar: No matches, and an empty query shows nothing"
+  (doc "abc")
+  (set-find-options! "zzz")
+  (check-equal? (send (fb) count-text) "No matches")
+  (set-find-options! "")
+  (check-equal? (send (fb) count-text) ""))
+
+(test-case "find bar: stepping shows 'K of N', wrapping back to 1"
+  (doc (string-join (make-list 12 "x") " "))  ; 12 single-character matches
+  (set-find-options! "x")
+  (for ([_ 3]) (find! 'forward))
+  (check-equal? (send (fb) count-text) "3 of 12")
+  (for ([_ 9]) (find! 'forward))              ; now at the 12th (last) match
+  (check-equal? (send (fb) count-text) "12 of 12")
+  (find! 'forward)
+  (check-equal? (send (fb) count-text) "Wrapped · 1 of 12"))
+
+(test-case "find bar: Whole word narrows the results"
+  (doc "cat catalog cat")
+  (set-find-options! "cat")
+  (check-equal? (send (fb) count-text) "3 matches")
+  (send (send (fb) get-word-box) set-value #t)
+  (fire (send (fb) get-word-box) 'check-box)
+  (check-equal? (send (fb) count-text) "2 matches"))
+
+(test-case "find bar: Advanced discloses and hides the regex/in-selection row"
+  (check-false (send (fb) advanced-shown?))
+  (fire (send (fb) get-advanced-button) 'button)
+  (check-true (send (fb) advanced-shown?))
+  (fire (send (fb) get-advanced-button) 'button)
+  (check-false (send (fb) advanced-shown?)))
+
+(test-case "find bar: an invalid regular expression is reported, not thrown"
+  (doc "abc")
+  (set-find-options! "(unclosed" #:regex? #t)
+  (check-equal? (send (fb) count-text) "Invalid pattern"))
+
+(test-case "find bar: regex replace-all with a \\1 \\2 group reference, one undo step"
+  (define b (doc "John Smith, Jane Doe"))
+  (set-find-options! "(\\w+) (\\w+)" #:replace "\\2 \\1" #:regex? #t)
+  (replace-all!)
+  (check-equal? (send b get-text) "Smith John, Doe Jane")
+  (send b undo)
+  (check-equal? (send b get-text) "John Smith, Jane Doe"))
+
+(test-case "find bar: In selection restricts matches to the selection at open time"
+  (define b (doc "cat cat cat cat"))
+  (send b set-position 4 7)                  ; the second "cat" only
+  (show-find-bar!)
+  (set-find-options! "cat" #:in-selection? #t)
+  (check-equal? (send (fb) count-text) "1 match")
+  (hide-find-bar!))
+
+(test-case "find bar: Esc hides the bar and refocuses the editor"
+  (doc "hello")
+  (show-find-bar!)
+  (define refocused #f)
+  (define (spy) (set! refocused #t))
+  (local-require "../rackmac/hook.rkt")
+  (add-hook! 'focus-editor spy)
+  (define field (send (fb) get-find-field))
+  (send field on-subwindow-char field (new key-event% [key-code 'escape]))
+  (remove-hook! 'focus-editor spy)
+  (check-true refocused)
+  (check-false (memq (fb) (send f get-children))))
 
 ;; ---- tabs and layout (UI foundation) ------------------------------------------------
 

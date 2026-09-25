@@ -4,9 +4,10 @@
 ;; menus deliberately carry no shortcuts of their own, so a key never fires twice.
 (require racket/class racket/gui/base racket/list racket/string
          "editor.rkt" "command.rkt" "keymap.rkt" "hook.rkt" "theme.rkt" "platform.rkt"
-         "ui/layout.rkt" "ui/toolbar-panel.rkt" "ui/status-bar.rkt" "ui/context-menu.rkt")
+         "ui/layout.rkt" "ui/toolbar-panel.rkt" "ui/status-bar.rkt" "ui/context-menu.rkt" "ui/find-bar.rkt")
 (provide make-main-frame show-find-bar! hide-find-bar!
-         find! replace-current! replace-all! focus-editor! main-frame main-canvas main-tabs set-find-options! tab-strip-style
+         find! replace-current! replace-all! focus-editor! main-frame main-canvas main-tabs
+         set-find-options! main-find-bar tab-strip-style
          main-toolbar toolbar-shown? set-toolbar-shown! main-status-bar
          menu-for-title menu-item-for refresh-menu-enabled! tab-context-menu-groups)
 
@@ -32,10 +33,7 @@
 (define status-bar #f)
 (define (main-status-bar) status-bar)
 (define find-bar #f)
-(define replace-row #f)
-(define find-field #f)
-(define replace-field #f)
-(define case-box #f)
+(define (main-find-bar) find-bar)
 (define tab-buffers '())
 (define syncing? #f)
 
@@ -124,7 +122,8 @@
                                   (set-current-buffer! (list-ref tab-buffers i)))))]))
   (set! canvas (new context-canvas% [parent tabs] [style '(auto-hscroll)]
                     [horizontal-inset editor-inset-x] [vertical-inset editor-inset-y]))
-  (build-find-bar!)
+  (set! find-bar (new find-bar% [parent frame] [on-close (lambda () (hide-find-bar!))]))
+  (send frame change-children (lambda (cs) (remq find-bar cs)))   ; hidden until Find
   (build-status-bar!)
 
   (add-hook! 'buffers-changed refresh-tabs!)
@@ -231,103 +230,26 @@
           (hash-set! menu-items (command-name c) item)
           group)))))
 
-;; ---- find / replace bar --------------------------------------------------
-
-(define find-field%
-  (class text-field%
-    (init-field on-enter)
-    (define/override (on-subwindow-char r ev)
-      (case (send ev get-key-code)
-        [(escape) (hide-find-bar!) #t]
-        [(#\return #\newline numpad-enter) (on-enter (send ev get-shift-down)) #t]
-        [else (super on-subwindow-char r ev)]))
-    (super-new)))
-
-(define (build-find-bar!)
-  (set! find-bar (new vertical-panel% [parent frame] [stretchable-height #f] [border bar-border]))
-  (define row1 (new horizontal-panel% [parent find-bar] [stretchable-height #f] [spacing bar-spacing]))
-  (set! find-field (new find-field% [parent row1] [label "Find"] [on-enter (lambda (shift?) (find! (if shift? 'backward 'forward)))]
-                        [callback (lambda (t e)
-                                    (when (eq? (send e get-event-type) 'text-field)
-                                      (find! 'forward #:from-start? #t)))]))
-  (new button% [parent row1] [label "Previous"] [callback (lambda (b e) (find! 'backward))])
-  (new button% [parent row1] [label "Next"] [callback (lambda (b e) (find! 'forward))])
-  (set! case-box (new check-box% [parent row1] [label "Match case"]))
-  (new button% [parent row1] [label "Close"] [callback (lambda (b e) (hide-find-bar!))])
-  (set! replace-row (new horizontal-panel% [parent find-bar] [stretchable-height #f] [spacing bar-spacing]))
-  (set! replace-field (new find-field% [parent replace-row] [label "Replace"]
-                           [on-enter (lambda (shift?) (replace-current!))]))
-  (new button% [parent replace-row] [label "Replace"] [callback (lambda (b e) (replace-current!))])
-  (new button% [parent replace-row] [label "Replace All"] [callback (lambda (b e) (replace-all!))])
-  (send find-bar change-children (lambda (cs) (list row1)))     ; replace row hidden until asked
-  (set! find-row1 row1)
-  (send frame change-children (lambda (cs) (remq find-bar cs))))   ; hidden until Find; rows not all built yet
-
-(define find-row1 #f)
+;; ---- find / replace bar ----------------------------------------------------------
+;; The widget and its matching logic live in ui/find-bar.rkt and the pure search.rkt (moved
+;; out per docs/UI-DESIGN.md section 5.2); these delegate so callers (commands.rkt, tests)
+;; keep using the same names.
 
 (define (show-find-bar! [replace? #f])
-  (define sel (selection-string))
-  (when (and (> (string-length sel) 0) (not (regexp-match? #rx"\n" sel)))
-    (send find-field set-value sel))
-  (send find-bar change-children (lambda (cs) (if replace? (list find-row1 replace-row) (list find-row1))))
+  (send find-bar show! replace?)
   (set! show-find? #t)
-  (layout-rows!)
-  (send find-field focus)
-  (send (send find-field get-editor) select-all))
-
-;; Set what the find bar searches for without the UI (tests, and recorded actions later).
-(define (set-find-options! query #:replace [replacement #f] #:match-case? [case? #f])
-  (send find-field set-value query)
-  (when replacement (send replace-field set-value replacement))
-  (send case-box set-value case?))
+  (layout-rows!))
 
 (define (hide-find-bar!)
   (set! show-find? #f)
   (layout-rows!)
-  (focus-editor!))
+  (run-hook 'focus-editor))
 
-;; Returns the position where the match begins. text%'s get-start? flag means "the start in
-;; the search direction", which for a backward search is the match's END, so it is flipped.
-(define (search b s dir start)
-  (send b find-string s dir start (if (eq? dir 'forward) 'eof 0) (eq? dir 'forward) (send case-box get-value)))
+(define (find! dir #:from-start? [from-start? #f]) (send find-bar find! dir #:from-start? from-start?))
+(define (replace-current!) (send find-bar replace-current!))
+(define (replace-all!) (send find-bar replace-all!))
 
-(define (find! dir #:from-start? [from-start? #f])
-  (define b (current-buffer))
-  (define s (send find-field get-value))
-  (cond
-    [(string=? s "") #f]
-    [else
-     (define start (cond [from-start? (send b get-start-position)]
-                         [(eq? dir 'forward) (send b get-end-position)]
-                         [else (send b get-start-position)]))
-     (define pos
-       (or (search b s dir start)
-           (let ([wrapped (search b s dir (if (eq? dir 'forward) 0 (send b last-position)))])
-             (when wrapped (run-hook 'echo "Wrapped around"))
-             wrapped)))
-     (cond [pos (send b set-position pos (+ pos (string-length s))) #t]
-           [else (run-hook 'echo (format "Not found: ~a" s)) #f])]))
-
-(define (replace-current!)
-  (define b (current-buffer))
-  (define s (send find-field get-value))
-  (define sel (selection-string b))
-  (when (and (> (string-length s) 0)
-             (if (send case-box get-value) (string=? sel s) (string-ci=? sel s)))
-    (send b insert (send replace-field get-value) (send b get-start-position) (send b get-end-position)))
-  (find! 'forward))
-
-(define (replace-all!)
-  (define b (current-buffer))
-  (define s (send find-field get-value))
-  (define r (send replace-field get-value))
-  (unless (string=? s "")
-    (send b begin-edit-sequence)
-    (define n
-      (let loop ([pos 0] [n 0])
-        (define p (search b s 'forward pos))
-        (cond [p (send b insert r p (+ p (string-length s)))
-                 (loop (+ p (string-length r)) (add1 n))]
-              [else n])))
-    (send b end-edit-sequence)
-    (message "Replaced ~a occurrence~a" n (if (= n 1) "" "s"))))
+;; Set what the find bar searches for without the UI (tests, and recorded actions later).
+(define (set-find-options! query #:replace [replacement #f] #:match-case? [case? #f]
+                            #:whole-word? [word? #f] #:regex? [regex? #f] #:in-selection? [in-selection? #f])
+  (send find-bar set-options! query replacement case? word? regex? in-selection?))
