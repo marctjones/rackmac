@@ -6,6 +6,7 @@
          "command.rkt" "keymap.rkt" "mode.rkt" "hook.rkt" "editor.rkt" "input.rkt"
          "theme.rkt" "picker.rkt" "frame.rkt" "eval.rkt" "platform.rkt" "modes.rkt" "owner.rkt" "fuzzy.rkt" "glossary.rkt")
 (provide save-buffer! confirm-quit? palette-items palette-matches command-description
+         confirm-discard-changes
          builtin-command-names)
 
 (define (t) (current-buffer))
@@ -151,6 +152,33 @@
   #:title "Previous Tab" #:menu "File" #:menu-order 31
   #:keys ("Ctrl-Shift-Tab") #:keys/mac ("Mod-Alt-Left" "Mod-Shift-[") #:keys/windows ("Ctrl-PageUp")
   (cycle-buffer -1))
+
+;; Asks before throwing away unsaved edits. A parameter so tests (and scripts) can answer.
+(define confirm-discard-changes
+  (make-parameter
+   (lambda (b)
+     (eq? 1 (message-box/custom "Rackmac"
+                                (format "Discard your changes to ~a and reload it from disk?" (send b get-name))
+                                "Reload" "Cancel" #f (ui-parent) '(caution default=2) 2)))))
+
+(define-command (reload-from-disk)
+  #:aliases ("revert-buffer" "revert" "reload file" "discard changes")
+  #:help "Read the document again from its file, discarding unsaved changes."
+  #:title "Reload from Disk" #:menu "File" #:menu-order 24
+  (define b (t))
+  (cond
+    [(not (send b get-path)) (message "~a has not been saved to a file yet." (send b get-name))]
+    [(not (file-exists? (send b get-path))) (message "~a no longer exists on disk." (send b get-path))]
+    [(and (send b is-modified?) (not ((confirm-discard-changes) b))) (void)]
+    [else (reload-buffer! b) (message "Reloaded ~a" (send b get-name))]))
+
+(define-command (save-all)
+  #:aliases ("save-some-buffers" "save everything")
+  #:help "Save every open document that has unsaved changes."
+  #:title "Save All" #:menu "File" #:menu-order 26 #:keys/mac ("Mod-Alt-s")
+  (define bs (unsaved-buffers))
+  (define saved (for/sum ([b bs]) (if (save-buffer! b) 1 0)))
+  (message (if (null? bs) "Nothing to save." (format "Saved ~a of ~a document~a." saved (length bs) (if (= 1 (length bs)) "" "s")))))
 
 (define-command (reopen-closed-tab)
   #:aliases ("undo close tab" "restore tab" "reopen tab")

@@ -4,7 +4,7 @@
 (require racket/class racket/list racket/string racket/path
          "buffer.rkt" "hook.rkt" "mode.rkt" "modes.rkt")
 (provide current-buffer set-current-buffer! all-buffers visible-buffers messages-buffer?
-         reopen-closed-tab! closed-tab-paths
+         reopen-closed-tab! closed-tab-paths reload-buffer!
          new-buffer! open-file! kill-buffer! find-buffer-by-path unique-name
          message messages-buffer show-messages!
          ui-parent set-ui-parent!
@@ -58,10 +58,25 @@
         (cond [(file-exists? p)
                (send b load-path! p)
                (define note (send b local-ref 'file-note #f))
-               (when note (message "~a: ~a" (send b get-name) note))]
+               (when note (message "~a: ~a" (send b get-name) note))
+               (when (send b large?)
+                 (message "~a is a large file, so syntax coloring is off for it." (send b get-name)))]
               [else (send b set-mode! (or (mode-for-path p) 'text-mode))])   ; a new file still gets its Language
         (send b set-path! p)
         b)))
+
+;; Re-read a document from its file, keeping the cursor near where it was. Returns #f
+;; (and changes nothing) if the document has no file or the file is gone.
+(define (reload-buffer! b)
+  (define p (send b get-path))
+  (cond
+    [(not (and p (file-exists? p))) #f]
+    [else
+     (define pos (send b get-start-position))
+     (send b load-path! p)
+     (send b set-position (min pos (send b last-position)))
+     (run-hook 'buffers-changed)
+     #t]))
 
 ;; Paths of closed tabs, most recent first, for Reopen Closed Tab (as in Chrome).
 (define closed '())

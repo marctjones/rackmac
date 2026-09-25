@@ -4,7 +4,11 @@
 ;; the keymap layers before text% sees them.
 (require racket/class racket/gui/base racket/string racket/list racket/file
          "keymap.rkt" "mode.rkt" "hook.rkt" "input.rkt" "theme.rkt" "fileio.rkt")
-(provide buffer%)
+(provide buffer% large-file-threshold)
+
+;; Documents longer than this many characters open without syntax coloring (it re-lexes the
+;; whole document after edits, which gets slow). A parameter so tests can lower it.
+(define large-file-threshold (make-parameter 500000))
 
 (define buffer%
   (class text%
@@ -90,9 +94,10 @@
         (super on-char ev)))
 
     ;; ---- change notification ---------------------------------------------
+    (define/public (large?) (> (send this last-position) (large-file-threshold)))
     (define/public (rehighlight!)
       (define h (find-highlighter major))
-      (when (and h (< (send this last-position) 300000))
+      (when (and h (not (large?)))
         (h this)))
     (define (schedule-highlight!)
       (unless highlight-timer

@@ -7,11 +7,11 @@ redefinable core. See [DESIGN.md](DESIGN.md) for the full design; this file cove
 ## Run
 
     racket main.rkt [file ...]
-    raco test tests            # 107 tests
+    raco test tests            # 113 tests
 
 Needs Racket 9.x with the GUI libraries (the standard distribution).
 
-What is verified: the 107 automated tests (commands, keymaps, key-event normalization, the picker
+What is verified: the 113 automated tests (commands, keymaps, key-event normalization, the picker
 dialog driven by timers, startup, the extension loader), and a launch on macOS (Apple Silicon)
 that renders correctly. **What is not verified:** that real keystrokes in the live window reach the
 buffer and run commands (one attempt with synthetic OS-level keystrokes produced no dispatch, and the
@@ -128,6 +128,7 @@ everything, including commands without a shortcut.
 | File | Close Tab | ⌘W | Ctrl+W, Ctrl+F4 |
 | File | Reopen Closed Tab | ⇧⌘T | Ctrl+Shift+T |
 | File | Print… | ⌘P | Ctrl+P |
+| File | Save All | ⌥⌘S | — |
 | File | Next Tab | ⌃⇥, ⌥⌘→, ⇧⌘] | Ctrl+Tab, Ctrl+PgDn |
 | File | Previous Tab | ⌃⇧⇥, ⌥⌘←, ⇧⌘[ | Ctrl+Shift+Tab, Ctrl+PgUp |
 | File | Customize with Code | ⌘, | Ctrl+, |

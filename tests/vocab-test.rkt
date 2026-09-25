@@ -12,7 +12,7 @@
   '(about close-buffer command-palette copy cut delete-line delete-to-line-start delete-word-back
     delete-word-forward describe-command describe-key doc-end doc-start duplicate-line eval-buffer
     go-to-tab-1 go-to-tab-2 go-to-tab-3 go-to-tab-4 go-to-tab-5 go-to-tab-6 go-to-tab-7 go-to-tab-8 go-to-tab-9
-    print-document reopen-closed-tab toggle-full-screen
+    print-document reopen-closed-tab toggle-full-screen reload-from-disk save-all
     eval-selection find find-next find-previous goto-line indent-lines indent-or-insert line-end
     line-start list-extensions list-keybindings move-line-down move-line-up new-buffer
     newline-and-indent next-buffer open-file open-init-file outdent-lines page-down page-up paste

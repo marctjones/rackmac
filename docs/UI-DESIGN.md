@@ -81,7 +81,8 @@ bar fonts and metrics in the same step.
   toolbar `spacing 4` with an 8 px gap (a `pane%` spacer) between groups, InfoBar and find row `border 8 spacing 8`,
   dialogs `border 16 spacing 12`.
 - **Editor margins:** `horizontal-inset` 16 (today 12), `vertical-inset` 12; prose Languages wrap at a readable
-  measure (`set-max-width` at ~80 columns of the mono font) with the text left-aligned, code Languages unwrapped.
+  measure (a fixed `set-max-width` of ~80 columns of the mono font instead of `buffer.rkt`'s `auto-wrap #t`,
+  which wraps at the window edge), text left-aligned; code Languages unwrapped.
 - **Row heights** follow the controls: toolbar = button height + 8; tab strip as `tab-panel%` draws it; status
   bar 24 (macOS 22); InfoBar one line of `ui` + 16.
 - **Motion:** none required. State changes are instant; caret blink is the editor's own. A reduced-motion
@@ -91,8 +92,10 @@ bar fonts and metrics in the same step.
 
 Fluent System Icons style: single-weight line icons on a 16-unit grid, 1 px stroke at 16 px, 1.5 at 20 px,
 round caps. Each icon is a small `racket/draw` path program in `rackmac/ui/icons.rkt`, rendered on demand into a
-`bitmap%` at the display's backing scale (`make-bitmap #:backing-scale`) in the `text` color, and handed to
-`button%` as a bitmap label, so `#:icon` drives native buttons directly. Commands without `#:icon` get a
+`bitmap%` at the display's backing scale (`make-bitmap #:backing-scale`) and handed to `button%` as a bitmap
+label, so `#:icon` drives native buttons directly. Toolbar icons take their color from the native chrome
+(`get-label-foreground-color`), not from the editor tokens, so they stay visible when the editor is dark and
+the Win32 chrome is light; only status-bar and gutter icons use `text`. Commands without `#:icon` get a
 letter tile (their initial in a rounded square), which RM-052 "Add to Toolbar" needs. Set: `new open save
 save-as close undo redo cut copy paste select-all find replace goto comment duplicate delete-line arrow-up
 arrow-down indent outdent zoom-in zoom-out zoom-reset wrap theme activity palette language run run-all keyboard
@@ -104,14 +107,16 @@ assigning names is its own small issue.
 
 ```
 frame% (native title: "• notes.md — Rackmac")
+├─ menu-bar%                           native, generated from #:menu (unchanged)
 └─ vertical-panel% border 0 spacing 0
-   ├─ menu-bar%                        native, generated from #:menu (unchanged)
    ├─ toolbar   horizontal-panel%      button% per toolbar item, bitmap labels, group spacers, hideable
-   ├─ tabs      tab-panel%             '(no-border can-reorder can-close new-button) → close box, drag, "+"
-   │  ├─ infobar  horizontal-panel%    hidden unless a message is pending
-   │  ├─ find     vertical-panel%      hidden; one or two rows
-   │  ├─ gutter   canvas% (optional)   line numbers, code Languages
-   │  └─ editor   editor-canvas%       or the start view panel when no documents are open
+   ├─ tabs      tab-panel%             '(no-border flat-portable can-reorder can-close new-button)
+   │  └─ vertical-panel% border 0      the stacked rows under the strip
+   │     ├─ infobar  horizontal-panel% hidden unless a message is pending
+   │     ├─ find     vertical-panel%   hidden; one or two rows
+   │     └─ horizontal-pane%
+   │        ├─ gutter  canvas%         optional, line numbers for code Languages
+   │        └─ editor  editor-canvas%  or the start view panel when no documents are open
    └─ status   canvas%                 message segment left, clickable segments right
 ```
 
@@ -124,17 +129,19 @@ frame% (native title: "• notes.md — Rackmac")
   `after-command`, `status-changed` and `buffer-modified-changed` hooks (RM-049), and the whole row hides from
   View > Show Toolbar. Icon-only by default; `button%` accepts `(list bitmap "Save" 'bottom)` so labels under
   icons are a setting. There is no tooltip API, so the hovered button's title and shortcut go to the status
-  message (`on-subwindow-event` on the toolbar panel sees motion events).
-- **Tabs.** `tab-panel%` with `'no-border 'can-reorder 'can-close 'new-button` (the styles DrRacket uses):
-  close boxes call `on-close-request` → `close-tab` on that buffer; dragging calls `on-reorder`; "+" calls
-  `on-new-request` → `new-document`. Labels keep the "• " modified prefix. `'flat-portable` (forced on Windows
-  when closing is enabled) draws the same strip on both OSes, which is what we want. Right-click on the strip
-  (`on-subwindow-event`) opens the tab context menu (RM-071); middle-click closes (RM-070). Keyboard: Ctrl+Tab
-  as today.
+  message via `on-subwindow-event` on the toolbar panel (verify on both OSes that motion over a native
+  `button%` reaches it; if not, the hint shows on focus and in the menus only).
+- **Tabs.** `tab-panel%` with `'no-border 'flat-portable 'can-reorder 'can-close 'new-button`: close boxes
+  call `on-close-request` → `close-tab` on that buffer; dragging calls `on-reorder`; "+" calls
+  `on-new-request` → `new-document`. Labels keep the "• " modified prefix. `'flat-portable` must be explicit:
+  `mrpanel.rkt` only forces it on Windows, and without it macOS gets Cocoa's own no-border strip (close and
+  reorder, but no "+" and a different drawing). With it, both OSes draw the same strip. Right-click on the
+  strip (`on-subwindow-event`) opens the tab context menu (RM-071); middle-click closes (RM-070). Keyboard:
+  Ctrl+Tab as today.
 - **Editor.** `editor-canvas%` with the margins above and `set-canvas-background` from `surface`. The optional
   gutter is a 48 px `canvas%` to the left that paints line numbers in `text-2` (current line in `text`) using
   the editor's `position-location` and scroll offset; it is on for code Languages, off for prose, per mode local
-  `gutter?` (RM-146-adjacent; new issue `ui-gutter`).
+  `gutter?` (new issue `ui-gutter`).
 - **Find row.** Native and in-layout, appearing between the tabs and the editor (a real overlay is impossible:
   `racket/gui` children never overlap). Row 1: `[ find text-field% ] 3 of 12  [☐ Match case] [☐ Whole word]
   [Advanced ▾] [Previous] [Next] [✕]`; row 2 (Find and Replace): `[ replace text-field% ] [Replace] [Replace All]`.
@@ -182,7 +189,7 @@ frame% (native title: "• notes.md — Rackmac")
 | Aspect | Windows | macOS | GNOME note (informative) |
 |---|---|---|---|
 | Title bar, menu bar | native in-window (light; Win32 controls do not follow dark mode) | native; menu in the system bar | header bar; not adopted |
-| Tab strip | `flat-portable` (forced with `can-close`) | `flat-portable` via `no-border`, same strip | libadwaita tab bar looks the same |
+| Tab strip | `flat-portable` (forced anyway with `can-close`) | `flat-portable` set explicitly; same strip and "+" as Windows | libadwaita tab bar looks the same |
 | Chrome font | Segoe UI (auto) | SF Pro (auto) | Cantarell |
 | Editor font | Cascadia Mono → Consolas 12 | SF Mono → Menlo 14 | Source Code Pro → DejaVu Sans Mono |
 | Accent / selection | `get-highlight-background-color` (follows Windows accent) | same (follows macOS accent) | same |
@@ -236,11 +243,13 @@ later `add-status-segment!`) are exported from `rackmac/api`, as ROADMAP says.
   syncing labels from `visible-buffers`. `status-panel` and its two `message%`s become `status-bar%`, fed by the
   `echo` and `status-changed` hooks. Menus are untouched.
 - **Toolbar icons at HiDPI.** Render each icon into `(make-bitmap 16 16 #t #:backing-scale s)` where `s` is
-  the frame's display scale (2.0 measured here), and re-render on `theme-changed` because the stroke color is a
-  token. `button%` draws the bitmap at logical size.
+  the frame's display scale (2.0 measured here), stroked in `get-label-foreground-color`; re-render when that
+  color changes (macOS appearance switch), not when the editor theme does. `button%` draws the bitmap at
+  logical size.
 - **Gutter.** `on-paint` draws numbers for the visible paragraph range using the editor's `position-location`
-  and `get-view`; it refreshes from the canvas's `on-scroll` and the buffer's change hooks. The current line
-  number is in `text`, others `text-2`; a 2 px `accent` bar marks the current line.
+  and `get-view`; it refreshes from the buffer's `after-scroll-to` (an `editor<%>` method; `editor-canvas%` has
+  no scroll hook) and the change hooks. The current line number is in `text`, others `text-2`; a 2 px `accent`
+  bar marks the current line.
 - **Status bar.** `render` is a pure function of (segments, hover, focus, width), so tests draw it to a
   `bitmap-dc%`; `on-event` maps x to a segment; Tab focuses the canvas, Left/Right move, Enter runs.
 - **Appearance.** On startup and every `on-activate`: read the OS (registry on Windows via `reg query`, or
@@ -279,7 +288,7 @@ Sizes follow ROADMAP (S under half a day, M 1–2 days, L 3–5). New issues are
   (issue ui-layout "Layout constants and frame rows on the 4 px grid; editor insets 16/12; prose measure" S todo
     "border 0 spacing 0 rows | insets applied | set-max-width for prose Languages | tests pass" (ui-tokens))
   (issue ui-tabs "Document tabs with close boxes, reordering and a new-tab button via tab-panel% styles" S todo
-    "no-border can-reorder can-close new-button | close box runs close-tab | + runs new-document | order change updates the buffer list" (ui-layout))
+    "no-border flat-portable can-reorder can-close new-button | close box runs close-tab | + runs new-document on both OSes | order change updates the buffer list" (ui-layout))
   (issue meta-icon-assign "Assign #:icon names to every built-in command with a menu entry" S todo
     "names from the documented set | test lists commands without one" (meta-icon)))
  (sub E2.M0.S2 "Appearance and tests"
@@ -390,8 +399,9 @@ The foundation is about a week; nothing in it is throwaway.
 
 ## Decisions needed from the owner
 
-1. **Tabs:** adopt the built-in `flat-portable` tab strip (close boxes, drag to reorder, "+", identical on both
-   OSes) as recommended, or keep the native macOS tab view (no close boxes; closing stays ⌘W and the menu)?
+1. **Tabs:** the built-in `flat-portable` strip (close boxes, drag to reorder, "+", identical on both OSes;
+   recommended), or Cocoa's own no-border strip on macOS (close boxes and reorder, native look, but no "+"
+   button and a different drawing from Windows)?
 2. **Toolbar:** confirm one row of icon-only native buttons with an overflow menu; labels under icons as an
    off-by-default setting.
 3. **Windows dark mode:** when the system is dark, should the editor and status bar go dark even though the
