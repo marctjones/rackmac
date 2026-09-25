@@ -53,4 +53,7 @@ Rules for anyone (person or agent) changing this repository.
 - Push to `origin main`. Close each finished issue with `gh issue close N --repo marctjones/rackmac
   --reason completed --comment "Done in <sha>. Tests: <file>."`; comment instead if only partly done.
 - GitHub issues are the source of truth for status. `ROADMAP.md` is the initial plan.
-- Releases are annotated tags `v0.N.0` on `main`, made by the maintainer after a review.
+- Work is organized in **phases**. Each phase ends with an annotated tag `v0.N.0` on `main` and a GitHub
+  pre-release with notes, made by the maintainer after a review. Before a major change of direction, tag
+  the current state first so it can always be returned to. Tags so far: `v0.1.0` foundation, `v0.2.0` native
+  desktop shell (checkpoint before the office/notes re-plan).
