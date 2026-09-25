@@ -93,8 +93,8 @@
   (add-hook! 'mode-changed (lambda (b) (send status-bar refresh)))
   (add-hook! 'status-segments-changed (lambda () (send status-bar refresh)))
   ;; An edit that leaves the caret where it was (e.g. Replace All at position 0) fires
-  ;; 'buffer-changed but not 'status-changed; the word count still needs a repaint.
-  (add-hook! 'buffer-changed (lambda (b) (send status-bar refresh)))
+  ;; 'text-changed but not 'status-changed; the word count still needs a repaint.
+  (add-hook! 'text-changed (lambda (b) (send status-bar refresh)))
   (add-hook! 'echo (lambda (s) (send status-bar set-message! s) (send status-bar refresh)))
   (add-hook! 'command-registered (lambda (n) (rebuild-menus!)))
   (add-hook! 'focus-editor focus-editor!)

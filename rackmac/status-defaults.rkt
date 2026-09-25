@@ -7,13 +7,13 @@
 ;; ---- word count: cached per buffer, invalidated on edits ------------------
 ;; Re-scanning the whole document on every cursor move would make typing feel slow in a
 ;; large document, so the count is kept until the buffer actually changes.
-(define generations (make-weak-hasheq))     ; buffer -> generation, bumped by 'buffer-changed
+(define generations (make-weak-hasheq))     ; buffer -> generation, bumped by 'text-changed
 (define cache (make-weak-hasheq))           ; buffer -> (cons generation count)
 (define scans 0)                            ; how many times the text was actually re-scanned
 (define (word-count-scans) scans)
 (define (reset-word-count-scans!) (set! scans 0))
 
-(add-hook! 'buffer-changed (lambda (b) (hash-update! generations b add1 0)))
+(add-hook! 'text-changed (lambda (b) (hash-update! generations b add1 0)))
 
 (define (count-words s)
   (set! scans (add1 scans))
