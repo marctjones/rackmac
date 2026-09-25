@@ -105,9 +105,9 @@
       (send highlight-timer start 120 #t))
 
     (define/augment (after-insert s l)
-      (schedule-highlight!) (inner (void) after-insert s l))
+      (schedule-highlight!) (run-hook 'buffer-changed this) (inner (void) after-insert s l))
     (define/augment (after-delete s l)
-      (schedule-highlight!) (inner (void) after-delete s l))
+      (schedule-highlight!) (run-hook 'buffer-changed this) (inner (void) after-delete s l))
     ;; Readable measure: a Language can set the local `measure` (characters per line); when
     ;; wrapping, lines then wrap at that width or the window edge, whichever is narrower.
     (define/public (measure-width)

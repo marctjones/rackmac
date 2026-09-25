@@ -9,7 +9,7 @@
 ;;   character cannot be represented (e.g. "€" in a Latin-1 file), instead of writing junk.
 ;; safe-write-bytes!: temp file in the same folder, same permissions, then rename over.
 (require racket/string racket/file racket/list racket/path)
-(provide decode-file encode-text safe-write-bytes! encoding-label
+(provide decode-file encode-text safe-write-bytes! encoding-label eol-label
          (struct-out exn:fail:rackmac-encoding))
 
 (struct exn:fail:rackmac-encoding exn:fail ())
@@ -17,6 +17,9 @@
 (define (encoding-label e)
   (case e [(utf-8) "UTF-8"] [(utf-8-bom) "UTF-8 with BOM"] [(utf-16le) "UTF-16 LE"]
     [(utf-16be) "UTF-16 BE"] [(latin-1) "Latin-1"] [(binary) "Binary"] [else (format "~a" e)]))
+
+;; The status bar's line-ending segment and the Line Endings… command share this label.
+(define (eol-label e) (cond [(equal? e "\n") "LF"] [(equal? e "\r\n") "CRLF"] [(equal? e "\r") "CR"] [else (format "~a" e)]))
 
 ;; ---- UTF-16 (done by hand so it works the same everywhere) -----------------
 

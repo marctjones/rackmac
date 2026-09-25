@@ -2,7 +2,7 @@
 ;; Light/dark colors, the editor font, and applying them to the shared style list.
 (require racket/class racket/gui/base racket/list racket/port racket/system "ui/tokens.rkt")
 (provide theme-color current-theme-name set-theme! toggle-theme! detect-theme
-         font-size set-font-size! apply-base-style! canvas-background editor-style-list)
+         font-size set-font-size! default-font-size apply-base-style! canvas-background editor-style-list)
 
 ; Colors come from ui/tokens.rkt (roles); this module keeps the editor font and style list.
 (define (mac-dark-mode?)
@@ -31,7 +31,9 @@
 
 (define (canvas-background) (token 'surface))
 
-(define font-size (if (eq? (system-type 'os) 'macosx) 14 12))
+;; The zoom percentage segment in the status bar is font-size / (default-font-size).
+(define (default-font-size) (if (eq? (system-type 'os) 'macosx) 14 12))
+(define font-size (default-font-size))
 (define (set-font-size! n) (set! font-size (max 8 (min 48 n))) (apply-base-style!))
 
 (define face

@@ -2,7 +2,7 @@
 ;; The public API: what init files and live-evaluated code get with (require rackmac/api).
 (require racket/class
          "command.rkt" "keymap.rkt" "mode.rkt" "hook.rkt" "editor.rkt" "eval.rkt" "theme.rkt"
-         "owner.rkt" "version.rkt" "toolbar.rkt" "picker.rkt")
+         "owner.rkt" "version.rkt" "toolbar.rkt" "status.rkt" "picker.rkt")
 (provide (all-from-out racket/class)
          define-command run-command find-command all-commands
          define-mode register-mode!
@@ -14,8 +14,9 @@
          set-theme! toggle-theme! set-font-size!
          bind-key! unbind-key!
          declare-extension! (rename-out [api-version rackmac-api-version])
-         ;; toolbar and UI helpers
+         ;; toolbar, status bar and UI helpers
          add-toolbar-item! remove-toolbar-item!
+         add-status-segment! remove-status-segment!
          command-enabled? command-title command-icon command-help command-shortcut
          ui-parent pick)
 

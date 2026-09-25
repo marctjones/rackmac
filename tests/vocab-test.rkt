@@ -17,8 +17,8 @@
     line-start list-extensions list-keybindings move-line-down move-line-up new-buffer
     newline-and-indent next-buffer open-file open-init-file outdent-lines page-down page-up paste
     previous-buffer quick-open quit redo reload-init replace save save-as select-all select-line
-    set-major-mode show-glossary show-messages toggle-comment toggle-theme toggle-word-wrap undo word-left
-    word-right zoom-in zoom-out zoom-reset))
+    set-line-endings set-major-mode show-encoding show-glossary show-messages toggle-comment toggle-theme
+    toggle-word-wrap undo word-left word-right zoom-in zoom-out zoom-reset))
 
 (test-case "built-in command names are stable (relabeling never renames a symbol)"
   (check-equal? (sort builtin-command-names symbol<?) (sort golden-names symbol<?))

@@ -8,11 +8,11 @@ visual design and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for how to contribu
 ## Run
 
     racket main.rkt [file ...]
-    raco test tests            # 148 tests
+    raco test tests            # 168 tests
 
 Needs Racket 9.x with the GUI libraries (the standard distribution).
 
-What is verified: the 148 automated tests (commands, keymaps, key-event normalization, the picker
+What is verified: the 168 automated tests (commands, keymaps, key-event normalization, the picker
 dialog driven by timers, startup, the extension loader), and a launch on macOS (Apple Silicon)
 that renders correctly. **What is not verified:** that real keystrokes in the live window reach the
 buffer and run commands (one attempt with synthetic OS-level keystrokes produced no dispatch, and the
@@ -74,6 +74,23 @@ The toolbar is built from a registry that extensions use too:
 
 Buttons dim when a command's `#:when` says it does not apply, hovering shows the name and shortcut in the
 status bar, and View → Show Toolbar hides the row. Items are removed when their extension unloads.
+
+### Status bar
+
+Left, the message segment (the same text `message`/`log-message` write to the echo area). Right, segments
+from a registry extensions use too:
+
+```racket
+(add-status-segment! 'shout-count (lambda () (format "~a shouts" (shout-count))) #:command 'shout)
+(remove-status-segment! 'shout-count)
+```
+
+The built-ins are position (opens Go to Line), word or selection count (words only for prose Languages),
+encoding, line ending (LF/CRLF, opens Line Endings…), Language (opens the Language picker) and zoom
+percentage (click to reset). A segment hides itself by having its thunk return `#f` (that is how the word
+count disappears for code Languages); hovering a clickable one underlines it and shows a hint in the message
+area. Segments are dropped, lowest `#:priority` first, when the window is too narrow for all of them, and
+they are removed when their extension unloads.
 
 ### How extensions work
 
@@ -205,7 +222,8 @@ Ctrl/Alt combinations do nothing rather than falling into Racket's built-in Emac
 
 Built: buffers, tabs, find/replace bar, command palette, quick open, menus generated from command
 metadata, modes (text, prog, Racket, Markdown) with syntax coloring, hooks, init file, live eval,
-light/dark theme, zoom, CRLF-preserving file I/O, describe-key and keybinding listings.
+light/dark theme, zoom, CRLF-preserving file I/O, describe-key and keybinding listings, a clickable
+status bar (position, word/selection count, encoding, line ending, Language, zoom).
 
 Deferred (in DESIGN.md, not built): Rackorg (Org-compatible mode), multiple cursors, splits,
 a piece-tree text store and custom renderer, undo tree, tree-sitter, LSP, session restore,

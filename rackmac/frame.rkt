@@ -3,10 +3,10 @@
 ;; menu bar generated from command metadata. Key handling lives in buffer%/input.rkt;
 ;; menus deliberately carry no shortcuts of their own, so a key never fires twice.
 (require racket/class racket/gui/base racket/list racket/string
-         "editor.rkt" "command.rkt" "keymap.rkt" "hook.rkt" "theme.rkt" "mode.rkt" "ui/layout.rkt" "ui/toolbar-panel.rkt")
+         "editor.rkt" "command.rkt" "keymap.rkt" "hook.rkt" "theme.rkt" "ui/layout.rkt" "ui/toolbar-panel.rkt" "ui/status-bar.rkt")
 (provide make-main-frame show-find-bar! hide-find-bar!
          find! replace-current! replace-all! focus-editor! main-frame main-canvas main-tabs set-find-options! tab-strip-style
-         main-toolbar toolbar-shown? set-toolbar-shown!)
+         main-toolbar toolbar-shown? set-toolbar-shown! main-status-bar)
 
 (define frame #f)
 (define (main-frame) frame)
@@ -23,13 +23,12 @@
 (define (layout-rows!)
   (send frame change-children
         (lambda (cs) (append (if show-toolbar? (list toolbar) '()) (list tabs)
-                             (if show-find? (list find-bar) '()) (list status-panel)))))
+                             (if show-find? (list find-bar) '()) (list status-bar)))))
 (define menu-bar #f)
 (define tabs #f)
 (define canvas #f)
-(define status-panel #f)
-(define echo-label #f)
-(define info-label #f)
+(define status-bar #f)
+(define (main-status-bar) status-bar)
 (define find-bar #f)
 (define replace-row #f)
 (define find-field #f)
@@ -88,16 +87,21 @@
   (build-status-bar!)
 
   (add-hook! 'buffers-changed refresh-tabs!)
-  (add-hook! 'buffer-modified-changed (lambda (b) (refresh-tabs!)))
-  (add-hook! 'current-buffer-changed (lambda (b) (show-buffer! b) (refresh-tabs!)))
-  (add-hook! 'status-changed update-status!)
-  (add-hook! 'mode-changed (lambda (b) (update-status!)))
-  (add-hook! 'echo (lambda (s) (send echo-label set-label (if (string=? s "") " " s))))
+  (add-hook! 'buffer-modified-changed (lambda (b) (refresh-tabs!) (send status-bar refresh)))
+  (add-hook! 'current-buffer-changed (lambda (b) (show-buffer! b) (refresh-tabs!) (send status-bar refresh)))
+  (add-hook! 'status-changed (lambda () (send status-bar refresh)))
+  (add-hook! 'mode-changed (lambda (b) (send status-bar refresh)))
+  (add-hook! 'status-segments-changed (lambda () (send status-bar refresh)))
+  ;; An edit that leaves the caret where it was (e.g. Replace All at position 0) fires
+  ;; 'buffer-changed but not 'status-changed; the word count still needs a repaint.
+  (add-hook! 'buffer-changed (lambda (b) (send status-bar refresh)))
+  (add-hook! 'echo (lambda (s) (send status-bar set-message! s) (send status-bar refresh)))
   (add-hook! 'command-registered (lambda (n) (rebuild-menus!)))
   (add-hook! 'focus-editor focus-editor!)
   (add-hook! 'theme-changed
              (lambda () (send canvas set-canvas-background (canvas-background))
-                        (send canvas refresh)))
+                        (send canvas refresh)
+                        (send status-bar refresh)))
 
   (add-hook! 'toolbar-changed (lambda () (send toolbar rebuild!)))
   (add-hook! 'current-buffer-changed (lambda (b) (send toolbar ensure-mode! (send b get-mode))))
@@ -115,7 +119,6 @@
   (send canvas set-editor b)
   (send canvas set-canvas-background (canvas-background))
   (update-title!)
-  (update-status!)
   (send canvas focus))
 
 (define (tab-label b)
@@ -139,24 +142,11 @@
           (format "~a~a — Rackmac" (if (send b is-modified?) "• " "") (send b get-name)))))
 
 ;; ---- status bar ----------------------------------------------------------
+;; The widget itself lives in ui/status-bar.rkt (pure layout and drawing, so it can be
+;; tested on a bitmap-dc%); this just makes one and wires the hooks above.
 
 (define (build-status-bar!)
-  (set! status-panel (new horizontal-panel% [parent frame] [stretchable-height #f]
-                          [border grid] [spacing (* 3 grid)]))
-  (set! echo-label (new message% [parent status-panel] [label " "] [stretchable-width #t]))
-  (set! info-label (new message% [parent status-panel] [label "Ln 1, Col 1"] [min-width 320])))
-
-(define (update-status!)
-  (when info-label
-    (define b (current-buffer))
-    (define pos (send b get-start-position))
-    (define para (send b position-paragraph pos))
-    (define col (- pos (send b paragraph-start-position para)))
-    (define n (- (send b get-end-position) pos))
-    (send info-label set-label
-          (format "Ln ~a, Col ~a~a   ~a" (add1 para) (add1 col)
-                  (if (> n 0) (format "  (~a selected)" n) "")
-                  (mode-display-name (send b get-mode))))))
+  (set! status-bar (new status-bar% [parent frame])))
 
 ;; ---- menus (generated from command metadata) -----------------------------
 

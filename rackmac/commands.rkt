@@ -4,7 +4,8 @@
 ;; and Windows differ (#:keys/mac, #:keys/windows).
 (require racket/class racket/gui/base racket/list racket/string racket/file racket/path
          "command.rkt" "keymap.rkt" "mode.rkt" "hook.rkt" "editor.rkt" "input.rkt"
-         "theme.rkt" "picker.rkt" "frame.rkt" "eval.rkt" "platform.rkt" "modes.rkt" "owner.rkt" "fuzzy.rkt" "glossary.rkt")
+         "theme.rkt" "picker.rkt" "frame.rkt" "eval.rkt" "platform.rkt" "modes.rkt" "owner.rkt" "fuzzy.rkt" "glossary.rkt"
+         "fileio.rkt")
 (provide save-buffer! confirm-quit? palette-items palette-matches command-description
          confirm-discard-changes confirm-save-changes
          builtin-command-names)
@@ -187,6 +188,35 @@
     [(not (file-exists? (send b get-path))) (message "~a no longer exists on disk." (send b get-path))]
     [(and (send b is-modified?) (not ((confirm-discard-changes) b))) (void)]
     [else (reload-buffer! b) (message "Reloaded ~a" (send b get-name))]))
+
+;; The status bar's line-ending segment (RM-062) opens this; "current" marks what the
+;; document already uses so the picker's Detail column shows it.
+(define eol-choices '(("\n" . "LF (Unix, macOS)") ("\r\n" . "CRLF (Windows)") ("\r" . "CR (Classic Mac)")))
+
+(define-command (set-line-endings)
+  #:aliases ("set-buffer-file-coding-system" "line endings" "convert line endings" "crlf" "eol")
+  #:help "Choose which line-ending characters this document is saved with."
+  #:title "Line Endings…"
+  #:doc "Sets the buffer-local `eol` used by save; the file is rewritten with it next Save."
+  (define b (t))
+  (define current (send b local-ref 'eol "\n"))
+  (define items (for/list ([p eol-choices])
+                  (list (cdr p) (if (equal? (car p) current) "current" "") (car p))))
+  (define choice (pick "Line Endings" items #:detail-heading "In use"))
+  (when (and choice (not (equal? choice current)))
+    (send b local-set! 'eol choice)
+    (send b set-modified #t)
+    (run-hook 'status-changed)
+    (message "Line endings: ~a (saved on next Save)" (eol-label choice))))
+
+;; The status bar's encoding segment (RM-087) opens this for now; changing the encoding
+;; from here is left for a later issue (#87 stays open for "save as UTF-8").
+(define-command (show-encoding)
+  #:aliases ("buffer-file-coding-system" "file encoding" "character encoding")
+  #:help "Show the character encoding this document is saved with."
+  #:title "File Encoding"
+  (define b (t))
+  (message "~a: ~a" (send b get-name) (encoding-label (send b local-ref 'encoding 'utf-8))))
 
 (define-command (save-all)
   #:when (lambda () (pair? (unsaved-buffers)))
@@ -654,7 +684,7 @@ TEMPLATE
   #:aliases ("text-scale-adjust" "reset zoom" "default font size")
   #:help "Return the text to its normal size."
   #:title "Actual Size" #:menu "View" #:menu-order 12 #:keys ("Mod-0")
-  (set-font-size! (if (mac?) 14 12)) (run-hook 'theme-changed))
+  (set-font-size! (default-font-size)) (run-hook 'theme-changed))
 
 (define-command (toggle-word-wrap)
   #:icon "wrap"
