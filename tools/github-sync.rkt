@@ -81,6 +81,9 @@
 
 ;; ---- labels --------------------------------------------------------------
 
+;; GitHub rejects label descriptions over 100 characters.
+(define (clip s [n 100]) (if (> (string-length s) n) (string-append (substring s 0 (- n 3)) "...") s))
+
 (define (ensure-labels!)
   (define wanted
     (append
@@ -94,7 +97,7 @@
      (list (list "release:Icebox" "cccccc" "Not scheduled into any release"))))
   (for ([w wanted] #:unless (hash-ref (state-ref 'labels) (car w) #f))
     (printf "label ~a\n" (car w))
-    (gh! "label" "create" (car w) "--repo" repo "--color" (cadr w) "--description" (caddr w) "--force")
+    (gh! "label" "create" (car w) "--repo" repo "--color" (cadr w) "--description" (clip (caddr w)) "--force")
     (state-set! 'labels (car w) #t)
     (pause)))
 
