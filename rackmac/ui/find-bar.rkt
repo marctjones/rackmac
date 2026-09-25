@@ -101,12 +101,17 @@
     (define (current-options) (values (send case-box get-value) (send word-box get-value) (send regex-box get-value)))
 
     ;; The selection at the time the bar was opened restricts the search when "In selection"
-    ;; is checked; an empty (or never-captured) selection means "no restriction".
+    ;; is checked; an empty (or never-captured) selection means "no restriction". The range
+    ;; is clamped to the buffer's current length: an edit (including our own Replace All) can
+    ;; shrink the buffer out from under a range captured earlier.
     (define (search-scope)
       (define full (buffer-string (current-buffer)))
+      (define len (string-length full))
       (cond
-        [(and (send selection-box get-value) sel-range (> (cdr sel-range) (car sel-range)))
-         (values (substring full (car sel-range) (cdr sel-range)) (car sel-range))]
+        [(and (send selection-box get-value) sel-range)
+         (define s (min (car sel-range) len))
+         (define e (min (cdr sel-range) len))
+         (if (> e s) (values (substring full s e) s) (values "" s))]
         [else (values full 0)]))
 
     (define (recompute-matches!)
@@ -191,6 +196,11 @@
            (send b begin-edit-sequence)
            (send b insert (replace-result-text result) offset (+ offset (string-length text)))
            (send b end-edit-sequence)
+           ;; The scoped region just changed length; track its new span so a later search
+           ;; (or another Replace All) still covers exactly the replaced text, not whatever
+           ;; now happens to sit at the old offsets.
+           (when (and (send selection-box get-value) sel-range)
+             (set! sel-range (cons offset (+ offset (string-length (replace-result-text result))))))
            (message "Replaced ~a occurrence~a" (replace-result-count result) (if (= (replace-result-count result) 1) "" "s"))])
         (show-live-count! (recompute-matches!))))
 

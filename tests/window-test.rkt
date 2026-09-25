@@ -175,6 +175,16 @@
   (check-true refocused)
   (check-false (memq (fb) (send f get-children))))
 
+(test-case "find bar: In selection survives Replace All shrinking the buffer past the old bounds"
+  (define b (doc "aaa"))
+  (send b set-position 0 3)                  ; the whole (and only) buffer is selected
+  (show-find-bar!)
+  (set-find-options! "a" #:replace "" #:in-selection? #t)
+  (replace-all!)                             ; used to crash: substring past the now-empty buffer
+  (check-equal? (send b get-text) "")
+  (check-equal? (send (fb) count-text) "No matches")
+  (hide-find-bar!))
+
 ;; ---- tabs and layout (UI foundation) ------------------------------------------------
 
 (define tabs (main-tabs))

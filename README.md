@@ -8,11 +8,11 @@ visual design and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for how to contribu
 ## Run
 
     racket main.rkt [file ...]
-    raco test tests            # 250 tests
+    raco test tests            # 251 tests
 
 Needs Racket 9.x with the GUI libraries (the standard distribution).
 
-What is verified: the 250 automated tests (commands, keymaps, key-event normalization, the picker
+What is verified: the 251 automated tests (commands, keymaps, key-event normalization, the picker
 dialog driven by timers, startup, the extension loader, find/replace matching), and a launch on macOS (Apple Silicon)
 that renders correctly. **What is not verified:** that real keystrokes in the live window reach the
 buffer and run commands (one attempt with synthetic OS-level keystrokes produced no dispatch, and the
