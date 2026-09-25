@@ -11,7 +11,7 @@
          default-key-strings command-menu-label)
 
 ;; title is the name users see; name is the stable symbol used by keymaps and scripts.
-;; aliases are extra search terms (including the Emacs name); help is one plain sentence;
+;; aliases are extra search terms (plain words people might type); help is one plain sentence;
 ;; icon names a toolbar/menu icon; when is a thunk saying whether the command applies now.
 ;; menu is a string ("File") or #f; menu-order groups items (a new tens digit adds a separator).
 (struct command (name title doc category menu menu-order proc aliases help icon when))

@@ -67,26 +67,19 @@
   (run-command 'select-all)
   (check-equal? (caddr (car (palette-items))) 'select-all))
 
-;; ---- Emacs alias detection --------------------------------------------------
-
-(test-case "Emacs alias: a plain word like yank still counts when nothing hyphenated exists"
-  (check-equal? (emacs-alias-of (find-command 'paste)) "yank")
-  (check-equal? (emacs-alias-of (find-command 'cut)) "kill-region")
-  (check-equal? (emacs-alias-of (find-command 'command-palette)) "M-x"))
-
 ;; ---- the dialog itself -------------------------------------------------------
 
 (test-case "the palette's columns are Command, Category, Shortcut"
   (check-equal? command-palette-columns (list "Command" "Category" "Shortcut")))
 
-(test-case "the footer shows help text and the Emacs alias, and updates on Down"
+(test-case "the footer shows help text and the key hint, and updates on Down"
   (void
    (run-dialog
     (lambda () (run-command 'command-palette))
     (lambda (d)
       (type! d "paste")
       (check-regexp-match #rx"Insert the clipboard" (send (footer-of d) get-label))
-      (check-regexp-match #rx"Emacs: yank" (send (footer-of d) get-label))
+      (check-regexp-match #rx"move.*run.*close" (send (footer-of d) get-label))
       (type! d "zoom")
       (define before (send (footer-of d) get-label))
       (send d on-subwindow-char (tf-of d) (key 'down))

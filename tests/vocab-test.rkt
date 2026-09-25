@@ -1,13 +1,14 @@
 #lang racket/base
-;; The vocabulary layer: friendly titles, Emacs-name aliases, help text, palette search,
+;; The vocabulary layer: friendly titles, office-word aliases, help text, palette search,
 ;; recents, and Describe. The layer is display-only, so command NAMES are pinned here:
 ;; a user's init.rkt refers to them (bind-key!, run-command), and must never break.
+;; Emacs vocabulary does not belong in this file's aliases or expectations: the default
+;; product's default is checked here and in tests/no-emacs-test.rkt; the Emacs preset's own
+;; names live only in rackmac/presets/emacs-names.rktd (v0.8, epic E13).
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/list racket/string
          "../rackmac/command.rkt" "../rackmac/commands.rkt" "../rackmac/mode.rkt"
-         "../rackmac/keymap.rkt" "../rackmac/editor.rkt" "../rackmac/picker.rkt"
-         "../rackmac/glossary.rkt" racket/file racket/runtime-path)
-(define-runtime-path readme "../README.md")
+         "../rackmac/keymap.rkt" "../rackmac/editor.rkt" "../rackmac/picker.rkt")
 
 (define golden-names
   '(about close-buffer close-other-tabs close-tabs-to-right command-palette copy copy-tab-path
@@ -19,12 +20,16 @@
     line-start list-extensions list-keybindings move-line-down move-line-up new-buffer
     newline-and-indent next-buffer open-file open-init-file outdent-lines page-down page-up paste
     previous-buffer quick-open quit redo reload-init replace save save-as select-all select-line
-    set-line-endings set-major-mode show-cheat-sheet show-encoding show-glossary show-messages
+    set-line-endings set-major-mode show-cheat-sheet show-encoding show-messages
     toggle-comment toggle-theme toggle-word-wrap undo word-left word-right zoom-in zoom-out zoom-reset))
 
 (test-case "built-in command names are stable (relabeling never renames a symbol)"
   (check-equal? (sort builtin-command-names symbol<?) (sort golden-names symbol<?))
   (for ([n golden-names]) (check-not-false (find-command n) (format "~a still resolves" n))))
+
+(test-case "the Emacs glossary command is gone from the default product (moved to docs/emacs-glossary.md, #263)"
+  (check-false (find-command 'show-glossary))
+  (check-false (memq 'show-glossary builtin-command-names)))
 
 (test-case "every built-in command has help text and at least one alias"
   (for ([n builtin-command-names])
@@ -42,16 +47,18 @@
 
 (define (top q) (let ([m (palette-matches q)]) (and (pair? m) (car m))))
 
-(test-case "the palette finds commands by Emacs names and office words"
-  (check-eq? (top "yank") 'paste)
-  (check-eq? (top "kill-region") 'cut)
-  (check-eq? (top "isearch") 'find)
-  (check-eq? (top "query-replace") 'replace)
-  (check-eq? (top "M-x") 'command-palette)
-  (check-eq? (top "kill-whole-line") 'delete-line)
-  (check-eq? (top "beginning-of-line") 'line-start)
+(test-case "the palette finds commands by office words (the default has no Emacs names)"
+  (check-eq? (top "paste") 'paste)
+  (check-eq? (top "cut selection") 'cut)
+  (check-eq? (top "search") 'find)
+  (check-eq? (top "find and replace") 'replace)
+  (check-eq? (top "run command") 'command-palette)
+  (check-eq? (top "remove line") 'delete-line)
+  (check-eq? (top "home") 'line-start)
   (check-eq? (top "dark mode") 'toggle-theme)
-  (check-eq? (top "init.el") 'open-init-file)
+  (check-eq? (top "settings") 'open-init-file)
+  (check-eq? (top "preferences") 'open-init-file)
+  (check-eq? (top "run code") 'eval-selection)
   (check-not-false (memq 'paste (palette-matches "paste")) "the ordinary word still works")
   (check-equal? (palette-matches "zzzzqqq") '() "no match gives an empty list"))
 
@@ -76,12 +83,12 @@
   (define text (command-description 'paste))
   (check-regexp-match #rx"^Paste  [(]paste[)]" text)
   (check-regexp-match #rx"Insert the clipboard contents" text)
-  (check-regexp-match #rx"Also known as: yank" text)
+  (check-regexp-match #rx"Also known as: paste clipboard" text)
   (check-regexp-match #rx"Shortcut: " text))
 
 (test-case "friendly titles for the vocabulary examples"
   (check-equal? (command-title (find-command 'describe-key)) "What Does This Key Do?")
-  (check-regexp-match #rx"describe-key" (string-join (command-aliases (find-command 'describe-key)) " ")))
+  (check-regexp-match #rx"help key" (string-join (command-aliases (find-command 'describe-key)) " ")))
 
 (test-case "modes have display labels"
   (check-equal? (mode-display-name 'racket-mode) "Racket")
@@ -121,27 +128,20 @@
              (new-buffer "New Document") (describe-command "Explain a Command…"))])
     (check-equal? (command-title (find-command (car p))) (cadr p)))
   (check-eq? (top "Run Selection") 'eval-selection)
-  (check-eq? (top "eval-region") 'eval-selection)
+  (check-eq? (top "run code") 'eval-selection)
   (check-eq? (top "evaluate selection") 'eval-selection "the old title still finds it")
   (check-eq? (top "reload init file") 'reload-init)
-  (check-eq? (top "*Messages*") 'show-messages)
-  (check-eq? (top "describe-function") 'describe-command)
-  (check-eq? (top "glossary") 'show-glossary)
+  (check-eq? (top "show messages") 'show-messages)
+  (check-eq? (top "explain command") 'describe-command)
   (check-eq? (top "cheat sheet") 'show-cheat-sheet)
   (check-eq? (top "shortcuts as text") 'list-keybindings))
 
 (test-case "buffer display names have no Emacs stars"
   (check-equal? (send (messages-buffer) get-name) "Activity")
   (run-command 'list-keybindings)
-  (check-equal? (send (current-buffer) get-name) "Shortcuts as Text")
-  (run-command 'show-glossary)
-  (check-equal? (send (current-buffer) get-name) "Glossary")
-  (check-regexp-match #rx"kill ring +Clipboard History" (send (current-buffer) get-text)))
+  (check-equal? (send (current-buffer) get-name) "Shortcuts as Text"))
 
-(test-case "the README glossary table matches the code"
-  (check-true (regexp-match? (regexp-quote (glossary-markdown)) (file->string readme))
-              "regenerate the README table from rackmac/glossary.rkt"))
-
-(test-case "Emacs terms for commands that exist find them in the palette (kill ring waits for Clipboard History)"
-  (for ([g glossary] #:when (member (car g) '("kill / yank" "M-x" "describe-key" "describe-function" "*Messages*")))
-    (check-true (pair? (palette-matches (car (regexp-split #rx" / |, " (car g))))) (car g))))
+(test-case "the default product's aliases carry no Emacs names (the preset restores them from rackmac/presets/emacs-names.rktd)"
+  (for ([term '("yank" "kill-region" "isearch" "M-x" "*Messages*" "describe-function"
+                "kill-whole-line" "beginning-of-line" "eval-region")])
+    (check-equal? (palette-matches term) '() (format "'~a' should not match by default" term))))

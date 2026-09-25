@@ -1,11 +1,11 @@
 #lang racket/base
 ;; The restyled command palette and the searchable shortcut cheat sheet: picker.rkt dressed
-;; up with placement over the top third of the main window, a Category column, a help/alias
+;; up with placement over the top third of the main window, a Category column, a help
 ;; footer and a helpful empty state (docs/UI-DESIGN.md §2, §7.3; issues #257, #30, #31, #39).
 (require racket/class racket/string racket/gui/base
          "../command.rkt" "../editor.rkt" "../picker.rkt" "../cheatsheet.rkt")
 (provide dialog-placement command-palette-columns cheat-sheet-columns
-         emacs-alias-of palette-pick cheat-sheet-pick)
+         palette-pick cheat-sheet-pick)
 
 ;; Pure placement math (docs/UI-DESIGN.md §2): center the dialog horizontally on the frame;
 ;; its top sits 15% of the way down from the frame's top ("over the top third"). Takes plain
@@ -33,27 +33,16 @@
 (define command-palette-columns (list "Command" "Category" "Shortcut"))
 (define cheat-sheet-columns (list "Command" "Category" "macOS" "Windows"))
 
-;; An alias that reads as an Emacs command name: "M-..."/"C-..." forms first (M-x, C-g), else
-;; a hyphenated, space-free word (kill-region); a plain word like "yank" only counts once no
-;; hyphenated alias exists, so Paste still shows "Emacs: yank".
-(define (emacs-alias-of c)
-  (define aliases (command-aliases c))
-  (or (for/first ([a (in-list aliases)] #:when (regexp-match? #rx"^(M-|C-)" a)) a)
-      (for/first ([a (in-list aliases)] #:when (and (regexp-match? #rx"-" a) (not (regexp-match? #rx" " a)))) a)
-      (for/first ([a (in-list aliases)] #:when (not (regexp-match? #rx" " a))) a)))
-
 (define hint "↑↓ move · ⏎ run · esc close")
 
 ;; item: (list title shortcut name search-fields category), per commands.rkt's palette-items.
+;; Footer = the command's help text plus the key hint.
 (define (command-footer it q)
   (cond
     [(not it) (format "No commands match '~a'. Check the spelling, or open Help > Keyboard Shortcuts." q)]
     [else
      (define c (find-command (caddr it)))
-     (define alias (and c (emacs-alias-of c)))
-     (string-append (if c (command-help c) "")
-                     (if alias (format "   Emacs: ~a" alias) "")
-                     "   " hint)]))
+     (string-append (if c (command-help c) "") "   " hint)]))
 
 ;; Used by both the Command Palette and Explain a Command, so both get the restyled columns,
 ;; placement, footer and empty state (they search the same list: commands.rkt's palette-items).

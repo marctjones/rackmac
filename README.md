@@ -1,40 +1,31 @@
 # Rackmac
 
-An Emacs-style editor for the desktop, scripted in Racket instead of Emacs Lisp.
-Modern shortcuts (Cmd on macOS, Ctrl on Windows), a command palette, tabs, and a live,
-redefinable core. See [DESIGN.md](DESIGN.md) for the full design, [docs/UI-DESIGN.md](docs/UI-DESIGN.md) for the
-visual design and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for how to contribute. This file covers what is built.
+A modern, native notes and documents editor for the desktop — macOS first, Windows next —
+that you can program in Racket. Native shortcuts (Cmd on macOS, Ctrl on Windows), a command
+palette, tabs, and a live, redefinable core: extend or reshape the app with ordinary Racket
+code, no plugin API to learn beyond `#lang rackmac`. See [DESIGN.md](DESIGN.md) for the full
+design, [docs/UI-DESIGN.md](docs/UI-DESIGN.md) for the visual design and
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for how to contribute. This file covers what is built.
 
 ## Run
 
     racket main.rkt [file ...]
-    raco test tests            # 251 tests
+    raco test tests            # 254 tests
 
 Needs Racket 9.x with the GUI libraries (the standard distribution).
 
-What is verified: the 251 automated tests (commands, keymaps, key-event normalization, the picker
+What is verified: the 254 automated tests (commands, keymaps, key-event normalization, the picker
 dialog driven by timers, startup, the extension loader, find/replace matching), and a launch on macOS (Apple Silicon)
 that renders correctly. **What is not verified:** that real keystrokes in the live window reach the
 buffer and run commands (one attempt with synthetic OS-level keystrokes produced no dispatch, and the
 cause is unresolved), and anything on a real Windows machine (the Windows key mapping is unit-tested
-with a simulated platform only). 
-## The Emacs ideas, in Racket
-
-| Idea | Where |
-|---|---|
-| Everything is a command; menus, palette and keys all read one registry | `rackmac/command.rkt` |
-| Layered keymaps: minor mode → major mode → global; key chords | `rackmac/keymap.rkt`, `rackmac/input.rkt` |
-| Major/minor modes with inheritance, buffer-local variables, hooks | `rackmac/mode.rkt`, `rackmac/hook.rkt`, `rackmac/buffer.rkt` |
-| A live extension language, with ownership and unloading | `rackmac/eval.rkt`, `rackmac/api.rkt`, `rackmac/owner.rkt`, `rackmac/lang/` |
-| Self-documenting: describe key, describe command, a searchable shortcut cheat sheet | `rackmac/commands.rkt`, `rackmac/ui/palette.rkt` |
-
-Storage, rendering, selection and undo come from Racket's `text%`; the Emacs-style layer sits on top.
+with a simulated platform only).
 
 The command palette (`rackmac/ui/palette.rkt`) sits over the top third of the main window with
-Command, Category and Shortcut columns, a footer showing the highlighted command's help text and
-its Emacs alias, and a helpful empty state. Help > Keyboard Shortcuts opens the same kind of
-picker over every default shortcut on both platforms, grouped by category and filterable by
-typing; Enter runs the selected command. "Shortcuts as Text" keeps the plain-text list.
+Command, Category and Shortcut columns, a footer showing the highlighted command's help text,
+and a helpful empty state. Help > Keyboard Shortcuts opens the same kind of picker over every
+default shortcut on both platforms, grouped by category and filterable by typing; Enter runs
+the selected command. "Shortcuts as Text" keeps the plain-text list.
 
 ## Customize: `#lang rackmac`
 
@@ -63,11 +54,12 @@ Set `RACKMAC_HOME` to use a different config directory, `RACKMAC_THEME=dark|ligh
 ### Command metadata
 
 `define-command` takes optional metadata that the menus, palette and Describe screens read:
-`#:title` (the name people see), `#:aliases` (extra search terms, e.g. the Emacs name), `#:help` (one plain
-sentence), `#:icon` (for the toolbar), `#:when` (a thunk: does the command apply right now?),
-plus `#:doc`, `#:keys`, `#:menu`. A command's symbol name never changes when its title does, so
-`bind-key!` and `run-command` in your init file keep working. `define-mode` takes `#:label`
-(what people see, e.g. "Plain Text"). Typing `yank` in the palette finds Paste, and Describe shows both names.
+`#:title` (the name people see), `#:aliases` (extra search terms — plain words people might type),
+`#:help` (one plain sentence), `#:icon` (for the toolbar), `#:when` (a thunk: does the command apply
+right now?), plus `#:doc`, `#:keys`, `#:menu`. A command's symbol name never changes when its title
+does, so `bind-key!` and `run-command` in your init file keep working. `define-mode` takes `#:label`
+(what people see, e.g. "Plain Text"). Typing `paste` in the palette finds Paste, and Describe shows
+every alias.
 
 ### Toolbar
 
@@ -138,31 +130,26 @@ they are removed when their extension unloads.
 Known limits: live-evaluated code (`Mod-Enter`) is not tracked as an extension, and the API restriction
 applies to `require` at load time, not to code that runs later.
 
-## Glossary: Emacs terms
+## Architecture (for developers)
 
-Rackmac shows office-style names; the command palette also understands the Emacs ones.
+Rackmac's core borrows a handful of proven editor ideas — implemented fresh in Racket, not
+inherited code:
 
-| Emacs | Rackmac |
+| Idea | Where |
 |---|---|
-| buffer | Document, Tab |
-| window / frame | Pane / Window |
-| point, mark, region | Cursor, Selection |
-| kill / yank | Cut / Paste |
-| kill ring | Clipboard History |
-| M-x | Command Palette |
-| minibuffer, echo area | Command bar, Status message |
-| mode line | Status bar |
-| major mode | Language |
-| minor mode | Option |
-| keymap, key binding | Shortcut |
-| hook | Trigger |
-| init file | Customize with Code |
-| evaluate | Run |
-| *scratch* | Scratch Pad |
-| *Messages* | Activity log |
-| describe-key | What Does This Key Do? |
-| describe-function | Explain a Command |
-| package | Extension |
+| Everything is a command; menus, palette and keys all read one registry | `rackmac/command.rkt` |
+| Layered keymaps: minor mode → major mode → global; key chords | `rackmac/keymap.rkt`, `rackmac/input.rkt` |
+| Major/minor modes with inheritance, buffer-local variables, hooks | `rackmac/mode.rkt`, `rackmac/hook.rkt`, `rackmac/buffer.rkt` |
+| A live extension language, with ownership and unloading | `rackmac/eval.rkt`, `rackmac/api.rkt`, `rackmac/owner.rkt`, `rackmac/lang/` |
+| Self-documenting: describe key, describe command, a searchable shortcut cheat sheet | `rackmac/commands.rkt`, `rackmac/ui/palette.rkt` |
+
+Storage, rendering, selection and undo come from Racket's `text%`. Several of these ideas —
+the command registry, layered keymaps, buffer-local state, a live extension language — trace
+back to Emacs, reimplemented here for a native desktop UI with office-style vocabulary and
+shortcuts throughout; nothing in the default product names Emacs or uses its terms. An
+opt-in preset (v0.8, epic E13, tracked in #263) will let people who know Emacs bring its
+names and key bindings back: see `rackmac/presets/emacs-names.rktd` (the preserved alias
+data, not loaded by default) and `docs/emacs-glossary.md` (the term mapping).
 
 ## Shortcuts
 

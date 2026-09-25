@@ -38,8 +38,11 @@ Rules for anyone (person or agent) changing this repository.
 - Every change adds or updates tests. Prefer behavior tests through the real registry and the real (hidden)
   window (`tests/window-test.rkt`, `tests/toolbar-test.rkt` show how: `make-main-frame` without `show`,
   drive controls with `command`, synthetic `key-event%`/`mouse-event%`, assert through hooks and state).
-- Generated docs have drift tests: the README shortcut table (`rackmac/cheatsheet.rkt`), the glossary
-  (`rackmac/glossary.rkt`), `ROADMAP.md` (`racket tools/roadmap.rkt`). Regenerate them when they change.
+- Generated docs have drift tests: the README shortcut table (`rackmac/cheatsheet.rkt`),
+  `ROADMAP.md` (`racket tools/roadmap.rkt`). Regenerate them when they change. The Emacs
+  glossary (`docs/emacs-glossary.md`) and alias data (`rackmac/presets/emacs-names.rktd`)
+  are for the opt-in v0.8 preset only; nothing in the default product loads them
+  (`tests/no-emacs-test.rkt`).
 - GUI test files `(require "no-front.rkt")` FIRST (before racket/gui) so tests never take keyboard focus.
 - Never launch the GUI (`racket main.rkt`), send keystrokes, or take screenshots from an automated agent.
   Visual checks are done by the maintainer session, announced to the owner first, launched with
