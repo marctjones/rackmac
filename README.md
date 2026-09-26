@@ -1,5 +1,7 @@
 # Rackmac
 
+[![test](https://github.com/marctjones/rackmac/actions/workflows/test.yml/badge.svg)](https://github.com/marctjones/rackmac/actions/workflows/test.yml)
+
 A modern, native notes and documents editor for the desktop — macOS first, Windows next —
 that you can program in Racket. Native shortcuts (Cmd on macOS, Ctrl on Windows), a command
 palette, tabs, and a live, redefinable core: extend or reshape the app with ordinary Racket

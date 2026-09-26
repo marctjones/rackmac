@@ -1,0 +1,29 @@
+# Runs the whole test suite on macOS on every push and pull request (#284).
+# Windows is deferred (label platform:windows); add a windows-latest job when that work starts.
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Bogdanp/setup-racket@v1.15
+        with:
+          version: '9.3'
+          variant: CS
+          distribution: full
+      - name: Compile
+        run: raco make -v rackmac/*.rkt rackmac/ui/*.rkt rackmac/lang/*.rkt tests/*.rkt main.rkt tools/*.rkt
+      - name: App tests
+        env:
+          RACKMAC_NO_FRONT: '1'
+        run: raco test tests
+      - name: Markdown library tests
+        run: raco test rackmac-markdown
+      - name: Markdown library installs as its own package
+        run: raco pkg install --auto --copy --batch ./rackmac-markdown && racket -l rackmac-markdown -e '(void)'
