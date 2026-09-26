@@ -5,7 +5,8 @@
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/list racket/string
          "../rackmac/commands.rkt" "../rackmac/command.rkt" "../rackmac/keymap.rkt"
-         "../rackmac/platform.rkt" "../rackmac/cheatsheet.rkt" racket/file racket/runtime-path)
+         "../rackmac/platform.rkt" "../rackmac/cheatsheet.rkt" "../rackmac/ui/settings-dialog.rkt"
+         "../rackmac/tools-menu.rkt" racket/file racket/runtime-path)
 (define-runtime-path readme "../README.md")
 
 (define (keys-on plat name)
@@ -32,7 +33,7 @@
     ("Mod-=" zoom-in "Zoom in (Chrome)") ("Mod--" zoom-out "Zoom out") ("Mod-0" zoom-reset "Actual size")
     ("Mod-1" go-to-tab-1 "Tab 1 (Chrome)") ("Mod-9" go-to-tab-9 "Last tab (Chrome)")
     ("Ctrl-Tab" next-tab "Next tab (Chrome)") ("Ctrl-Shift-Tab" previous-tab "Previous tab")
-    ("Mod-," customize-with-code "Preferences/Settings (macOS, Chrome)")))
+    ("Mod-," open-settings "Preferences/Settings (macOS, Chrome)")))
 
 (define mac-only
   '(("Mod-Shift-z" redo "Redo (macOS)")

@@ -3,7 +3,15 @@
 (require racket/class racket/gui/base
          "commands.rkt" "toolbar-defaults.rkt" "status-defaults.rkt" "context-defaults.rkt"
          "command.rkt" "editor.rkt" "frame.rkt" "eval.rkt" "theme.rkt" "hook.rkt"
-         "library/recents.rkt" "library/open-recent.rkt" "appearance.rkt" "office.rkt" "recovery.rkt")
+         "library/recents.rkt"
+         "library/open-recent.rkt"
+         "appearance.rkt"
+         "office.rkt"
+         "recovery.rkt"
+         "ui/settings-dialog.rkt"
+         "tools-menu.rkt"
+         ;; feature modules: one per line, so parallel work doesn't collide here
+         )
 (provide main)
 
 (define (main args)

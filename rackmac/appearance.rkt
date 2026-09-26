@@ -9,10 +9,16 @@
 
 (define editor-themes '(system light dark))
 
+;; Shared with the Settings dialog's choice% (#291) and the View > Editor Theme submenu below,
+;; so the two never drift apart.
+(define editor-theme-choices
+  '((system . "Use System Setting") (light . "Light") (dark . "Dark")))
+
 (define-setting editor-theme
   #:contract (lambda (v) (and (memq v editor-themes) #t))
   #:default 'system
   #:category "Appearance"
+  #:choices editor-theme-choices
   #:doc "Editor theme: follow the system appearance, or always Light or Dark.")
 
 ;; How the system appearance is read: a parameter so tests can stand in for macOS.
@@ -48,9 +54,9 @@
 ;; View > Editor Theme ▸ System / Light / Dark, the current choice checked.
 (define (populate! m)
   (define current (setting-ref 'editor-theme))
-  (for ([choice (in-list editor-themes)]
-        [label (in-list '("Use System Setting" "Light" "Dark"))])
-    (new checkable-menu-item% [label label] [parent m] [checked (eq? choice current)]
+  (for ([choice+label (in-list editor-theme-choices)])
+    (define choice (car choice+label))
+    (new checkable-menu-item% [label (cdr choice+label)] [parent m] [checked (eq? choice current)]
          [callback (lambda (i e) (setting-set! 'editor-theme choice))])))
 
 (register-submenu! "Editor Theme" #:menu "View" #:menu-order 22 populate!)
