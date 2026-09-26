@@ -17,7 +17,7 @@
 (require racket/class racket/gui/base racket/list racket/string racket/lazy-require
          "command.rkt" "editor.rkt" "hook.rkt" "mode.rkt" "settings.rkt" "platform.rkt"
          "context-menu.rkt" "frame.rkt" "md-style.rkt" (only-in "ui/tokens.rkt" token)
-         (only-in "../rackmac-markdown/main.rkt"
+         (only-in "markdown-lib.rkt"
                   parse-document document-text all-extensions style-runs run-start run-end run-roles
                   run-node link? link-kind))
 (provide (struct-out spell-checker) null-spell-checker current-spell-checker

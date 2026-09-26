@@ -7,7 +7,7 @@
 ;; no parse, so the one line under the pointer is parsed on its own (inline links, autolinks and
 ;; wiki links work; reference links need their definitions and do not).
 (require racket/class racket/string racket/list racket/path net/uri-codec net/url
-         "../rackmac-markdown/main.rkt" "md-style.rkt")
+         "markdown-lib.rkt" "md-style.rkt")
 (provide markdown-link-at link-target-at resolve-link)
 
 ;; The target of the link covering `pos` in `doc`, as written: a URL or path for a link or

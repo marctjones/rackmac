@@ -36,13 +36,22 @@ Rules for anyone (person or agent) changing this repository.
 
 - Run everything: `raco make rackmac/*.rkt rackmac/ui/*.rkt rackmac/lang/*.rkt rackmac/library/*.rkt tests/*.rkt main.rkt && raco test tests`
 - `rackmac-markdown/` (docs/MARKDOWN-DESIGN.md) is a separate sibling package with its own tests:
-  `raco test rackmac-markdown` (no install needed; it also runs unlinked). Locally and in CI,
-  installing both is two steps: `raco pkg install --link ./rackmac-markdown` (its own package;
-  `commonmark-lib` is an optional build-only oracle dependency, network-fetched on demand) then
-  `raco pkg install --link .` for the app -- the two cannot be `--link`-installed together in one
-  command from this checkout, since `rackmac-markdown/` sits inside the app's own directory tree
-  and `raco pkg install --link` refuses overlapping linked directories; `racket main.rkt` needs
-  neither installed.
+  `raco test rackmac-markdown` (no install needed; it also runs unlinked).
+- Packages (#285): the checkout root is not a package. `rackmac/` is the app package (single
+  collection `rackmac`, `rackmac/info.rkt`) and `rackmac-markdown/` the library package; tests/,
+  tools/ and docs/ are never installed. Install both in one command from the checkout root, both
+  copied or both linked: `raco pkg install --auto ./rackmac-markdown ./rackmac` (or with `--link`);
+  `commonmark-lib` is an optional build-only oracle dependency of the library, fetched by `--auto`.
+  Then `(require rackmac/api)` and `#lang rackmac` resolve anywhere, and
+  `racket -l- rackmac/app [file ...]` launches the installed app. Do not install `.` itself: a
+  multi-collection root would install tests/ and tools/ as collections, and its nested
+  rackmac-markdown/ conflicts with the library package (if you linked the root under the old
+  instructions, `raco pkg remove` it first; `raco pkg show` names it). A `--link`ed app with a copied library
+  loads two instances of the library, so link both or copy both. The app reaches the library
+  through `rackmac/markdown-lib.rkt`: the sibling directory when present (checkout, link install),
+  else the installed collection. Nothing needs installing to work from the checkout: `racket
+  main.rkt` puts the checkout on the collection path itself. CI tests the uninstalled checkout,
+  then installs both packages and checks `racket -l rackmac/api`.
 - Every change adds or updates tests. Prefer behavior tests through the real registry and the real (hidden)
   window (`tests/window-test.rkt`, `tests/toolbar-test.rkt` show how: `make-main-frame` without `show`,
   drive controls with `command`, synthetic `key-event%`/`mouse-event%`, assert through hooks and state).

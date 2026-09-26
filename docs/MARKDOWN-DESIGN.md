@@ -343,8 +343,8 @@ for generated documents (the Today view, imports). It is not used to save the us
 in a `'multi` package only the root `info.rkt` declares dependencies, and installing the library would drag in
 `gui-lib`. So `rackmac-markdown/` is a **sibling package** with its own `info.rkt` (`(define collection
 "rackmac-markdown")`, `deps '("base")`, `build-deps '("rackunit-lib" "commonmark-lib")`), the layout
-racket-commonmark itself uses, and the app's `info.rkt` lists `"rackmac-markdown"` in `deps`. Locally and in CI that
-is two installs (`raco pkg install ./rackmac-markdown ./`); `raco distribute` bundles collections regardless of
+racket-commonmark itself uses, and the app's `rackmac/info.rkt` lists `"rackmac-markdown"` in `deps`. Locally and in CI that
+is two installs (`raco pkg install ./rackmac-markdown ./rackmac`, #285); `raco distribute` bundles collections regardless of
 packages. This touches #246 `pkg-hygiene`, so `mdlib-pkg` carries that change rather than pretending #246 is untouched:
 
 ```
