@@ -10,10 +10,12 @@
 ;; edit sequences that are not undoable, and restores the modified flag, as highlight.rkt does.
 ;;
 ;; Styles. Each run's role stack (outermost first) folds into one set of effects (size factor,
-;; weight, slant, face, colors, underline); that becomes one style: a join of the document's base
-;; style ("Prose") with a delta style holding the effects. One level of join only, so zoom (which
-;; changes "Standard", and through it "Prose") re-sizes every note style at once. The single-role
-;; styles are also named in the shared style list ("Heading 1" .. "Heading 6", "Markup", ...).
+;; weight, slant, face, colors, underline); that becomes one delta style derived from the
+;; document's base style ("Prose"), so zoom (which changes "Standard", and through it "Prose")
+;; re-sizes every note style at once. The single-role styles are named in the shared style list
+;; ("Heading 1" .. "Heading 6", "Markup", ...). Join styles are avoided on purpose: snip-lib's
+;; join update (racket/snip/private/style.rkt, s-update) stores the transparent-text flag on the
+;; shift style instead of the join, so every joined style painted a white text background.
 (require racket/class racket/gui/base racket/list
          "../rackmac-markdown/main.rkt" "theme.rkt" "hook.rkt" (rename-in "ui/tokens.rkt" [token color-token]))
 (provide render-markdown! markdown-edit! markdown-flush!
@@ -61,22 +63,20 @@
   (when (fx-italic? f) (send d set-style-on 'italic))
   (when (eq? (fx-face f) 'mono) (send d set-delta-face mono-face 'modern))
   (when (fx-fg f) (send d set-delta-foreground (color-token (fx-fg f))))
-  (when (fx-bg f)
-    (send d set-delta-background (color-token (fx-bg f)))
-    (send d set-transparent-text-backing-off #t))
+  ;; Text backing is said explicitly both ways: a join does not carry the base style's
+  ;; transparent backing over, and an opaque one paints the (white) default background.
+  (cond
+    [(fx-bg f) (send d set-delta-background (color-token (fx-bg f)))
+               (send d set-transparent-text-backing-off #t)]
+    [else (send d set-transparent-text-backing-on #t)])
   (case (fx-underline f)
     [(on) (send d set-underlined-on #t)]
     [(off) (send d set-underlined-off #t)]
     [else (void)])
   d)
 
-(define (shift-style f)
-  (send editor-style-list find-or-create-style (send editor-style-list basic-style) (fx->delta f)))
-
-;; The named single-role styles ("Heading 1", "Markup", ...): each holds its role's delta over the
-;; root style, and the Formatted view joins it over "Prose". The theme's colors are in the deltas,
-;; so they are reset when the theme changes (set-delta; style%'s set-shift-style has a bug in
-;; snip-lib's style.rkt, `get-s-join-style`, so joins are never re-pointed).
+;; The named single-role styles ("Heading 1", "Markup", ...), each derived from "Prose". The
+;; theme's colors are in their deltas, which are reset when the theme changes.
 (define note-style-names
   '(("Heading 1" heading-1) ("Heading 2" heading-2) ("Heading 3" heading-3)
     ("Heading 4" heading-4) ("Heading 5" heading-5) ("Heading 6" heading-6)
@@ -86,30 +86,30 @@
 (define (refresh-named-styles!)
   (unless (eq? named-theme (current-theme-name))
     (set! named-theme (current-theme-name))
+    (define prose (send editor-style-list find-named-style "Prose"))
     (for ([e (in-list note-style-names)])
       (define d (fx->delta (stack->fx (cdr e))))
       (define named (send editor-style-list find-named-style (car e)))
       (if named
           (send named set-delta d)
           (send editor-style-list new-named-style (car e)
-                (send editor-style-list find-or-create-style (send editor-style-list basic-style) d))))))
+                (send editor-style-list find-or-create-style prose d))))))
 
-;; (theme base-name . roles) -> style%. Styles are cached per theme: a theme change re-renders
-;; every document (appearance.rkt), which then picks up the new colors.
+;; (theme base-name . roles) -> style%. Cached per theme: a theme change re-renders every
+;; document (appearance.rkt), which then picks up the new colors.
 (define style-cache (make-hash))
 (define (markdown-style-for base-name roles)
+  (refresh-named-styles!)          ; the named styles are shared by every theme's cache entries
   (hash-ref! style-cache (list* (current-theme-name) base-name roles)
              (lambda ()
                (define base (send editor-style-list find-named-style base-name))
+               (define named (and (equal? base-name "Prose") (pair? roles) (null? (cdr roles))
+                                  (for/first ([e (in-list note-style-names)] #:when (eq? (cadr e) (car roles)))
+                                    (send editor-style-list find-named-style (car e)))))
                (cond
                  [(null? roles) base]
-                 [else
-                  (refresh-named-styles!)
-                  (define named (and (null? (cdr roles))
-                                     (for/first ([e (in-list note-style-names)] #:when (eq? (cadr e) (car roles)))
-                                       (send editor-style-list find-named-style (car e)))))
-                  (send editor-style-list find-or-create-join-style base
-                        (or named (shift-style (stack->fx roles))))]))))
+                 [named named]
+                 [else (send editor-style-list find-or-create-style base (fx->delta (stack->fx roles)))]))))
 
 ;; ---- per-document state ---------------------------------------------------------------------
 
@@ -219,7 +219,8 @@
   (send b begin-edit-sequence #f #f)
   (proc)
   (send b end-edit-sequence)
-  (send b set-modified was-modified?))
+  ;; only when styling changed it: buffer% announces every set-modified
+  (unless (eq? was-modified? (send b is-modified?)) (send b set-modified was-modified?)))
 
 ;; One change-style per stretch of runs that resolve to the same style. After a reset to the
 ;; base style, runs without roles need nothing.
