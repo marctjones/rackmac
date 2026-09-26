@@ -25,8 +25,9 @@ into your own Racket), runs `raco exe --gui` and `raco distribute`, and sets the
 icon, version and document types (`.md`, `.markdown` and `.txt` files list Rackmac under Finder's
 Open With). `--smoke` then starts the built app headless (`RACKMAC_SMOKE=1`: it loads everything,
 prints one line per check and quits without showing a window) with no Racket or Homebrew on
-`PATH`. The app is not signed: a copy downloaded from elsewhere needs right-click > Open the first
-time. Pandoc (Word import and export) is found in `/opt/homebrew/bin` or `/usr/local/bin` even
+`PATH`. The app is not signed (#20): a copy built on this Mac opens normally, but one downloaded from
+elsewhere is refused at first launch until allowed in System Settings > Privacy & Security
+("Open Anyway"). Pandoc (Word import and export) is found in `/opt/homebrew/bin` or `/usr/local/bin` even
 when the app is started from Finder. Inside the app, extensions may require `rackmac/api` and the
 libraries the app itself contains (`racket/base`, `racket/list`, `racket/string`, `racket/date`,
 `racket/gui/base`, ...), not other installed collections.
