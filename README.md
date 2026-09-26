@@ -194,6 +194,7 @@ everything, including commands without a shortcut.
 | Edit | Move Line Down | ⌥↓ | Alt+Down |
 | Edit | Indent Lines | ⌘] | Ctrl+] |
 | Edit | Outdent Lines | ⌘[, ⇧⇥ | Ctrl+[, Shift+Tab |
+| Edit | Insert Date | ⌃⇧D | Alt+Shift+D |
 | View | Zoom In | ⌘=, ⇧⌘= | Ctrl+=, Ctrl+Shift+= |
 | View | Zoom Out | ⌘- | Ctrl+- |
 | View | Actual Size | ⌘0 | Ctrl+0 |

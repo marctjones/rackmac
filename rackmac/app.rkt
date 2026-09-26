@@ -10,6 +10,7 @@
          "recovery.rkt"
          "ui/settings-dialog.rkt"
          "tools-menu.rkt"
+         "insert-date.rkt"
          ;; feature modules: one per line, so parallel work doesn't collide here
          )
 (provide main)

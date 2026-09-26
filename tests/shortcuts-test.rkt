@@ -5,8 +5,9 @@
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/list racket/string
          "../rackmac/commands.rkt" "../rackmac/command.rkt" "../rackmac/keymap.rkt"
-         "../rackmac/platform.rkt" "../rackmac/cheatsheet.rkt" "../rackmac/ui/settings-dialog.rkt"
-         "../rackmac/tools-menu.rkt" racket/file racket/runtime-path)
+         "../rackmac/platform.rkt" "../rackmac/cheatsheet.rkt"
+         "../rackmac/app.rkt"   ; every feature module, so their shortcuts are checked and listed too
+         racket/file racket/runtime-path)
 (define-runtime-path readme "../README.md")
 
 (define (keys-on plat name)
