@@ -1,6 +1,7 @@
 #lang racket/base
 ;; Icons: every menu command has one from the drawn set, each icon renders visible pixels
-;; at 1x and 2x, and icons are distinguishable from each other. All headless (bitmaps).
+;; at 1x and 2x, icons are distinguishable from each other, and the Workbench outlines are
+;; interpreted as SVG would draw them. All headless (bitmaps).
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/draw racket/list racket/string
          "../rackmac/ui/icons.rkt" "../rackmac/commands.rkt" "../rackmac/command.rkt")
@@ -50,3 +51,24 @@
 
 (test-case "bitmaps are cached"
   (check-eq? (icon-bitmap "copy") (icon-bitmap "copy")))
+
+;; ---- the Workbench set and its path interpreter ----------------------------------
+
+(define (bbox d)
+  (define-values (x y w h) (send (path->dc-path d) get-bounding-box))
+  (list x y w h))
+(define (close-to? as bs) (for/and ([a as] [b bs]) (< (abs (- a b)) 0.01)))
+
+(test-case "every icon is drawn from a named Workbench icon"
+  (check-equal? (icon-source "run") "play")
+  (check-equal? (icon-source "activity") "logbook-moth")
+  (for ([n (icon-names)])
+    (check-true (string? (icon-source n)) n)))
+
+(test-case "path interpreter: lines, quadratics and SVG arcs land where SVG puts them"
+  (check-true (close-to? (bbox "M2,2 L22,2 L22,22 Z") '(2 2 20 20)) "straight lines")
+  ;; a quadratic from (0,0) to (24,0) bulging to y=24 becomes a cubic with controls at y=16
+  (check-true (close-to? (bbox "M0,0 Q12,24 24,0 Z") '(0 0 24 16)) "quadratic as cubic")
+  ;; two half-circle arcs of radius 10 around (12,12): the full circle's box
+  (check-true (close-to? (bbox "M2,12 A10 10 0 1 0 22,12 A10 10 0 1 0 2,12 Z") '(2 2 20 20)) "arcs")
+  (check-exn exn:fail? (lambda () (path->dc-path "M0,0 T4,4")) "unsupported commands are an error"))

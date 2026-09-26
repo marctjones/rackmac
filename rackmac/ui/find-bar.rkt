@@ -3,7 +3,7 @@
 ;; and Replace All are delegated to the pure rackmac/search.rkt so this module only wires
 ;; widgets to buffer positions. docs/UI-DESIGN.md section 2, section 7.4.
 (require racket/class racket/gui/base
-         "../search.rkt" "../editor.rkt" "icons.rkt" "layout.rkt" "tokens.rkt" "status-bar.rkt")
+         "../search.rkt" "../editor.rkt" "../theme.rkt" "icons.rkt" "layout.rkt" "tokens.rkt" "status-bar.rkt")
 (provide find-bar%)
 
 ;; A text-field% that intercepts Enter/Shift+Enter (step) and Esc (close) before the editor
@@ -24,11 +24,13 @@
 (define count-box-w 210)
 (define count-box-h 18)
 
+(define count-font (ui-font))
+
 (define (render-count-bitmap text color)
   (define scale (or (get-display-backing-scale) 1.0))
   (define bm (make-bitmap count-box-w count-box-h #t #:backing-scale scale))
   (define dc (new bitmap-dc% [bitmap bm]))
-  (send dc set-font normal-control-font)
+  (send dc set-font count-font)          ; same face as the status bar
   (send dc set-text-foreground color)
   (define shown (truncate-to-width dc text count-box-w))
   (define-values (tw th td ta) (send dc get-text-extent shown))

@@ -97,6 +97,18 @@
 (define context-canvas%
   (class editor-canvas%
     (super-new)
+    ;; Prose documents sit centered at their measure, like a page (docs/UI-DESIGN.md 1.4):
+    ;; the insets grow with the window instead of every paragraph getting margins. Code
+    ;; documents keep the normal insets.
+    (define/public (fit-measure!)
+      (define ed (send this get-editor))
+      (define measure (and ed (send ed auto-wrap) (send ed measure-width)))
+      (define-values (cw ch) (send this get-client-size))
+      (define x (centered-inset cw measure))
+      (define y (if measure prose-inset-y editor-inset-y))
+      (unless (= x (send this horizontal-inset)) (send this horizontal-inset x))
+      (unless (= y (send this vertical-inset)) (send this vertical-inset y)))
+    (define/override (on-size w h) (super on-size w h) (fit-measure!))
     (define/override (on-event ev)
       (define ed (send this get-editor))
       (cond
@@ -130,7 +142,7 @@
   (add-hook! 'buffer-modified-changed (lambda (b) (refresh-tabs!) (send status-bar refresh)))
   (add-hook! 'current-buffer-changed (lambda (b) (show-buffer! b) (refresh-tabs!) (send status-bar refresh)))
   (add-hook! 'status-changed (lambda () (send status-bar refresh)))
-  (add-hook! 'mode-changed (lambda (b) (send status-bar refresh)))
+  (add-hook! 'mode-changed (lambda (b) (send canvas fit-measure!) (send status-bar refresh)))
   (add-hook! 'status-segments-changed (lambda () (send status-bar refresh)))
   ;; An edit that leaves the caret where it was (e.g. Replace All at position 0) fires
   ;; 'text-changed but not 'status-changed; the word count still needs a repaint.
@@ -140,6 +152,7 @@
   (add-hook! 'focus-editor focus-editor!)
   (add-hook! 'theme-changed
              (lambda () (send canvas set-canvas-background (canvas-background))
+                        (send canvas fit-measure!)          ; zoom changes the measure
                         (send canvas refresh)
                         (send status-bar refresh)))
 
@@ -157,6 +170,7 @@
 
 (define (show-buffer! b)
   (send canvas set-editor b)
+  (send canvas fit-measure!)
   (send canvas set-canvas-background (canvas-background))
   (update-title!)
   (send canvas focus))

@@ -30,7 +30,10 @@ _Changed 2026-09-25._
 - **Formatted or Source, per document.** Any Markdown document switches between the formatted view and plain
   Markdown source (View menu, a Format-group button, a status segment, ⌥⌘U as in Chrome's View Source); the choice
   is remembered per document; the same formatting keys edit the same characters in both (§2.2.1).
-- **Color:** the one token module for what we paint, light and dark, accent from the OS. No new roles were needed
+- **Theme: Skeptical Engineering** (§1.0). Paper for documents, the dark bench for the Library, moss as the one
+  accent, IBM Plex (Serif for notes, Mono for code, Sans for painted chrome text), Workbench drafting icons. Native
+  controls stay native; the theme lives on the surfaces we paint.
+- **Color:** the one token module for what we paint, light ("Paper") and dark ("Bench"). No new roles were needed
   for notes: headings use `heading`, markup `text-2`, links `accent`, overdue `error`.
 - **UX:** discover by menu, toolbar, palette and shortcut hints; Office/Pages/Notes/Chrome shortcuts only; non-modal
   feedback; designed empty states (start screen, empty Library, no backlinks yet); keyboard everything.
@@ -39,6 +42,35 @@ _Changed 2026-09-25._
 - **racket-skia:** out of scope (§5.1).
 
 ## 1. Visual language
+
+### 1.0 The Skeptical Engineering theme
+
+_Changed 2026-09-25 (new)._ Rackmac takes its look from the Skeptical Engineering design system
+(`skepticalengineering-design`: `docs/brand-book.md`, `tokens/tokens.json`, the Workbench icon set), the system the
+workshop's other desktop apps build against. Mockup: macOS Paper and Bench, Windows 11 Paper (the owner's design
+canvas, "Rackmac UI — Skeptical Engineering"). What that means inside our scope rules:
+
+- **Paper and bench.** Documents sit on `paper` (warm off-white, not white). The Library sidebar (§2.1) is the dark
+  `bench`, the same in both appearances. The brand's bench-colored *title bar* is not possible: the title bar and
+  menu bar are native, and stay so.
+- **Modern macOS and Windows 11, by layout and not by effects.** From the platforms we take what the brand allows:
+  a sidebar-plus-content window, a single toolbar row of native buttons, the platform's own title bar, menus and
+  control font, 4 px spacing, generous document margins, keyboard access everywhere. We do not imitate Mica,
+  acrylic, vibrancy, pill buttons or shadows; the brand forbids glass and layering, and `racket/gui` cannot restyle
+  native controls anyway. Structure comes from 1 px `stroke` rules and type.
+- **One accent.** `accent` is always `moss`. Earlier builds borrowed the OS highlight color; that is dropped, since the
+  system allows one accent. `ochre` marks caution (find matches, warnings), `rust` errors. Code coloring necessarily
+  uses more than one hue; it stays in those families (§1.2) at readable contrast.
+- **Type.** IBM Plex Serif for notes (the person's voice), IBM Plex Mono for code, paths and headings in the
+  Markdown source view, IBM Plex Sans for text we paint in the chrome. Plex is used when installed and falls back to
+  installed faces (§1.3). **Open question for the owner:** bundle the Plex TTFs (OFL 1.1) inside the app. `racket/draw`
+  cannot load a font file, so that needs a CoreText registration call through the FFI, a new kind of code in the
+  core. Until it is decided, installing Plex (for example `brew install --cask font-ibm-plex-serif
+  font-ibm-plex-mono font-ibm-plex-sans`) switches Rackmac to it with no other change.
+- **A note on audience.** The brand is "half workshop, half terminal"; the product is for lawyers who live in Word
+  (PRODUCT.md). Where the two pull apart the product wins: prose is serif at a readable size, labels are plain nouns
+  in Plex Sans rather than uppercase mono, and mono appears only where it carries information (code, paths, dates,
+  shortcuts).
 
 ### 1.1 What is native and what we paint
 
@@ -50,32 +82,35 @@ _Changed 2026-09-25: two additions in the right column (sidebar tree, editor sni
 
 ### 1.2 Color tokens (`rackmac/ui/tokens.rkt`)
 
-_Unchanged, as built. Notes reuse existing roles: `heading` for heading text, `text-2` for markup characters, quotes
-and done tasks, `accent` for link text and today's date, `error` for overdue, `match` for find, `line-highlight` off for
-prose. High-contrast columns remain RM-145._
+_Changed 2026-09-25: values are now the Skeptical Engineering tokens (§1.0); the roles are unchanged, plus four
+`bench-*` roles for the Library sidebar. Notes reuse existing roles: `heading` for heading text, `text-2` for markup
+characters, quotes and done tasks, `accent` for link text and today's date, `error` for overdue, `match` for find,
+`line-highlight` off for prose. High-contrast columns remain RM-145._
 
-Roles, not colors. `theme.rkt` already holds `bg fg comment string constant keyword error heading`; this table
-extends it and moves it behind `(token 'name)`. Seeds: GitHub-light/VS-dark values already in `theme.rkt` for
-faces; Fluent 2 and HIG neutrals for surfaces. `accent` comes from `get-highlight-background-color` (the OS
-selection color, which follows the Windows accent and the macOS accent setting) and is only used where we paint.
+Roles, not colors: code asks for `(token 'name)`, never a hex value. Each role names the design-system token it
+takes (the light value is the token's light value, the dark value its dark value). Two source tokens that fail
+4.5:1 for small text, `ink-label` and `bench-quiet`, are deliberately not mapped to any text role.
 
-| Role | Light | Dark | Used for |
-|---|---|---|---|
-| `surface` | #FFFFFF | #1E1E1E | editor background (`canvas-background`) |
-| `text` | #1F2328 | #D4D4D4 | editor text (`fg`) |
-| `text-2` | #636C76 | #9DA5AD | gutter numbers, status segments, placeholders, **Markdown markup, quotes, done tasks** |
-| `text-disabled` | #A6A6A6 | #6E6E6E | dimmed segments |
-| `stroke` | #D0D7DE | #3A3A3A | 1 px line above the status bar, gutter edge, **sidebar edge** |
-| `line-highlight` | #F6F8FA | #262626 | current line (prose Languages off, code on) |
-| `selection` | OS highlight (fallback #B3D7FF) | OS highlight (fallback #264F78) | text selection; `text%` uses the OS color itself |
-| `accent` | OS highlight, fallback #0067C0 / macOS #007AFF | fallback #60CDFF / macOS #0A84FF | status-bar hover underline, gutter marker for the current line, find count when matches exist, **link text, due today** |
-| `match` / `match-current` | #FFE08A / #FFB000 | #6B5900 / #7A4000 | Find All highlights (RM-109), 35% alpha |
-| `info` / `success` / `warning` / `error` | #0067C0 / #0F7B0F / #8A5100 / #C42B1C | #60CDFF / #6CCB5F / #FCE100 / #FF99A4 | status-bar icons, find "No matches", InfoBar text, **overdue tasks (`error`)** |
-| `status-bg` | #F3F3F3 (macOS #ECECEC) | #202020 (macOS #282828) | status bar; sits visually with the OS window color |
-| faces `comment string constant keyword heading` | as `theme.rkt` | as `theme.rkt` | syntax coloring, unchanged; `heading` also colors note headings |
+| Role | Light | Dark | Source token | Used for |
+|---|---|---|---|---|
+| `surface` | #F8F8F6 | #1C1C1C | `paper` | editor background (`canvas-background`) |
+| `text` | #2A2A28 | #C8C8C0 | `ink-body` | editor text (`fg`) |
+| `text-2` | #686860 | #909088 | `ink-quiet` | gutter numbers, status segments, placeholders, **Markdown markup, quotes, done tasks** |
+| `text-disabled` | #888880 | #808078 | `ink-label` | dimmed segments (not required to pass 4.5:1) |
+| `stroke` | #DCDCD4 | #3A3A36 | `rule` | 1 px line above the status bar, gutter edge, **sidebar edge** |
+| `line-highlight` | #EFEFE9 | #242422 | `paper-sunk` | current line (prose Languages off, code on), code spans |
+| `selection` | #D5E3D3 | #2F4430 | moss over paper | text selection where we paint it; `text%` draws the OS color itself |
+| `accent` | #4A7C4A | #80A080 | `moss` | status-bar hover underline, gutter marker for the current line, find count when matches exist, **link text, due today** |
+| `match` / `match-current` | #EDE3B8 / #D9C77E | #4A4424 / #5A4E20 | `ochre` family | Find All highlights (RM-109) |
+| `info` / `success` / `warning` / `error` | #505048 / #3A5C3A / #6A6030 / #7A3526 | #A0A090 / #A0C0A0 / #D8C890 / #E0A090 | `ink-muted` / `moss-ink` / `ochre-ink` / `rust-ink` | status-bar icons, find "No matches", InfoBar text, **overdue tasks (`error`)**; the system has no blue, so `info` is plain ink |
+| `status-bg` | #EFEFE9 | #242422 | `paper-sunk` | status bar: one step off the page, ruled above |
+| `comment` / `string` / `constant` / `keyword` | #686860 / #6A6030 / #505048 / #3A5C3A | #909088 / #D8C890 / #A0A090 / #A0C0A0 | `ink-quiet` (italic) / `ochre-ink` / `ink-muted` / `moss-ink` | syntax coloring in code Languages |
+| `heading` / `face-error` | #1C1C1C / #7A3526 | #E0E0D8 / #E0A090 | `ink` (bold) / `rust-ink` | note headings; lexer errors |
+| `bench` / `bench-heading` / `bench-text` / `bench-rule` | #1C1C1C / #E0E0D8 / #A0A090 / #505048 | #141413 / same / same / same | `bench-*` | the Library sidebar (§2.1): the workbench does not change when the lights go down |
 
-As built (`rackmac/ui/tokens.rkt`): the contrast test adjusted light `warning`, dark `match-current` and the dark
-`comment` face; the OS highlight is used as `accent` only when it reaches 3:1 on the surface.
+As built (`rackmac/ui/tokens.rkt`): the match colors are ours (the system's `ochre-tint` is too faint to find text
+by), picked so that `text` on them stays above 4.5:1; dark `match-current` was darkened from the first choice when
+the contrast test flagged it.
 
 Rules: `text` and `text-2` on `surface`, and every status token on `status-bg`, meet 4.5:1 (a test computes
 it); `stroke` and `accent` on their surfaces meet 3:1; nothing is conveyed by color alone (the current find match
@@ -84,16 +119,18 @@ a folded section also shows "…"). High-contrast variants (RM-145) are two more
 
 ### 1.3 Typography
 
-_Changed 2026-09-25: a `prose` slot is added; `mono` now applies to code Languages and to code spans inside notes._
+_Changed 2026-09-25: the Skeptical Engineering faces (§1.0). `prose` is IBM Plex Serif, `mono` IBM Plex Mono,
+painted `ui` text IBM Plex Sans; each falls back to the first installed face in its list (`resolve-face` over
+`get-face-list`, `rackmac/theme.rkt`)._
 
 Native controls use the OS control font automatically (`normal-control-font` is `.AppleSystemUIFont` 13 on
 macOS and Segoe UI on Windows; nothing to do). We choose fonts only for what we paint and for the start screen.
 
 | Slot | macOS | Windows | Where |
 |---|---|---|---|
-| `prose` | system family (SF Pro) 15, line spacing 4 | Segoe UI 11 pt | Markdown and Plain Text body; headings 1.6× / 1.35× / 1.15× bold (H4–H6 1.0× bold). Set through `style-delta%` `set-family 'system` so no face name is hard-coded (**verify** this yields SF Pro in `text%`; fallback `set-delta-face "Helvetica Neue"`). A setting offers a serif alternative (Georgia / Charter). |
-| `mono` | SF Mono → Menlo, 14 | Cascadia Mono → Consolas, 12 | code Languages, gutter, fenced code and inline code in notes; resolved once with `get-face-list` |
-| `ui` | `normal-control-font` (13) | `normal-control-font` (Segoe UI 9 pt) | status bar, InfoBar text, sidebar tree |
+| `prose` | IBM Plex Serif → Charter → Georgia, `mono` size + 1 (15), line spacing 4 | IBM Plex Serif → Cambria → Georgia | Markdown and Plain Text body: the "Prose" named style, derived from "Standard" (so zoom scales it), chosen by the Language's `document-style` local through `buffer%`'s `default-style-name`. Headings 1.6× / 1.35× / 1.15× bold (H4–H6 1.0× bold) arrive with `md-render`. |
+| `mono` | IBM Plex Mono → Menlo, 14 | IBM Plex Mono → Cascadia Mono → Consolas, 12 | code Languages ("Standard"), gutter, fenced code and inline code in notes (inline code one point smaller than the prose around it) |
+| `ui` | IBM Plex Sans at `normal-control-font`'s size, else the control font (13) | same (Segoe UI 9 pt) | status bar, InfoBar text, sidebar tree |
 | `ui-small` | `small-control-font` (11) | `small-control-font` | status segments when the window is narrow |
 | `title` | `ui` face at 22 bold | `ui` face at 20 bold | start screen heading (`message%` with `font`) |
 | `subtitle` | `ui` face at 15 | `ui` face at 14 | start screen card titles |
@@ -109,11 +146,13 @@ _Changed 2026-09-25: the prose measure is a page, not 80 columns; sidebar width 
 - **4 px grid** through `panel%` `border`, `spacing`, `horiz-margin`, `vert-margin`: window rows `border 0`,
   toolbar `spacing 4` with an 8 px gap (a `pane%` spacer) between groups, InfoBar and find row `border 8 spacing 8`,
   dialogs `border 16 spacing 12`, sidebar `border 0`, sidebar section headers 8 px above.
-- **Editor margins:** `horizontal-inset` 16, `vertical-inset` 12 (as built). **Prose measure:** 6.5 in of text
-  (Letter minus 1 in margins) at the current zoom, so about 620 px at 96 dpi; the text is **centered** by setting every
-  paragraph's left and right margins to `(view-width − measure) / 2` in `on-display-size` (existing augment in
-  `buffer.rkt`; today it only clamps `set-max-width` to `prose-measure` characters, which becomes the fallback when
-  the view is narrower than the measure). Code Languages: unwrapped, no centering.
+- **Editor margins:** `horizontal-inset` 16, `vertical-inset` 12 for code. **Prose measure:** `prose-measure`
+  (80) characters of the prose face, about 6.5 in at the default zoom; the text is **centered** by widening the
+  canvas's own horizontal inset to `(view-width − measure) / 2` (`centered-inset` in `layout.rkt`, applied by the
+  editor canvas on resize, on switching documents or Language, and on zoom), never below 16, with 48 px above the
+  first line (`prose-inset-y`). _Changed 2026-09-25:_ this replaces the earlier plan of per-paragraph margins, which
+  would have to be recomputed for every paragraph on each resize; `buffer.rkt`'s `set-max-width` clamp stays as the
+  fallback. Code Languages: unwrapped, no centering.
 - **Sidebar:** fixed 240 px (`min-width 240`, `stretchable-width #f`), a setting from 200 to 360; drag-resize arrives
   with the E9 splitter (v0.6).
 - **Row heights** follow the controls: toolbar = button height + 8; tab strip as `tab-panel%` draws it; status
@@ -123,19 +162,27 @@ _Changed 2026-09-25: the prose measure is a page, not 80 columns; sidebar width 
 
 ### 1.5 Icons
 
-_Changed 2026-09-25: names added for notes._
+_Changed 2026-09-25: the Skeptical Engineering Workbench set replaces the Fluent-style drawings; names added for
+notes._
 
-Fluent System Icons style: single-weight line icons on a 16-unit grid, 1 px stroke at 16 px, 1.5 at 20 px,
-round caps. Each icon is a small `racket/draw` path program in `rackmac/ui/icons.rkt`, rendered on demand into a
-`bitmap%` at the display's backing scale (`make-bitmap #:backing-scale`) and handed to `button%` as a bitmap
-label, so `#:icon` drives native buttons directly. Toolbar icons take their color from the native chrome
+The Workbench set: drafting-style line icons on a 24-unit grid, a 1.5-unit stroke (1 px at 16 px) with square caps
+and miter joins. Rackmac does not draw them itself: `tools/workbench-icons.rkt` copies the icons it uses from the
+design repository into `rackmac/ui/workbench-icons.rktd`, taking each icon's **outlined** form (the stroke already
+expanded to shapes), and `rackmac/ui/icons.rkt` interprets those paths (absolute `M L Q C A Z`; quadratics and arcs
+become cubics) into a `dc-path%` that it fills. So the icons match the design system exactly, and no SVG stroker is
+needed. The tool holds the mapping from Rackmac names to Workbench names (`run` → `play`, `activity` →
+`logbook-moth`, `palette` → `terminal`, `zoom-reset` → `ruler`, …); `icon-source` reports it. Icons are rendered on
+demand into a `bitmap%` at the display's backing scale (`make-bitmap #:backing-scale`) and handed to `button%` as
+a bitmap label, so `#:icon` drives native buttons directly. **Gap:** Workbench has no text-formatting icons (bold,
+italic, heading, lists, quote). The Format group uses letter labels for Bold and Italic, as Pages does, and the
+rest need drawing to `docs/iconography.md`'s rules in the design repository first, then vendoring. Toolbar icons take their color from the native chrome
 (`get-label-foreground-color`), not from the editor tokens, so they stay visible when the editor is dark and
 the Win32 chrome is light; only status-bar and gutter icons use `text`. Commands without `#:icon` get a
-letter tile (their initial in a rounded square), which RM-052 "Add to Toolbar" needs. Set as built (about 55):
+letter tile (their initial in a nearly square tile, `radius-sm`), which RM-052 "Add to Toolbar" needs. Set as built (49):
 `new open save save-as close undo redo cut copy paste select-all find replace goto comment duplicate delete-line
 arrow-up arrow-down indent outdent zoom-in zoom-out zoom-reset wrap theme activity palette language run run-all
 keyboard help book info settings extensions history search chevron-down chevron-right chevron-left more x check
-warning error split-right split-down sidebar record stop play`. **Added for notes:** `bold italic code-inline link
+warning error maximize print`. **Added for notes:** `bold italic code-inline link
 heading list-bullet list-number checklist quote export import word pdf note folder folder-cloud tag calendar outline
 backlink today lock`.
 
@@ -172,7 +219,17 @@ _Changed 2026-09-25 (new)._
   `~/Library/Mobile Documents/com~apple~CloudDocs/`. **Add Folder…** (`get-directory`) lists those candidates
   above the dialog button when they exist, with a cloud icon. That is the entire OneDrive/SharePoint integration:
   the sync client does the syncing, Rackmac reads and writes files. No Graph API, no sign-in.
-- **Sections, top to bottom** (each a header `message%` in `ui-small` caps, `text-2`):
+- **Look (Skeptical Engineering, §1.0).** The sidebar is the `bench`: `bench-text` rows in `ui`, the selected row
+  `bench-heading` with a 2 px `accent` marker on its left edge, `bench-rule` between sections and on the edge
+  next to the tabs, sections labelled in `ui-small` (not uppercase mono: `bench-quiet` fails contrast). A bench is
+  only possible on surfaces we paint: a native `list-box%` draws the OS's light table and a native `text-field%` a
+  white box. **Decision for the owner (open):** (a) every sidebar list editor-based (`hierarchical-list%` takes our
+  background and styles) and the filter a painted row "Find a note ⇧⌘O" that opens Quick Open over the Library, as
+  the mockup shows; or (b) a `paper-sunk` sidebar that keeps native `list-box%`es and a native filter field, which
+  keeps the OS's VoiceOver support for Recent, Tags, Outline and Backlinks (§2.5) but gives up the bench.
+  Recommended: (a), because the Folders tree is already editor-based in either plan, so the E10 accessibility work
+  (v0.7) is needed for the sidebar regardless; (a) adds three more lists to that work.
+- **Sections, top to bottom** (each a header in `ui-small`, `bench-text`):
   1. `text-field%` **Filter** (matches titles and paths; Enter opens the first hit; ⇧⌘O Quick Open is the same
      search as a picker).
   2. **Recent** (`list-box%`, last 10, from `recents.rktd`).

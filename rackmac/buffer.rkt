@@ -46,8 +46,23 @@
       (define new (find-mode name))
       (when (and new (mode-on-enable new)) ((mode-on-enable new) this))
       (send this auto-wrap (and (local-ref 'wrap-lines #f) #t))
+      (send this set-line-spacing (local-ref 'line-spacing 1))
+      (restyle-document!)
       (rehighlight!)
       (run-hook 'mode-changed this))
+    ;; The Language decides the document's base style: "Prose" (serif) for text-mode and its
+    ;; children, "Standard" (monospace) for code. Highlighters reset to it (highlight.rkt).
+    ;; (While text% is still being constructed its own style list has no "Prose" yet.)
+    (define/override (default-style-name)
+      (define name (local-ref 'document-style "Standard"))
+      (if (send (send this get-style-list) find-named-style name) name "Standard"))
+    ;; Put the whole document back on its base style, outside undo and the modified flag.
+    (define/public (restyle-document!)
+      (define was-modified? (send this is-modified?))
+      (send this begin-edit-sequence #f #f)
+      (send this change-style (send (send this get-style-list) find-named-style (default-style-name)) 0 'end)
+      (send this end-edit-sequence)
+      (send this set-modified was-modified?))
     (define/public (enable-minor-mode! name)
       (unless (memq name minors)
         (set! minors (cons name minors))
@@ -203,7 +218,7 @@
       (define dc (send this get-dc))
       (and cols dc
            (let-values ([(w h d a) (send dc get-text-extent "0"
-                                         (send (send (send this get-style-list) find-named-style "Standard") get-font))])
+                                         (send (send (send this get-style-list) find-named-style (default-style-name)) get-font))])
              (* cols w))))
     (define/augment (on-display-size)
       (when (send this auto-wrap)

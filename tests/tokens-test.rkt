@@ -35,22 +35,28 @@
 
 (test-case "the accent is visible on the surface and status bar (3:1)"
   (for* ([app '(light dark)] [bg '(surface status-bg)])
-    (parameterize ([current-os-accent (lambda () #f)])
-      (check-true (>= (ratio 'accent bg app) 3.0) (format "~a: accent on ~a" app bg)))))
+    (check-true (>= (ratio 'accent bg app) 3.0) (format "~a: accent on ~a" app bg))))
 
-(test-case "the OS accent is used only when it is readable"
-  (parameterize ([current-os-accent (lambda () "#B3D7FF")])        ; macOS default: pale selection blue
-    (check-equal? (token-hex 'accent 'light) "#0067C0" "too pale on white: fallback"))
-  (parameterize ([current-os-accent (lambda () "#8E24AA")])        ; a strong purple accent
-    (check-equal? (token-hex 'accent 'light) "#8E24AA" "readable: the user's accent wins")))
+(test-case "Skeptical Engineering: paper ground and moss the one accent, whatever the OS accent is"
+  (check-equal? (token-hex 'surface 'light) "#F8F8F6" "paper")
+  (check-equal? (token-hex 'surface 'dark) "#1C1C1C" "paper, dark")
+  (check-equal? (token-hex 'accent 'light) "#4A7C4A" "moss")
+  (check-equal? (token-hex 'accent 'dark) "#80A080" "moss, dark")
+  (check-equal? (token-hex 'success 'light) (token-hex 'keyword 'light) "moss-ink carries both"))
+
+(test-case "the workbench is the same in both appearances, and its text is readable on it"
+  (for ([r '(bench-heading bench-text bench-rule)])
+    (check-equal? (token-hex r 'light) (token-hex r 'dark) (format "~a" r)))
+  (for* ([app '(light dark)] [r '(bench-heading bench-text)])
+    (check-true (>= (ratio r 'bench app) 4.5) (format "~a: ~a on bench" app r))))
 
 (test-case "switching appearance changes the editor colors"
   (define before (current-theme-name))
   (set-theme! 'light)
-  (check-equal? (color->hex (canvas-background)) "#FFFFFF")
+  (check-equal? (color->hex (canvas-background)) "#F8F8F6")
   (check-equal? (color->hex (theme-color 'fg)) (token-hex 'text 'light))
   (set-theme! 'dark)
-  (check-equal? (color->hex (canvas-background)) "#1E1E1E")
+  (check-equal? (color->hex (canvas-background)) "#1C1C1C")
   (check-eq? (current-theme-name) 'dark)
   (check-exn exn:fail? (lambda () (set-theme! 'purple)))
   (set-theme! before))

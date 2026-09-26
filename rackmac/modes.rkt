@@ -5,7 +5,8 @@
 (define-mode text-mode
   #:label "Plain Text"
   #:doc "Plain text. Wraps long lines."
-  #:locals `((wrap-lines . #t) (indent-string . "  ") (measure . ,prose-measure)))
+  #:locals `((wrap-lines . #t) (indent-string . "  ") (measure . ,prose-measure)
+             (document-style . "Prose") (line-spacing . 4)))
 
 (define-mode prog-mode
   #:label "Code"

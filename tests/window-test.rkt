@@ -5,7 +5,7 @@
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/gui/base racket/string racket/list
          "../rackmac/commands.rkt" "../rackmac/editor.rkt" "../rackmac/frame.rkt"
-         "../rackmac/command.rkt" "../rackmac/platform.rkt")
+         "../rackmac/command.rkt" "../rackmac/platform.rkt" "../rackmac/ui/layout.rkt")
 
 (define f (make-main-frame))                ; hidden: show is never called
 (define canvas (main-canvas))
@@ -228,9 +228,16 @@
     (send tabs on-close-request 0))
   (check-equal? (map (lambda (b) (send b get-name)) (visible-buffers)) '("other") "Don't Save closes it"))
 
-(test-case "the editor has comfortable margins"
+(test-case "code has comfortable margins; prose sits centered on a page"
+  (define b (doc "(define x 1)"))
+  (send b set-mode! 'racket-mode)
   (check-equal? (send canvas horizontal-inset) 16)
-  (check-equal? (send canvas vertical-inset) 12))
+  (check-equal? (send canvas vertical-inset) 12)
+  (send b set-mode! 'text-mode)
+  (define-values (cw ch) (send canvas get-client-size))
+  (check-equal? (send canvas horizontal-inset) (centered-inset cw (send b measure-width)) "centered at the measure")
+  (check-true (> (send canvas horizontal-inset) 16) "the window is wider than the measure")
+  (check-equal? (send canvas vertical-inset) prose-inset-y))
 
 (test-case "prose wraps at a readable measure, code does not wrap"
   (define b (doc "some prose"))

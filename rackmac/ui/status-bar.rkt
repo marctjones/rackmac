@@ -5,7 +5,7 @@
 ;; area. Layout and drawing are pure functions of their inputs (docs/UI-DESIGN.md 5.3/5.4),
 ;; so tests render to a bitmap-dc% instead of a real window.
 (require racket/class racket/gui/base racket/list
-         "../status.rkt" "../hook.rkt" "../command.rkt" "tokens.rkt" "layout.rkt")
+         "../status.rkt" "../hook.rkt" "../command.rkt" "../theme.rkt" "tokens.rkt" "layout.rkt")
 (provide status-bar% layout-segments render-status font-for-width truncate-to-width
          (struct-out seg-view) compute-segments)
 
@@ -17,7 +17,11 @@
 (define seg-sep " · ")
 (define min-message-width 24)
 
-(define (font-for-width w) (if (< w 480) small-control-font normal-control-font))
+;; IBM Plex Sans at the control font's size when it is installed (theme.rkt), else the
+;; control font; the small size when the window is narrow.
+(define small-font (ui-font small-control-font))
+(define normal-font (ui-font normal-control-font))
+(define (font-for-width w) (if (< w 480) small-font normal-font))
 
 (define (text-w dc s)
   (define-values (w h d a) (send dc get-text-extent s))
