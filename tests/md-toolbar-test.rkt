@@ -71,3 +71,28 @@
   (click 'toggle-markdown-view)
   (check-equal? (command-checked? (find-command 'toggle-markdown-view)) #t)
   (click 'toggle-markdown-view))
+
+;; ---- the popups: built as the button builds them, never shown; picking an item runs it ----
+
+(define (labels menu) (for/list ([i (send menu get-items)]) (send i get-label)))
+(define (pick menu prefix)
+  (define item (for/first ([i (send menu get-items)] #:when (regexp-match? (regexp (string-append "^" prefix)) (send i get-label))) i))
+  (send item command (new control-event% [event-type 'menu])))
+
+(test-case "picking a Heading popup item runs that command on the paragraph"
+  (define b (doc "hello" 'markdown-mode))
+  (define menu (send tb popup-for 'heading-menu))
+  (check-equal? (labels menu) '("Heading 1    ⌥⌘1" "Heading 2    ⌥⌘2" "Heading 3    ⌥⌘3" "Body Text    ⌥⌘0"))
+  (pick menu "Heading 2")
+  (check-equal? (send b get-text) "## hello")
+  (pick (send tb popup-for 'heading-menu) "Heading 1")
+  (check-equal? (send b get-text) "# hello")
+  (pick (send tb popup-for 'heading-menu) "Heading 3")
+  (check-equal? (send b get-text) "### hello")
+  (pick (send tb popup-for 'heading-menu) "Body Text")
+  (check-equal? (send b get-text) "hello"))
+
+(test-case "plain buttons have no popup"
+  (doc "hello" 'markdown-mode)
+  (check-false (send tb popup-for 'toggle-bold)))
+
