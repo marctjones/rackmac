@@ -45,8 +45,13 @@
 (struct list-item block (marker-end content-indent task children) #:transparent) ; container
 (struct link-ref-def block (label dest title) #:transparent)             ; leaf, kept in the tree
 
-;; Extensions (not implemented by mdlib-blocks; declared so the tree shape is stable).
+;; Extensions (mdlib-ext #320). A table's `alignments` is a list of 'left 'center 'right or #f
+;; per column; `head` a list of table-cells, `rows` a list of lists of table-cells (every row
+;; padded or cut to the header's width; a padding cell is empty, at its row's end). A table-cell
+;; is a leaf with inline content, like a paragraph (its `inlines` an inline-cell). Front
+;; matter's `fields` is an alist of string keys, or #f when the YAML is beyond the tiny reader.
 (struct table block (alignments head rows) #:transparent)
+(struct table-cell block (segments inlines) #:transparent)               ; leaf
 (struct front-matter block (fields) #:transparent)
 
 ;; --- Inlines ------------------------------------------------------------------------------------
