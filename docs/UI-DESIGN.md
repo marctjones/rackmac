@@ -63,7 +63,7 @@ canvas, "Rackmac UI — Skeptical Engineering"). What that means inside our scop
   uses more than one hue; it stays in those families (§1.2) at readable contrast.
 - **Type.** IBM Plex Serif for notes (the person's voice), IBM Plex Mono for code, paths and headings in the
   Markdown source view, IBM Plex Sans for text we paint in the chrome. Plex is used when installed and falls back to
-  installed faces (§1.3). **Open question for the owner:** bundle the Plex TTFs (OFL 1.1) inside the app. `racket/draw`
+  installed faces (§1.3). **Open question for the owner (#330):** bundle the Plex TTFs (OFL 1.1) inside the app. `racket/draw`
   cannot load a font file, so that needs a CoreText registration call through the FFI, a new kind of code in the
   core. Until it is decided, installing Plex (for example `brew install --cask font-ibm-plex-serif
   font-ibm-plex-mono font-ibm-plex-sans`) switches Rackmac to it with no other change.
@@ -173,7 +173,7 @@ become cubics) into a `dc-path%` that it fills. So the icons match the design sy
 needed. The tool holds the mapping from Rackmac names to Workbench names (`run` → `play`, `activity` →
 `logbook-moth`, `palette` → `terminal`, `zoom-reset` → `ruler`, …); `icon-source` reports it. Icons are rendered on
 demand into a `bitmap%` at the display's backing scale (`make-bitmap #:backing-scale`) and handed to `button%` as
-a bitmap label, so `#:icon` drives native buttons directly. **Gap:** Workbench has no text-formatting icons (bold,
+a bitmap label, so `#:icon` drives native buttons directly. **Gap (#332):** Workbench has no text-formatting icons (bold,
 italic, heading, lists, quote). The Format group uses letter labels for Bold and Italic, as Pages does, and the
 rest need drawing to `docs/iconography.md`'s rules in the design repository first, then vendoring. Toolbar icons take their color from the native chrome
 (`get-label-foreground-color`), not from the editor tokens, so they stay visible when the editor is dark and
@@ -223,7 +223,7 @@ _Changed 2026-09-25 (new)._
   `bench-heading` with a 2 px `accent` marker on its left edge, `bench-rule` between sections and on the edge
   next to the tabs, sections labelled in `ui-small` (not uppercase mono: `bench-quiet` fails contrast). A bench is
   only possible on surfaces we paint: a native `list-box%` draws the OS's light table and a native `text-field%` a
-  white box. **Decision for the owner (open):** (a) every sidebar list editor-based (`hierarchical-list%` takes our
+  white box. **Decision for the owner (open, #331):** (a) every sidebar list editor-based (`hierarchical-list%` takes our
   background and styles) and the filter a painted row "Find a note ⇧⌘O" that opens Quick Open over the Library, as
   the mockup shows; or (b) a `paper-sunk` sidebar that keeps native `list-box%`es and a native filter field, which
   keeps the OS's VoiceOver support for Recent, Tags, Outline and Backlinks (§2.5) but gives up the bench.
