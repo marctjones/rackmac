@@ -66,6 +66,7 @@
     [(block-quote? b) (block-quote-children b)]
     [(list-block? b) (list-block-children b)]
     [(list-item? b) (list-item-children b)]
+    [(table? b) (append (table-head b) (apply append (table-rows b)))]
     [else '()]))
 
 (define (inline-children x)
@@ -78,6 +79,7 @@
   (cond
     [(paragraph? b) (cell-inlines (paragraph-inlines b))]
     [(heading? b) (cell-inlines (heading-inlines b))]
+    [(table-cell? b) (cell-inlines (table-cell-inlines b))]
     [else '()]))
 
 (define (document-length doc) (string-length (document-text doc)))
@@ -119,7 +121,7 @@
       (define node2 (if (or role extra) b node))
       (when (or role extra) (paint! (block-start b) (block-end b) stack2 node2))
       (cond
-        [(or (paragraph? b) (heading? b))
+        [(or (paragraph? b) (heading? b) (table-cell? b))
          (for ([x (in-list (leaf-inlines b))]) (walk-inline x stack2 node2))]
         [(list-item? b)
          (define task-role (case (list-item-task b) [(done) 'task-done] [(cancelled) 'task-cancelled] [else #f]))

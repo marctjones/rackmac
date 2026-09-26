@@ -459,7 +459,8 @@
 ;; ============================================================================================
 
 (define (process-line! doc source lr)
-  (process-line-inner! doc source lr)
+  (define prefix-end (box (line-record-start lr)))
+  (process-line-inner! doc source lr prefix-end)
   ;; Catch-all: whatever got opened, continued, or closed above, every block on the freshly
   ;; recomputed open path (down to the new tip -- which reflects any newly opened containers or
   ;; leaf) legitimately spans through this line's content-end. Individual branches above also
@@ -469,21 +470,29 @@
   ;; Looseness bookkeeping (see append-child!): every list-item still reachable records whether
   ;; *this* line was blank, so the next thing attached to it (a sibling item, or a second child
   ;; of the same item) can tell whether a blank line came immediately before it.
-  (define line-blank? (blank-from? source (line-record-start lr) (line-record-content-end lr)))
-  (for ([b (in-list fresh-path)] #:when (eq? (mblk-kind b) 'list-item))
-    (mdata-set! b 'trailing-blank? line-blank?)))
+  ;; A line is blank for the items below the deepest block quote it continues when nothing
+  ;; follows that quote's `>` (so `> - a` / `>` / `> - b` is a loose list), and for no item
+  ;; above that quote (spec example 320: `* a` / `  > b` / `  >` / `* c` stays tight), as cmark
+  ;; sets last_line_blank on the innermost container only.
+  (define line-blank? (blank-from? source (unbox prefix-end) (line-record-content-end lr)))
+  (define deepest-quote (for/last ([b (in-list fresh-path)] #:when (eq? (mblk-kind b) 'block-quote)) b))
+  (for/fold ([below-quotes? (not deepest-quote)]) ([b (in-list fresh-path)])
+    (when (eq? (mblk-kind b) 'list-item) (mdata-set! b 'trailing-blank? (and below-quotes? line-blank?)))
+    (or below-quotes? (eq? b deepest-quote)))
+  (void))
 
-(define (process-line-inner! doc source lr)
+(define (process-line-inner! doc source lr prefix-end)
   (define line-start (line-record-start lr))
   (define content-end (line-record-content-end lr))
   (define full-path (open-path-of doc))
   (define n (length full-path))
   (define tip (list-ref full-path (sub1 n)))
-  (define tip-is-leaf? (memq (mblk-kind tip) '(paragraph code-block html-block)))
+  (define tip-is-leaf? (memq (mblk-kind tip) '(paragraph code-block html-block table)))
   (define containers
     (if tip-is-leaf? (take (cdr full-path) (- n 2)) (cdr full-path)))
   (define-values (k end-offset end-column blank-stop?)
     (match-containers containers source line-start content-end))
+  (set-box! prefix-end end-offset)
   (define fully-matched? (= k (length containers)))
   (cond
     [fully-matched?
@@ -617,10 +626,140 @@
        [(find-new-block-start source offset column content-end #t)
         (close-block! leaf)
         (open-new-blocks! (parent-of doc leaf) source offset column content-end #t)]
+       ;; GFM tables (design §2.3): tried after every other block start, as cmark-gfm tries
+       ;; extensions last
+       [(and (extension-set-tables (mdata-ref doc 'ext))
+             (try-table-start! doc full-path leaf source offset column content-end))
+        (void)]
        [else
         (define-values (src-start vindent) (paragraph-line-start source offset column content-end))
         (add-line! leaf src-start content-end vindent)
+        (touch-path! full-path content-end)])]
+    [(table)
+     (cond
+       [(or (blank-from? source offset content-end)
+            (find-new-block-start source offset column content-end #t))
+        (close-block! leaf)
+        (open-new-blocks! (parent-of doc leaf) source offset column content-end #f)]
+       [else
+        (define-values (ns nc) (scan-indent source offset column content-end))
+        (mdata-set! leaf 'rows (cons (cons ns content-end) (mdata-ref leaf 'rows '())))
         (touch-path! full-path content-end)])]))
+
+;; --- Tables (GFM) ----------------------------------------------------------------------------
+
+;; A row's cells: the line [start, end) trimmed, split at unescaped pipes, an outer leading and
+;; trailing pipe dropped, each cell trimmed. Returns (values cells pipes): cells as (start . end)
+;; source ranges, pipes as the positions of every unescaped pipe.
+(define (split-table-row source start end)
+  (define s (let loop ([i start]) (if (and (< i end) (space-or-tab? (string-ref source i))) (loop (add1 i)) i)))
+  (define e (let loop ([i end]) (if (and (> i s) (space-or-tab? (string-ref source (sub1 i)))) (loop (sub1 i)) i)))
+  (define pipes
+    (let loop ([i s] [acc '()])
+      (cond [(>= i e) (reverse acc)]
+            [(eqv? (string-ref source i) #\\) (loop (+ i 2) acc)]
+            [(eqv? (string-ref source i) #\|) (loop (add1 i) (cons i acc))]
+            [else (loop (add1 i) acc)])))
+  (define lead? (and (pair? pipes) (= (car pipes) s)))
+  (define trail? (and (pair? pipes) (= (last pipes) (sub1 e)) (not (and lead? (= (length pipes) 1)))))
+  (define lo (if lead? (add1 s) s))
+  (define hi (if trail? (sub1 e) e))
+  (define inner (filter (lambda (p) (and (>= p lo) (< p hi))) pipes))
+  (define bounds (append (list (sub1 lo)) inner (list hi)))
+  (define cells
+    (for/list ([a (in-list bounds)] [b (in-list (cdr bounds))])
+      (define cs (let loop ([i (add1 a)]) (if (and (< i b) (space-or-tab? (string-ref source i))) (loop (add1 i)) i)))
+      (define ce (let loop ([i b]) (if (and (> i cs) (space-or-tab? (string-ref source (sub1 i)))) (loop (sub1 i)) i)))
+      (cons cs ce)))
+  (values cells pipes))
+
+;; A delimiter-row cell: optional `:`, one or more `-`, optional `:`. Returns its alignment
+;; ('left 'right 'center or 'none), or #f.
+(define (delimiter-cell-alignment source c)
+  (define str (substring source (car c) (cdr c)))
+  (and (regexp-match? #px"^:?-+:?$" str)
+       (let ([l (eqv? (string-ref str 0) #\:)] [r (eqv? (string-ref str (sub1 (string-length str))) #\:)])
+         (cond [(and l r) 'center] [l 'left] [r 'right] [else 'none]))))
+
+;; The line at (offset, column) is a delimiter row whose cell count equals that of the
+;; paragraph's last line: that line becomes the header of a new table (the paragraph keeps its
+;; earlier lines, or disappears), and this line its delimiter row. Returns #t if so.
+(define (try-table-start! doc full-path leaf source offset column content-end)
+  (define-values (ns nc) (scan-indent source offset column content-end))
+  (define header (car (mdata-ref leaf 'lines))) ; lines are kept newest first
+  (and (< (- nc column) 4) (= 0 (third header))
+       ;; a delimiter row holds only these: prose fails at its first character
+       (for/and ([c (in-string source ns content-end)]) (memv c '(#\| #\- #\: #\space #\tab)))
+       (for/or ([c (in-string source ns content-end)]) (eqv? c #\-))
+       (let-values ([(dcells dpipes) (split-table-row source ns content-end)])
+         (define aligns (for/list ([c (in-list dcells)]) (delimiter-cell-alignment source c)))
+         (define hstart (first header)) (define hend (+ (first header) (second header)))
+         (define-values (hcells hpipes) (split-table-row source hstart hend))
+         (and (andmap values aligns) (= (length hcells) (length dcells))
+              (let ()
+                (define parent (list-ref full-path (- (length full-path) 2)))
+                (define older (cdr (mdata-ref leaf 'lines)))
+                (cond
+                  [(null? older) ; the paragraph was only the header: the table replaces it
+                   (set-mblk-children! parent (cdr (mblk-children parent)))]
+                  [else
+                   (mdata-set! leaf 'lines older)
+                   (set-mblk-end! leaf (+ (first (car older)) (second (car older))))
+                   (close-block! leaf)])
+                (define t (make-mblk 'table hstart
+                                     (list (cons 'header (cons hstart hend))
+                                           (cons 'delimiter (cons ns content-end))
+                                           (cons 'alignments (for/list ([a (in-list aligns)]) (and (not (eq? a 'none)) a))))))
+                (set-mblk-end! t content-end)
+                (append-child! parent t)
+                #t)))))
+
+;; A cell's content: its source with `\|` read as `|` (GFM), as segments over the source pieces
+;; between the removed backslashes, plus an `escape` token for each of them.
+(define (table-cell-node source c refmap)
+  (define cs (car c)) (define ce (cdr c))
+  (define escapes
+    (let loop ([i cs] [acc '()])
+      (cond [(>= i ce) (reverse acc)]
+            [(and (eqv? (string-ref source i) #\\) (< (add1 i) ce))
+             (loop (+ i 2) (if (eqv? (string-ref source (add1 i)) #\|) (cons i acc) acc))]
+            [else (loop (add1 i) acc)])))
+  (define pieces ; source ranges between the removed backslashes
+    (let loop ([from cs] [es escapes] [acc '()])
+      (if (null? es)
+          (reverse (cons (cons from ce) acc))
+          (loop (add1 (car es)) (cdr es) (cons (cons from (car es)) acc)))))
+  (define-values (segs content-pos)
+    (for/fold ([segs '()] [pos 0] #:result (values (reverse segs) pos)) ([pc (in-list pieces)] #:when (< (car pc) (cdr pc)))
+      (define len (- (cdr pc) (car pc)))
+      (values (cons (segment pos len (car pc) len) segs) (+ pos len))))
+  (define content (apply string-append (for/list ([pc (in-list pieces)]) (substring source (car pc) (cdr pc)))))
+  (table-cell cs ce (for/list ([e (in-list escapes)]) (token 'escape e (add1 e))) segs
+              (leaf-cell 'table-cell segs content refmap)))
+
+(define (finalize-table source b refmap)
+  (define aligns (mdata-ref b 'alignments))
+  (define ncols (length aligns))
+  (define (row-cells range)
+    (define-values (cells pipes) (split-table-row source (car range) (cdr range)))
+    (define kept (for/list ([c (in-list cells)] [i (in-range ncols)]) (table-cell-node source c refmap)))
+    (define pad-at (cdr range))
+    (values (append kept (for/list ([i (in-range (length kept) ncols)])
+                           (table-cell pad-at pad-at '() '() empty-inline-cell)))
+            (for/list ([p (in-list pipes)]) (token 'table-pipe p (add1 p)))))
+  (define-values (head head-pipes) (row-cells (mdata-ref b 'header)))
+  (define delim (mdata-ref b 'delimiter))
+  (define-values (dcells dpipes) (split-table-row source (car delim) (cdr delim)))
+  (define dstart (let loop ([i (car delim)]) (if (and (< i (cdr delim)) (space-or-tab? (string-ref source i))) (loop (add1 i)) i)))
+  (define dend (let loop ([i (cdr delim)]) (if (and (> i dstart) (space-or-tab? (string-ref source (sub1 i)))) (loop (sub1 i)) i)))
+  (define-values (rows row-pipes)
+    (for/fold ([rows '()] [pipes '()] #:result (values (reverse rows) (append* (reverse pipes))))
+              ([r (in-list (reverse (mdata-ref b 'rows '())))])
+      (define-values (cells ps) (row-cells r))
+      (values (cons cells rows) (cons ps pipes))))
+  (table (mblk-start b) (mblk-end b)
+         (sort (append head-pipes (list (token 'table-delim-row dstart dend)) row-pipes) < #:key token-start)
+         aligns head rows))
 
 ;; Strips up to `n` columns of leading indentation from (offset,column), returning the position
 ;; reached (used for fenced-code content, which strips min(fence-indent, available) columns).
@@ -795,26 +934,97 @@
 
 ;; The inline parser a leaf's cell will call: (kind content refmap) -> content-relative inline
 ;; list, kind being 'paragraph or 'heading. mdlib-parser passes one that consults its memo.
-(define (default-inline-parser kind content refmap) (parse-inlines content refmap))
-(define current-inline-parser (make-parameter default-inline-parser))
+(define current-inline-parser (make-parameter (lambda (kind content refmap) (parse-inlines content refmap))))
+;; (vector extension-set heading-keywords) for finalization
+(define current-block-options (make-parameter (vector no-extensions '())))
 
 (define (leaf-cell kind segs content refmap)
   (define ip (current-inline-parser)) ; captured now: the cell is forced after parse-blocks returns
   (make-inline-cell content segs (lambda () (ip kind content refmap))))
 
+;; `inline-parser` (kind content refmap) -> content-relative inlines, kind 'paragraph 'heading
+;; or 'table-cell; by default parse-inlines with this parse's extensions and keywords (the
+;; parser object passes one that goes through its memo). The keyword lists default to the
+;; parameters' values now.
 (define (parse-blocks source #:extensions [extensions no-extensions]
-                      #:inline-parser [inline-parser default-inline-parser])
+                      #:inline-parser [inline-parser #f]
+                      #:heading-keywords [hk (heading-keywords)]
+                      #:date-keywords [dk (date-keywords)])
   (define lines (source-lines source))
   (define line-idx (lines->line-index lines))
-  (define doc (make-mblk 'document 0 '()))
-  (for ([lr (in-list lines)]) (process-line! doc source lr))
+  (define doc (make-mblk 'document 0 (list (cons 'ext extensions))))
+  (define-values (fm body-lines)
+    (if (extension-set-front-matter extensions) (take-front-matter source lines) (values #f lines)))
+  (for ([lr (in-list body-lines)]) (process-line! doc source lr))
   (close-all! doc)
   (touch-path! (list doc) (string-length source))
   (define refmap (make-hash))
+  (define ip (or inline-parser
+                 (lambda (kind content refmap)
+                   (parse-inlines content refmap (inline-options extensions kind hk dk)))))
   (define children
-    (parameterize ([current-inline-parser inline-parser])
+    (parameterize ([current-inline-parser ip]
+                   [current-block-options (vector extensions hk)])
       (finalize-children source (reverse (mblk-children doc)) refmap)))
-  (document 0 (string-length source) '() source children refmap line-idx extensions))
+  (document 0 (string-length source) '() source (if fm (cons fm children) children) refmap line-idx extensions))
+
+;; --- Front matter (design §2.3) ----------------------------------------------------------------
+
+;; `---` as the first line, then lines up to a `---` or `...` line: a front-matter block and the
+;; lines after it. Unterminated, it is not front matter and every line goes to the block parser.
+(define (fence-line? source lr strs)
+  (define ls (line-record-start lr)) (define le (line-record-content-end lr))
+  (and (>= (- le ls) 3)
+       (member (substring source ls (+ ls 3)) strs)
+       (blank-from? source (+ ls 3) le)))
+(define (take-front-matter source lines)
+  (cond
+    [(and (pair? lines) (fence-line? source (car lines) '("---")))
+     (let loop ([ls (cdr lines)] [inside '()])
+       (cond
+         [(null? ls) (values #f lines)]
+         [(fence-line? source (car ls) '("---" "..."))
+          (define open (car lines)) (define close (car ls))
+          (values (front-matter 0 (line-record-content-end close)
+                                (list (token 'front-matter-fence (line-record-start open) (+ 3 (line-record-start open)))
+                                      (token 'front-matter-fence (line-record-start close) (+ 3 (line-record-start close))))
+                                (read-front-matter source (reverse inside)))
+                  (cdr ls))]
+         [else (loop (cdr ls) (cons (car ls) inside))]))]
+    [else (values #f lines)]))
+
+;; A tiny YAML reader: top-level `key: value`, flow lists `[a, b]`, block lists of `- item`
+;; lines under a key with no value, quoted scalars, comments and blank lines. Values are strings
+;; or lists of strings ("" for a key with nothing after it). Anything else: #f.
+(define (read-front-matter source lines)
+  (define strs (for/list ([lr (in-list lines)]) (substring source (line-record-start lr) (line-record-content-end lr))))
+  (define (scalar v)
+    (define t (string-trim v))
+    (cond [(regexp-match #px"^\"(.*)\"$" t) => cadr]
+          [(regexp-match #px"^'(.*)'$" t) => cadr]
+          [else t]))
+  (define (value v)
+    (cond [(regexp-match #px"^\\[(.*)\\]$" (string-trim v))
+           => (lambda (m) (if (string=? (string-trim (cadr m)) "") '() (map scalar (string-split (cadr m) ","))))]
+          [else (scalar v)]))
+  (let/ec fail
+    (let loop ([ls strs] [acc '()])
+      (cond
+        [(null? ls) (reverse acc)]
+        [(regexp-match? #px"^\\s*(#.*)?$" (car ls)) (loop (cdr ls) acc)]
+        [(regexp-match #px"^([^\\s:#-][^:]*?)\\s*:(?:\\s+(.*))?$" (car ls))
+         => (lambda (m)
+              (define key (cadr m)) (define v (caddr m))
+              (cond
+                [(and v (not (string=? (string-trim v) ""))) (loop (cdr ls) (cons (cons key (value v)) acc))]
+                [else
+                 (define-values (items rest)
+                   (let items ([ls (cdr ls)] [acc '()])
+                     (cond [(and (pair? ls) (regexp-match #px"^\\s*-\\s+(.*)$" (car ls)))
+                            => (lambda (m) (items (cdr ls) (cons (scalar (cadr m)) acc)))]
+                           [else (values (reverse acc) ls)])))
+                 (loop rest (cons (cons key (if (null? items) "" items)) acc))]))]
+        [else (fail #f)]))))
 
 (define (close-all! b)
   (for ([c (in-list (mblk-children b))]) (when (mblk-open? c) (close-all! c) (close-block! c))))
@@ -837,7 +1047,15 @@
                        (mdata-ref b 'delimiter) (list-tight? b) kids))]
     [(list-item)
      (define kids (finalize-children source (reverse (mblk-children b)) refmap))
-     (list (list-item (mblk-start b) (mblk-end b) (block-tokens-of b) (mdata-ref b 'marker-end) (mdata-ref b 'content-column) #f kids))]
+     (define task (and (extension-set-tasks (vector-ref (current-block-options) 0))
+                       (pair? kids) (paragraph? (car kids))
+                       (split-task-marker (car kids) refmap)))
+     (list (list-item (mblk-start b) (mblk-end b)
+                      (if task (append (block-tokens-of b) (list (second task))) (block-tokens-of b))
+                      (mdata-ref b 'marker-end) (mdata-ref b 'content-column)
+                      (and task (first task))
+                      (if task (cons (third task) (cdr kids)) kids)))]
+    [(table) (list (finalize-table source b refmap))]
     [(thematic-break) (list (thematic-break (mblk-start b) (mblk-end b) '()))]
     [(code-block)
      (define lns (leaf-lines b))
@@ -853,7 +1071,7 @@
      (list (html-block (mblk-start b) (mblk-end b) '() (mdata-ref b 'kind) out-lines))]
     [(heading)
      (define-values (segs content) (build-segments+content source (leaf-lines b)))
-     (list (heading (mblk-start b) (mblk-end b) (block-tokens-of b) (mdata-ref b 'level) #f #f segs
+     (list (heading (mblk-start b) (mblk-end b) (block-tokens-of b) (mdata-ref b 'level) #f (keyword-of content) segs
                     (leaf-cell 'heading segs content refmap)))]
     [(paragraph)
      (cond
@@ -864,7 +1082,7 @@
                (build-segments+content source (trim-trailing-line-ws source remaining)))
              (append refdefs
                      (list (heading (if (null? refdefs) (mblk-start b) (first (car remaining)))
-                                    (mblk-end b) (block-tokens-of b) level #t #f segs
+                                    (mblk-end b) (block-tokens-of b) level #t (keyword-of content) segs
                                     (leaf-cell 'heading segs content refmap)))))]
        [else
         (define-values (remaining refdefs) (strip-link-ref-defs source (leaf-lines b) refmap))
@@ -878,6 +1096,43 @@
                                  (leaf-cell 'paragraph segs content refmap))))))
         (append refdefs (if para (list para) '()))])]
     [else '()]))
+
+;; The heading keyword (design §2.3) a heading's content starts with, when keywords are on.
+(define (keyword-of content)
+  (define opts (current-block-options))
+  (and (extension-set-keywords (vector-ref opts 0)) (heading-keyword-of content (vector-ref opts 1))))
+
+;; GFM task list items (design §2.3): a list item's first paragraph starting with `[ ]`, `[x]`,
+;; `[X]` or `[-]` (ours: cancelled) and whitespace. Returns (list state task-marker-token
+;; paragraph-without-the-marker), or #f.
+(define (split-task-marker para refmap)
+  (define cell (paragraph-inlines para))
+  (define content (inline-cell-content cell))
+  (define segs (paragraph-segments para))
+  (define n (string-length content))
+  (and (> n 4)
+       (eqv? (string-ref content 0) #\[) (eqv? (string-ref content 2) #\])
+       (memv (string-ref content 1) '(#\space #\x #\X #\-))
+       (memv (string-ref content 3) '(#\space #\tab #\newline))
+       (pair? segs) (>= (segment-source-length (car segs)) 3) (= 0 (segment-content-start (car segs)))
+       (let ([k (let loop ([i 3]) (if (and (< i n) (memv (string-ref content i) '(#\space #\tab #\newline))) (loop (add1 i)) i))])
+         (and (< k n)
+              (let* ([new-segs
+                      (for*/list ([g (in-list segs)]
+                                  #:when (> (+ (segment-content-start g) (segment-content-length g)) k))
+                        (define cs (segment-content-start g))
+                        (cond
+                          [(>= cs k) (segment (- cs k) (segment-content-length g) (segment-source-start g) (segment-source-length g))]
+                          [else
+                           (define cut (- k cs))
+                           (segment 0 (- (segment-content-length g) cut) (+ (segment-source-start g) cut)
+                                    (max 0 (- (segment-source-length g) cut)))]))]
+                     [new-content (substring content k)]
+                     [marker-start (segment-source-start (car segs))])
+                (list (case (string-ref content 1) [(#\space) 'open] [(#\-) 'cancelled] [else 'done])
+                      (token 'task-marker marker-start (+ marker-start 3))
+                      (paragraph (segment-source-start (car new-segs)) (block-end para) '() new-segs
+                                 (leaf-cell 'paragraph new-segs new-content refmap))))))))
 
 ;; A code-block line is blank if its real (non-virtual) source slice is empty or all
 ;; whitespace -- note this is independent of its *stripped content's* length, which can be

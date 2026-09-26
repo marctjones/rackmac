@@ -51,15 +51,17 @@
   #:transparent)
 
 (struct parser (extensions
+                heading-keywords           ; keyword lists snapshotted at make-parser (design §3.1)
+                date-keywords
                 [document #:mutable]       ; the last parse's document, or #f
                 [refdefs #:mutable]        ; sorted (label dest title) list of that parse
                 [generation #:mutable]     ; its refmap fingerprint
                 [memo #:mutable]           ; (kind . content) -> content-relative inline list
-                [memo-stamp #:mutable]     ; (cons generation extensions) the memo was built for
+                [memo-stamp #:mutable]     ; (list generation extensions keywords...) the memo was built for
                 [memo-limit #:mutable]))   ; size past which the memo is checked for rebuilding
 
 (define (make-parser #:extensions [extensions no-extensions])
-  (parser extensions #f #f 0 (make-hash) #f 64))
+  (parser extensions (heading-keywords) (date-keywords) #f #f 0 (make-hash) #f 64))
 
 (define (parser-parse! p text)
   (define-values (doc report) (run-parse! p text #f))
@@ -95,15 +97,19 @@
        (define hit (hash-ref table key none))
        (cond
          [(eq? hit none)
-          (define r (parse-inlines content refmap))
+          (define r (parse-inlines content refmap
+                                   (inline-options (parser-extensions p) kind
+                                                   (parser-heading-keywords p) (parser-date-keywords p))))
           (hash-set! table key r)
           r]
          [else hit])]))
-  (define doc (parse-blocks text #:extensions (parser-extensions p) #:inline-parser memo-inline-parser))
+  (define doc (parse-blocks text #:extensions (parser-extensions p) #:inline-parser memo-inline-parser
+                           #:heading-keywords (parser-heading-keywords p)
+                           #:date-keywords (parser-date-keywords p)))
   (define refdefs (refmap->refdefs (document-refmap doc)))
   (define refmap-changed? (not (and old (equal? refdefs (parser-refdefs p)))))
   (define generation (if refmap-changed? (add1 (parser-generation p)) (parser-generation p)))
-  (define stamp (cons generation (parser-extensions p)))
+  (define stamp (list generation (parser-extensions p) (parser-heading-keywords p) (parser-date-keywords p)))
   (define same-stamp? (equal? stamp (parser-memo-stamp p)))
   (set! table (if same-stamp? (parser-memo p) (make-hash)))
   (define report
@@ -144,8 +150,9 @@
   (sort (for/list ([(label v) (in-hash refmap)]) (list label (car v) (cadr v)))
         string<? #:key car))
 
-(define (leaf-kind b) (if (heading? b) 'heading 'paragraph))
-(define (leaf-cell b) (if (heading? b) (heading-inlines b) (paragraph-inlines b)))
+(define (leaf-kind b) (cond [(heading? b) 'heading] [(table-cell? b) 'table-cell] [else 'paragraph]))
+(define (leaf-cell b)
+  (cond [(heading? b) (heading-inlines b)] [(table-cell? b) (table-cell-inlines b)] [else (paragraph-inlines b)]))
 
 (define (block-kids b)
   (cond
@@ -153,13 +160,15 @@
     [(block-quote? b) (block-quote-children b)]
     [(list-block? b) (list-block-children b)]
     [(list-item? b) (list-item-children b)]
+    [(table? b) (append (table-head b) (apply append (table-rows b)))]
     [else '()]))
 
-;; The paragraphs and headings of `b` (a document or any block), in document order.
+;; The blocks with inline content (paragraphs, headings, table cells) of `b` (a document or any
+;; block), in document order.
 (define (leaf-blocks b)
   (let loop ([b b] [acc '()])
     (cond
-      [(or (paragraph? b) (heading? b)) (cons b acc)]
+      [(or (paragraph? b) (heading? b) (table-cell? b)) (cons b acc)]
       [else (for/fold ([acc acc]) ([k (in-list (reverse (block-kids b)))]) (loop k acc))])))
 
 ;; ---------------------------------------------------------------------------------------------
@@ -263,6 +272,18 @@
             (and (html-block? n)
                  (eqv? (html-block-kind o) (html-block-kind n))
                  (lines-eq? (html-block-lines o) (html-block-lines n) d))]
+           [(table-cell? o)
+            (and (table-cell? n)
+                 (segments-eq? (table-cell-segments o) (table-cell-segments n) d)
+                 (cells-eq? (table-cell-inlines o) (table-cell-inlines n))
+                 (match! o n))]
+           [(table? o)
+            (and (table? n)
+                 (equal? (table-alignments o) (table-alignments n))
+                 (kids-eq? (table-head o) (table-head n) d)
+                 (= (length (table-rows o)) (length (table-rows n)))
+                 (for/and ([ro (in-list (table-rows o))] [rn (in-list (table-rows n))]) (kids-eq? ro rn d)))]
+           [(front-matter? o) (and (front-matter? n) (equal? (front-matter-fields o) (front-matter-fields n)))]
            [(link-ref-def? o)
             (and (link-ref-def? n)
                  (equal? (link-ref-def-label o) (link-ref-def-label n))
@@ -278,7 +299,6 @@
                  (= (+ (list-item-marker-end o) d) (list-item-marker-end n))
                  (item-headers-eq? o n)
                  (kids-eq? (list-item-children o) (list-item-children n) d))]
-           ;; Extension blocks (tables, front matter) are not built yet: never "unchanged".
            [else #f])))
   (define (list-headers-eq? o n)
     (and (eq? (list-block-ordered? o) (list-block-ordered? n))
@@ -375,7 +395,9 @@
            (eq? (heading-setext? o) (heading-setext? n)))
       (and (code-block? o) (code-block? n) (eq? (code-block-fenced? o) (code-block-fenced? n)))
       (and (html-block? o) (html-block? n))
-      (and (link-ref-def? o) (link-ref-def? n))))
+      (and (link-ref-def? o) (link-ref-def? n))
+      (and (table? o) (table? n) (equal? (table-alignments o) (table-alignments n)))
+      (and (front-matter? o) (front-matter? n))))
 
 (define (merge-ranges rs)
   (let loop ([rs (sort rs < #:key car)] [acc '()])

@@ -9,7 +9,8 @@
 ;; --- Tokens -----------------------------------------------------------------------------------
 
 ;; The closed set of markup-token roles (design §1.2). Exported as a list so tests can check
-;; coverage as new phases add tokens; mdlib-blocks only emits the block-level subset.
+;; coverage; the extension roles (table-*, wiki-*, tag-hash, front-matter-fence, task-marker,
+;; strike-delim) appear only with their extensions on.
 (define token-roles
   '(heading-marker setext-underline quote-marker bullet ordered-marker task-marker
     fence fence-info code-indent
@@ -41,19 +42,25 @@
 (struct html-block block (kind lines) #:transparent)                      ; leaf
 (struct block-quote block (children) #:transparent)                      ; container
 (struct list-block block (ordered? start-number delimiter tight? children) #:transparent) ; container
-;; task: #f, 'open, 'done, or 'cancelled (extension; unset until mdlib-ext).
+;; task: #f, 'open, 'done, or 'cancelled (the tasks extension: `[ ]`, `[x]`/`[X]`, `[-]`).
 (struct list-item block (marker-end content-indent task children) #:transparent) ; container
 (struct link-ref-def block (label dest title) #:transparent)             ; leaf, kept in the tree
 
-;; Extensions (not implemented by mdlib-blocks; declared so the tree shape is stable).
+;; Extensions (mdlib-ext #320). A table's `alignments` is a list of 'left 'center 'right or #f
+;; per column; `head` a list of table-cells, `rows` a list of lists of table-cells (every row
+;; padded or cut to the header's width; a padding cell is empty, at its row's end). A table-cell
+;; is a leaf with inline content, like a paragraph (its `inlines` an inline-cell). Front
+;; matter's `fields` is an alist of string keys, or #f when the YAML is beyond the tiny reader.
 (struct table block (alignments head rows) #:transparent)
+(struct table-cell block (segments inlines) #:transparent)               ; leaf
 (struct front-matter block (fields) #:transparent)
 
 ;; --- Inlines ------------------------------------------------------------------------------------
 ;; Spans and tokens as in design §1.2. link/image `kind`: 'inline 'full 'collapsed 'shortcut
 ;; 'autolink; `label` is the reference label as written (full/collapsed/shortcut) or #f; `dest`
 ;; and `title` are decoded (escapes, entities; `title` #f when absent), percent-encoding is left
-;; to the renderer. wiki-link, tag, date-ref, state-keyword and strike are mdlib-ext's.
+;; to the renderer; kind 'literal is a GFM autolink literal. wiki-link, tag, date-ref,
+;; state-keyword and strike come from the extensions (design §2.3).
 
 (struct inline (start end tokens) #:transparent)
 (struct text inline (value) #:transparent)
@@ -108,3 +115,22 @@
 
 (define no-extensions (extension-set #f #f #f #f #f #f #f #f #f))
 (define all-extensions (extension-set #t #t #t #t #t #t #t #t #t))
+;; GitHub Flavored Markdown's extensions only: tables, task lists, strikethrough, autolinks.
+(define gfm-extensions (extension-set #t #t #t #t #f #f #f #f #f))
+
+;; The keyword lists of design §2.3, read when a document is parsed (`parse-document`) or when a
+;; parser is made (`make-parser` snapshots them: a list changing under its memo would be unsound).
+;; heading-keywords: a heading whose content starts with one of these and a space carries it as
+;; `heading-keyword` and a `state-keyword` inline. date-keywords: a date preceded by one of these
+;; and a space is a date-ref with that keyword (matched without regard to case).
+(define heading-keywords (make-parameter '("TODO" "WAITING" "DONE")))
+(define date-keywords (make-parameter '("due")))
+
+;; The heading keyword a heading's content starts with, or #f.
+(define (heading-keyword-of content keywords)
+  (for/first ([k (in-list keywords)]
+              #:when (let ([n (string-length k)])
+                       (and (> (string-length content) n)
+                            (string=? (substring content 0 n) k)
+                            (eqv? (string-ref content n) #\space))))
+    k))

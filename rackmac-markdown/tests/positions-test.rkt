@@ -7,10 +7,13 @@
 ;; leaf's subtree are pairwise disjoint; no token covers a container prefix or line ending; and a
 ;; token-free text node's source slice is its value (relocation through segments is exact).
 (require json racket/list racket/string racket/runtime-path rackunit
-         "../main.rkt" "../ast.rkt")
+         "../main.rkt" "../ast.rkt" "ext-corpus.rkt")
 
 (define-runtime-path spec-path "spec/spec-0.31.2.json")
+(define-runtime-path gfm-path "spec/gfm-0.29-extensions.json")
 (define examples (call-with-input-file spec-path read-json))
+(define gfm-examples (call-with-input-file gfm-path read-json))
+(define current-exts (make-parameter no-extensions))
 
 (define (block-children b)
   (cond
@@ -18,11 +21,16 @@
     [(list-block? b) (list-block-children b)]
     [(list-item? b) (list-item-children b)]
     [(document? b) (document-children b)]
+    [(table? b) (append (table-head b) (apply append (table-rows b)))]
     [else '()]))
 
 (define (leaf? b)
   (or (paragraph? b) (heading? b) (thematic-break? b) (code-block? b) (html-block? b)
-      (link-ref-def? b)))
+      (link-ref-def? b) (table-cell? b) (front-matter? b)))
+
+(define (leaf-segments b)
+  (cond [(paragraph? b) (paragraph-segments b)] [(heading? b) (heading-segments b)]
+        [(table-cell? b) (table-cell-segments b)] [else '()]))
 
 ;; Checks: b's span is [start, end), start <= end; every child's span lies within b's; children
 ;; are ordered and pairwise disjoint (next child's start >= previous child's end).
@@ -59,7 +67,7 @@
 
 (define (inline-children x)
   (cond
-    [(emph? x) (emph-children x)] [(strong? x) (strong-children x)]
+    [(emph? x) (emph-children x)] [(strong? x) (strong-children x)] [(strike? x) (strike-children x)]
     [(link? x) (link-children x)] [(image? x) (image-children x)]
     [else '()]))
 
@@ -72,8 +80,10 @@
                 (format "~a: token ~a outside its node [~a,~a)" where t s e))
     (check-false (for/or ([c (in-string source (token-start t) (token-end t))]) (eqv? c #\newline))
                  (format "~a: token ~a covers a line ending" where t)))
+  ;; (a table cell's `\|` is read as `|`: the backslash is the cell's token, not the text's)
   (when (and (text? x) (null? (inline-tokens x))
-             (not (for/or ([c (in-string source s e)]) (eqv? c #\tab))))
+             (not (for/or ([c (in-string source s e)]) (eqv? c #\tab)))
+             (not (regexp-match? #rx"[\\][|]" (substring source s e))))
     (check-equal? (text-value x) (substring source s e) (format "~a: text slice" where)))
   (append (inline-tokens x) (check-inline-list! (inline-children x) s e source where)))
 
@@ -97,7 +107,7 @@
                   (format "~a: tokens ~a and ~a overlap" where a c)))
     ;; Every token lies within one segment's source text, so it never covers a container
     ;; prefix (`> `, list indentation) or a line ending (design §1.3).
-    (define segs (if (paragraph? b) (paragraph-segments b) (heading-segments b)))
+    (define segs (leaf-segments b))
     (for ([t (in-list tokens)])
       (check-true (for/or ([g (in-list segs)])
                     (<= (segment-source-start g) (token-start t) (token-end t)
@@ -140,7 +150,7 @@
       [(container? b) (for ([t (in-list (block-tokens b))]) (mark! covered (token-start t) (token-end t)))]
       [else
        (mark! covered (block-start b) (block-end b))
-       (for ([g (in-list (cond [(paragraph? b) (paragraph-segments b)] [(heading? b) (heading-segments b)] [else '()]))])
+       (for ([g (in-list (leaf-segments b))])
          (mark! content (segment-source-start g) (+ (segment-source-start g) (segment-source-length g))))
        (for ([l (in-list (cond [(code-block? b) (code-block-lines b)] [(html-block? b) (html-block-lines b)] [else '()]))])
          (mark! content (first l) (second l)))]))
@@ -153,12 +163,12 @@
       (fail-check (format "~s: container token ~a covers leaf content" source t)))))
 
 (define (check-document! source)
-  (define doc (parse-document source))
+  (define doc (parse-document source #:extensions (current-exts)))
   (check-node! doc "doc")
   (check-coverage! doc source)
   (check-leaf-inlines! doc source)
   (check-block-tokens! doc source)
-  (check-equal? doc (parse-document source) "parsing is deterministic and equal? is structural"))
+  (check-equal? doc (parse-document source #:extensions (current-exts)) "parsing is deterministic and equal? is structural"))
 
 (test-case "positions: every spec example"
   (for ([e (in-list examples)])
@@ -178,3 +188,14 @@
                   ;; add an item, never become the list's own children (found by #321's test)
                   "-\n\n\ntwo\n" "-\n\n\n    two\n" "-\n\n\n- b\n" "-\n\n\n* * *\n"))])
     (check-document! s)))
+
+;; mdlib-ext (#320): the same properties with every extension on, over the spec examples, the
+;; GFM extension examples and the corpus of our syntax.
+(test-case "positions: every spec and GFM example, all extensions"
+  (parameterize ([current-exts all-extensions])
+    (for ([e (in-list (append examples gfm-examples))])
+      (check-document! (hash-ref e 'markdown)))))
+
+(test-case "positions: extension corpus, all extensions"
+  (parameterize ([current-exts all-extensions])
+    (for ([s (in-list ext-corpus)]) (check-document! s))))
