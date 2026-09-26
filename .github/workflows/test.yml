@@ -26,4 +26,4 @@ jobs:
       - name: Markdown library tests
         run: raco test rackmac-markdown
       - name: Markdown library installs as its own package
-        run: raco pkg install --auto --copy --batch ./rackmac-markdown && racket -l rackmac-markdown -e '(void)'
+        run: raco pkg install --auto --copy --batch ./rackmac-markdown && racket -e '(require rackmac-markdown)'
