@@ -8,7 +8,8 @@
 (require rackunit racket/class racket/gui/base racket/string
          "../rackmac/commands.rkt" "../rackmac/editor.rkt" "../rackmac/frame.rkt"
          "../rackmac/command.rkt" "../rackmac/ui/settings-dialog.rkt" "../rackmac/tools-menu.rkt"
-         "../rackmac/library/open-recent.rkt")
+         "../rackmac/library/open-recent.rkt"
+         "../rackmac/library/folders.rkt" "../rackmac/library/new-note.rkt")
 
 (define f (make-main-frame))                ; hidden: show is never called
 
@@ -33,7 +34,8 @@
     (cons (send m get-label) (snapshot-menu m))))
 
 (define golden
-  '(("File" "New Document" "Open…" "Quick Open…" ("Open Recent" "Files you open appear here.") "---"
+  '(("File" "New Note" "Open…" "Quick Open…" ("Open Recent" "Files you open appear here.")
+     "Add Folder…" "Remove Folder…" "---"
      "Save" "Save As…" "Close Tab" "Reopen Closed Tab" "Reload from Disk" "Print…" "Save All" "---"
      "Next Tab" "Previous Tab" "---" "Settings…" "---" "Quit")
     ("Edit" "Undo" "Redo" "---" "Cut" "Copy" "Paste" "Select All" "Select Line" "---"
@@ -43,7 +45,7 @@
     ("View" "Zoom In" "Zoom Out" "Actual Size" "---" "Toggle Word Wrap" "Toggle Dark/Light Theme"
      "Toggle Full Screen" ("Editor Theme" "Use System Setting" "Light" "Dark") "Show Toolbar" "---"
      "Show Activity Log" "---" "Command Palette…" "Set Language…")
-    ("Tools" "Run Selection" "Run Document" "---" "Scratch Pad" "---"
+    ("Tools" "Run Selection" "Run Document" "---" "Scratch Pad" "New Code File…" "---"
      ("Extensions" "Customize with Code" "Reload Extensions" "List Extensions"))
     ("Help" "What Does This Key Do?" "Keyboard Shortcuts" "Explain a Command…" "Shortcuts as Text" "---"
      "About Rackmac")))

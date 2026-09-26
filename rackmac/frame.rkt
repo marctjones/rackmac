@@ -60,7 +60,7 @@
       (when (< i (length tab-buffers))
         (set-current-buffer! (list-ref tab-buffers i))
         (run-command/safe 'close-tab)))
-    (define/override (on-new-request) (run-command/safe 'new-document))
+    (define/override (on-new-request) (run-command/safe 'new-note))   ; #276: "+" makes a note
     ;; `former` lists, for each tab position after the drag, the position it had before.
     (define/augment (on-reorder former)
       (set-tab-order! (for/list ([i (in-list former)]) (list-ref tab-buffers i))))

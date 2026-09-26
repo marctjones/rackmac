@@ -88,12 +88,15 @@
   (when ok? (for ([b (in-list (reverse discarded))]) (run-hook 'changes-discarded b)))
   ok?)
 
+;; #276 lib-new-note: Cmd+N now makes a note (rackmac/library/new-note.rkt); this keeps its
+;; old behavior (an empty, mode-less tab, useful for a quick Racket or Python script) reachable
+;; under its old symbol, so nothing that calls it by name breaks, moved to Tools and renamed.
 (define-command (new-document)
-  #:icon "new"
-  #:aliases ("new document" "new file" "new tab")
-  #:help "Start a new empty document in a new tab."
-  #:title "New Document" #:menu "File" #:menu-order 10 #:keys ("Mod-n" "Mod-t")
-  #:doc "Create an empty document."
+  #:icon "language"
+  #:aliases ("new document" "new file" "new tab" "new code file" "new script")
+  #:help "Start a new empty code file in a new tab."
+  #:title "New Code File…" #:menu "Tools" #:menu-order 21 #:category "Tools"
+  #:doc "Create an empty document with no Library folder or file yet -- for a quick script. Notes use New Note instead."
   (set-current-buffer! (new-buffer! "untitled")))
 
 (define-command (open-file)

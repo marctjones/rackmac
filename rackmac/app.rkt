@@ -5,6 +5,8 @@
          "command.rkt" "editor.rkt" "frame.rkt" "eval.rkt" "theme.rkt" "hook.rkt"
          "library/recents.rkt"
          "library/open-recent.rkt"
+         "library/folders.rkt"
+         "library/new-note.rkt"
          "appearance.rkt"
          "office.rkt"
          "recovery.rkt"

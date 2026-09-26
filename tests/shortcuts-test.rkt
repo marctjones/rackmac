@@ -19,8 +19,8 @@
 
 ;; (key-string command why): Mod = Cmd on macOS, Ctrl on Windows.
 (define both
-  '(("Mod-n" new-document "New (Office, Chrome new window/doc)")
-    ("Mod-t" new-document "New tab (Chrome)")
+  '(("Mod-n" new-note "New (Office, Chrome new window/doc)")
+    ("Mod-t" new-note "New tab (Chrome)")
     ("Mod-o" open-file "Open (Office)")
     ("Mod-s" save "Save")
     ("Mod-Shift-s" save-as "Save As (macOS)")

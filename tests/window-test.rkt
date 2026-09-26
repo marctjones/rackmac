@@ -3,9 +3,17 @@
 ;; the buffer's key dispatch, and find/replace behave. (The OS -> window step still needs a
 ;; person or CI with a display; see issue "Verify real keystrokes".)
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
-(require rackunit racket/class racket/gui/base racket/string racket/list
+(require rackunit racket/class racket/gui/base racket/string racket/list racket/file
          "../rackmac/commands.rkt" "../rackmac/editor.rkt" "../rackmac/frame.rkt"
-         "../rackmac/command.rkt" "../rackmac/platform.rkt" "../rackmac/ui/layout.rkt")
+         "../rackmac/command.rkt" "../rackmac/platform.rkt" "../rackmac/ui/layout.rkt"
+         "../rackmac/library/folders.rkt" "../rackmac/library/new-note.rkt" "../rackmac/settings.rkt")
+
+;; #276: the "+" button and New Document's toolbar/menu slot now make a note, which needs a
+;; Library folder to put it in.
+(define lib-dir (make-temporary-file "rackmac-window-lib~a" 'directory))
+(void (putenv "RACKMAC_HOME" (path->string lib-dir)))
+(setting-set! 'library-folders '())
+(add-library-folder-path! lib-dir)
 
 (define f (make-main-frame))                ; hidden: show is never called
 (define canvas (main-canvas))
@@ -204,11 +212,12 @@
   (send tabs on-close-request 1)
   (check-equal? (map (lambda (b) (send b get-name)) (visible-buffers)) '("one" "three")))
 
-(test-case "the + button makes a new document"
+(test-case "the + button makes a new note (#276)"
   (define bs (fresh-tabs '("only")))
   (send tabs on-new-request)
   (check-equal? (length (visible-buffers)) 2)
-  (check-equal? (send (current-buffer) get-name) "untitled"))
+  (check-regexp-match #rx"^Untitled [0-9]+[.]md$" (send (current-buffer) get-name))
+  (check-eq? (send (current-buffer) get-mode) 'markdown-mode))
 
 (test-case "dragging tabs reorders the documents (and Go to Tab N follows)"
   (define bs (fresh-tabs '("a" "b" "c")))

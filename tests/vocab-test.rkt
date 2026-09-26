@@ -128,7 +128,7 @@
              (show-activity-log "Show Activity Log") (set-language "Set Language…")
              (customize-with-code "Customize with Code") (reload-init "Reload Extensions")
              (show-cheat-sheet "Keyboard Shortcuts") (list-keybindings "Shortcuts as Text")
-             (new-document "New Document") (describe-command "Explain a Command…"))])
+             (new-document "New Code File…") (describe-command "Explain a Command…"))])
     (check-equal? (command-title (find-command (car p))) (cadr p)))
   (check-eq? (top "Run Selection") 'run-selection)
   (check-eq? (top "run code") 'run-selection)

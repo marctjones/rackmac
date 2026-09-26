@@ -6,7 +6,14 @@
 (require rackunit racket/class racket/gui/base racket/list racket/file
          "../rackmac/toolbar.rkt" "../rackmac/owner.rkt" "../rackmac/mode.rkt"
          "../rackmac/commands.rkt" "../rackmac/toolbar-defaults.rkt" "../rackmac/editor.rkt"
-         "../rackmac/frame.rkt" "../rackmac/command.rkt" "../rackmac/hook.rkt")
+         "../rackmac/frame.rkt" "../rackmac/command.rkt" "../rackmac/hook.rkt"
+         "../rackmac/library/folders.rkt" "../rackmac/library/new-note.rkt" "../rackmac/settings.rkt")
+
+;; #276: the toolbar's "New" button is now New Note, which needs a Library folder.
+(define lib-dir (make-temporary-file "rackmac-toolbar-lib~a" 'directory))
+(void (putenv "RACKMAC_HOME" (path->string lib-dir)))
+(setting-set! 'library-folders '())
+(add-library-folder-path! lib-dir)
 
 (define (names groups) (map (lambda (g) (map toolbar-item-command g)) groups))
 
@@ -14,7 +21,7 @@
 
 (test-case "default toolbar: file, history, clipboard, find, then Search commands at the end"
   (check-equal? (names (toolbar-items-for 'text-mode))
-                '((new-document open-file save) (undo redo) (cut copy paste) (find) (command-palette))))
+                '((new-note open-file save) (undo redo) (cut copy paste) (find) (command-palette))))
 
 (test-case "Language items appear only for that Language and its children"
   (check-not-false (member '(run-selection) (names (toolbar-items-for 'racket-mode))) "Run for Racket")
@@ -56,7 +63,7 @@
 
 (test-case "the window shows one button per toolbar item, in order"
   (doc "" 'text-mode)
-  (check-equal? (send tb button-commands) '(new-document open-file save undo redo cut copy paste find command-palette)))
+  (check-equal? (send tb button-commands) '(new-note open-file save undo redo cut copy paste find command-palette)))
 
 (test-case "switching to a Racket document adds Run; back to text removes it"
   (doc "" 'racket-mode)
@@ -66,8 +73,8 @@
 
 (test-case "a button runs its command"
   (define b (doc "abc" 'text-mode))
-  (click 'new-document)
-  (check-not-eq? (current-buffer) b "New Document made a new tab"))
+  (click 'new-note)
+  (check-not-eq? (current-buffer) b "New Note made a new tab"))
 
 (test-case "Cut and Copy dim without a selection and light up with one"
   (define b (doc "some text" 'text-mode))
