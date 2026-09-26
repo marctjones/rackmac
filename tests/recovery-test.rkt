@@ -7,7 +7,7 @@
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/file racket/class racket/path racket/list racket/gui/base
          "../rackmac/recovery.rkt" "../rackmac/editor.rkt" "../rackmac/hook.rkt"
-         "../rackmac/settings.rkt" "../rackmac/platform.rkt")
+         "../rackmac/settings.rkt" "../rackmac/platform.rkt" "../rackmac/commands.rkt")
 
 (define dir (make-temporary-file "rackmac-recovery~a" 'directory))
 (void (putenv "RACKMAC_HOME" (path->string dir)))
@@ -163,7 +163,17 @@
   (kill-buffer! b)
   (check-false (snapshot-for id) "before-close-buffer deleted it because it was not modified"))
 
-(test-case "closing WITHOUT saving preserves the snapshot for recovery"
+(test-case "answering Don't Save (on close or on quit) discards the snapshot, as in Word and Pages"
+  (define b (new-buffer! "untitled"))
+  (send b insert "changes the user chose to throw away")
+  (snapshot-buffer! b)
+  (define id (buffer-recovery-id b))
+  (check-not-false (snapshot-for id))
+  (parameterize ([confirm-save-changes (lambda (doc) 'discard)])
+    (check-true (confirm-quit?)))
+  (check-false (snapshot-for id) "no recovery offer next launch for text the user discarded"))
+
+(test-case "a document closed while modified without a Don't Save answer keeps its snapshot (safe default)"
   (define b (new-buffer! "untitled"))
   (send b insert "unsaved work")
   (snapshot-buffer! b)

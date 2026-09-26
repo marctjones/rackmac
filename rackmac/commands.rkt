@@ -62,7 +62,9 @@
   (or (not (send b is-modified?))
       (case (ask-save b)
         [(save) (save-buffer! b)]
-        [(discard) #t]
+        ;; Don't Save means discard, as in Word and Pages: recovery drops its snapshot too
+        ;; (recovery.rkt); only a crash or a kill leaves one behind.
+        [(discard) (run-hook 'changes-discarded b) #t]
         [else #f])))
 
 (define (confirm-quit?)

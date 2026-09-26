@@ -118,14 +118,17 @@
 
 (define (on-text-changed b) (schedule-autosave! b))
 (define (on-after-save b) (forget-buffer-snapshot! b))
-;; A document closed while still modified was closed with Don't Save: its snapshot is exactly
-;; the unsaved text recovery exists for, so it is left alone.
+;; Don't Save (on close or on quit) announces 'changes-discarded, and the snapshot goes with the
+;; changes, as in Word and Pages. A document closed while still modified without that answer
+;; (never through the UI today) keeps its snapshot, the safe default.
 (define (on-before-close b) (unless (send b is-modified?) (forget-buffer-snapshot! b)))
+(define (on-changes-discarded b) (forget-buffer-snapshot! b))
 
 (define (enable-autosave-recovery!)
   (add-hook! 'text-changed on-text-changed)
   (add-hook! 'after-save on-after-save)
-  (add-hook! 'before-close-buffer on-before-close))
+  (add-hook! 'before-close-buffer on-before-close)
+  (add-hook! 'changes-discarded on-changes-discarded))
 
 ;; ---- restore on launch (#77) ----------------------------------------------------------------
 
