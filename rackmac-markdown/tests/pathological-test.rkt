@@ -49,19 +49,46 @@
          (string-append (string-append* (for/list ([i (in-range 50000)]) (format "[~a]: u\n" i))) (rep "[0] " 1000))
          #px"^<p>(<a href=\"u\">0</a> ){20}")))
 
-(define (time-case! name md expected)
+
+;; mdlib-ext (#320): the extensions' scanners stay linear too.
+(define extension-cases
+  (list
+   (list "tildes with no closers" (rep "~a " 65000) #px"^<p>(~a ){20}")
+   (list "mismatched tilde runs" (rep "~~a~ " 40000) #f)
+   (list "wiki openers" (rep "[[" 80000) #px"^<p>(\\[){40}")
+   (list "unclosed wiki links" (rep "[[a|b " 50000) #px"^<p>(\\[\\[a\\|b ){20}")
+   (list "many wiki links" (rep "[[a#b|c]] " 50000) #px"^<p>(<a class=\"wiki\" href=\"a#b\">c</a> ){20}")
+   (list "many www links" (rep "www.a.b " 40000) #px"^<p>(<a href=\"http://www.a.b\">www.a.b</a> ){20}")
+   (list "scheme without a domain" (rep "http://aaaa " 30000) #px"^<p>(http://aaaa ){20}")
+   (list "trailing parentheses" (string-append "www.a.b/" (rep ")" 100000)) #px"^<p><a href=\"http://www.a.b/\">")
+   (list "trailing entity-like runs" (string-append "www.a.b/" (rep "&x;" 50000)) #px"^<p><a href=\"http://www.a.b/\">")
+   (list "failing emails" (rep "a@b " 50000) #px"^<p>(a@b ){20}")
+   (list "one long local part" (string-append (make-string 200000 #\a) "@") #f)
+   (list "many tags" (rep "#t " 60000) #px"^<p>(<span class=\"tag\">#t</span> ){20}")
+   (list "many dates" (rep "due 2026-09-30 " 30000) #px"^<p>(<time datetime=\"2026-09-30\">due 2026-09-30</time> ){20}")
+   (list "digit runs" (rep "2026-09-3 " 50000) #f)))
+
+(define extension-block-cases
+  (list
+   (list "many table rows" (string-append "| a | b |\n| - | - |\n" (rep "| x | y |\n" 20000)) #px"^<table>")
+   (list "a wide table row" (string-append (rep "| a " 20000) "|\n" (rep "| - " 20000) "|\n") #px"^<table>")
+   (list "many task items" (rep "- [ ] x\n" 20000) #px"^<ul>\n<li><input disabled=")
+   (list "long front matter" (string-append "---\n" (rep "k: v\n" 50000) "---\nbody\n") #px"^<p>body</p>")))
+
+(define (time-case! name md expected [exts no-extensions])
   (define-values (html ms)
     ;; Process CPU time (GC included), not wall time: other sessions share this Mac and CI
     ;; runners are noisy, and the property under test is the algorithm's cost.
     (let ([t0 (current-process-milliseconds)])
-      (define doc (parse-document md))
+      (define doc (parse-document md #:extensions exts))
       ;; Force the absolute (relocated) trees as well: consumers pay for those, not just HTML.
       (let walk ([bs (document-blocks doc)])
         (for ([b (in-list bs)])
           (cond [(leaf-block? b) (block-inlines b)]
                 [(block-quote? b) (walk (block-quote-children b))]
                 [(list-block? b) (walk (list-block-children b))]
-                [(list-item? b) (walk (list-item-children b))])))
+                [(list-item? b) (walk (list-item-children b))]
+                [(table? b) (walk (append (table-head b) (apply append (table-rows b))))])))
       (define html (document->html doc #:unsafe? #t))
       (values html (- (current-process-milliseconds) t0))))
   (printf "  ~a: ~a ms (~a chars)\n" name (round ms) (string-length md))
@@ -80,3 +107,8 @@
 (for ([c (in-list inline-cases)]) (apply time-case! c))
 (printf "block:\n")
 (for ([c (in-list block-cases)]) (apply time-case! c))
+(printf "all extensions on, the cases above and the extensions' own:\n")
+(for ([c (in-list (append inline-cases block-cases))])
+  (time-case! (string-append (car c) " (extensions)") (cadr c) #f all-extensions))
+(for ([c (in-list (append extension-cases extension-block-cases))])
+  (time-case! (car c) (cadr c) (caddr c) all-extensions))

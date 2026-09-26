@@ -14,7 +14,7 @@
 ;; A failure prints the seed, the text before the edit and the edit, which reproduce it.
 (require json racket/list racket/string racket/runtime-path rackunit
          "../main.rkt" (only-in "../parser.rkt" leaf-blocks) (only-in "../inlines.rkt" cell-relative-inlines)
-         "notes-gen.rkt")
+         "notes-gen.rkt" "ext-corpus.rkt")
 
 (define-runtime-path spec-path "spec/spec-0.31.2.json")
 
@@ -39,7 +39,11 @@
   '("\n" "\n\n" " " "  " "\t" "a" "word" "> " ">" "- " "* " "+ " "1. " "2) " "# " "## " "###"
     "```" "~~~" "```x\n" "    " "===" "---" "***" "*" "**" "_" "__" "`" "``" "[" "]" "[x]" "](" ")"
     "(" "<" ">" "<div>" "</div>" "<!--" "-->" "\\" "&amp;" "&" "!" "[foo]: /url\n" "[bar]: /b \"t\"\n"
-    "[foo]" "[bar][]" "<http://a.b>" "  \n" "\n- x\n" "\n> y\n" "\n    z\n" "\n\n# h\n\n"))
+    "[foo]" "[bar][]" "<http://a.b>" "  \n" "\n- x\n" "\n> y\n" "\n    z\n" "\n\n# h\n\n"
+    ;; extension syntax (design §2.3), for the sessions with extensions on
+    "|" " | " "| a | b |\n" "|---|---|\n" "\n| - |\n" ":-:" "\\|" "~" "~~" "[[" "]]" "[[a|b]]" "#" "#tag"
+    "2026-09-30" "due " "[ ] " "[x] " "[-]" "- [ ] " "---\n" "...\n" "a: 1\n" "TODO " "DONE "
+    "www." "www.a.b" "http://x.y/(z)" "@" "a@b.c" "."))
 
 ;; --- the soundness check for the change report ------------------------------------------------
 
@@ -128,31 +132,46 @@
 (define (apply-edit text e)
   (string-append (substring text 0 (edit-start e)) (edit-text e) (substring text (edit-end e))))
 
-(test-case (format "incremental: ~a random edits, reparse == parse (seed ~a)" edit-count seed)
+(define (run-sessions! exts count seed starts)
   (define rng (make-pseudo-random-generator))
   (parameterize ([current-pseudo-random-generator rng]) (random-seed seed))
   (let session ([done 0])
-    (when (< done edit-count)
-      (define p (make-parser))
-      ;; half the sessions on a spec example, half on generated notes and the hand fixtures
-      (define start-text
-        (if (= 0 (random 2 rng))
-            (vector-ref spec-vector (random (vector-length spec-vector) rng))
-            (vector-ref notes-vector (random (vector-length notes-vector) rng))))
+    (when (< done count)
+      (define p (make-parser #:extensions exts))
+      (define start-text (starts rng))
       (parser-parse! p start-text)
-      (define n (min edits-per-session (- edit-count done)))
+      (define n (min edits-per-session (- count done)))
       (for/fold ([text start-text]) ([i (in-range n)])
         (define e (random-edit text rng))
         (define new-text (apply-edit text e))
         (define old (parser-document p))
         (define-values (doc rep) (parser-reparse! p new-text e))
-        (define expected (parse-document new-text))
+        (define expected (parse-document new-text #:extensions exts))
         (unless (equal? doc expected)
           (fail-check (format "reparse != parse (seed ~a)\ntext: ~s\nedit: ~s" seed text e)))
         (with-check-info (['seed seed] ['text text] ['edit e])
           (check-report-sound! old doc e rep))
         new-text)
       (session (+ done n)))))
+
+(test-case (format "incremental: ~a random edits, reparse == parse (seed ~a)" edit-count seed)
+  ;; half the sessions on a spec example, half on generated notes and the hand fixtures
+  (run-sessions! no-extensions edit-count seed
+                 (lambda (rng)
+                   (if (= 0 (random 2 rng))
+                       (vector-ref spec-vector (random (vector-length spec-vector) rng))
+                       (vector-ref notes-vector (random (vector-length notes-vector) rng))))))
+
+;; mdlib-ext (#320): the same property with every extension on, starting from the extension
+;; corpus half the time.
+(define ext-vector (list->vector ext-corpus))
+(test-case (format "incremental with all extensions: ~a random edits (seed ~a)" edit-count (add1 seed))
+  (run-sessions! all-extensions edit-count (add1 seed)
+                 (lambda (rng)
+                   (case (random 4 rng)
+                     [(0) (vector-ref spec-vector (random (vector-length spec-vector) rng))]
+                     [(1) (vector-ref notes-vector (random (vector-length notes-vector) rng))]
+                     [else (vector-ref ext-vector (random (vector-length ext-vector) rng))]))))
 
 ;; --- targeted cases ------------------------------------------------------------------------------
 
@@ -222,3 +241,17 @@
   (check-false (change-report-structure-changed? rep))
   (check-equal? (length (change-report-inline-changed rep)) 1)
   (check-true (< (- (cdr (car (change-report-ranges rep))) (car (car (change-report-ranges rep)))) 20)))
+
+(test-case "typing in a note with front matter and a table reports only the edited paragraph"
+  (define text (string-append ext-note "\n" (generate-notes 200 5)))
+  (define p (make-parser #:extensions all-extensions))
+  (define old (parser-parse! p text))
+  (for-each block-inlines (leaf-blocks old))
+  (define target (list-ref (filter paragraph? (document-children old)) 8))
+  (define pos (sub1 (block-end target)))
+  (define-values (doc rep) (reparse p text (edit pos pos "x")))
+  (check-equal? (length (change-report-inline-changed rep)) 1)
+  (check-false (change-report-structure-changed? rep))
+  (check-equal? (change-report-ranges rep) (list (cons (block-start target) (add1 (block-end target)))))
+  ;; the front matter and the table matched their old selves: only the paragraph is reported
+  (check-true (for/and ([b (in-list (change-report-blocks rep))]) (paragraph? b))))

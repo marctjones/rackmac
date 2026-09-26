@@ -110,6 +110,23 @@
   (check-toggle "# Title" "# Title" 'strong "# **Title**")
   (check-toggle "- one\n- two" "one\n- two" 'strong "- **one**\n- **two**"))
 
+;; strikethrough parses only with its extension (GFM); tasks, tables and wiki links nearby
+(define (strike-cases)
+  (check-toggle "a b c" "b" 'strike "a ~~b~~ c")
+  (check-toggle "~~abc~~" "b" 'strike "~~a~~b~~c~~")
+  (check-toggle "~a b~" "b" 'strike "~~a~~ b" #:twice? #f)
+  (check-toggle "**a b**" "b" 'strike "**a ~~b~~**")
+  (check-toggle "- [ ] buy milk" "buy milk" 'strike "- [ ] ~~buy milk~~")
+  (check-toggle "- [ ] buy milk" "buy milk" 'strong "- [ ] **buy milk**")
+  (check-toggle "see [[Page|the page]] now" "the page]] now" 'strong "see **[[Page|the page]] now**")
+  (check-toggle "a #tag b" "tag b" 'emph "a *#tag b*")
+  (check-toggle "due 2026-09-30 x" "09-30 x" 'strong "**due 2026-09-30 x**")
+  (check-toggle "| a b | c |\n| - | - |" "b" 'strong "| a **b** | c |\n| - | - |")
+  (check-toggle "# TODO fix it" "fix" 'emph "# TODO *fix* it"))
+
+(test-case "toggle-emphasis-edits: strike and extension syntax (extensions on)"
+  (parameterize ([current-exts all-extensions]) (strike-cases)))
+
 (test-case "toggle-emphasis-edits (extensions off)" (inline-cases))
 (test-case "toggle-emphasis-edits (extensions on)" (parameterize ([current-exts all-extensions]) (inline-cases)))
 
@@ -326,7 +343,7 @@
           (define words (regexp-match-positions* #px"[A-Za-z]+" text (inline-start t) (inline-end t)))
           (unless (null? words)
             (define w (list-ref words (random (length words) rng)))
-            (define kind (list-ref '(strong emph code) (random 3 rng)))
+            (define kind (list-ref '(strong emph code strike) (random 4 rng)))
             (unless (and (eq? kind 'strike) (not (extension-set-strike exts)))
               (define-values (t1 s1 e1) (toggle text (car w) (cdr w) kind))
               (define d1 (parse t1))

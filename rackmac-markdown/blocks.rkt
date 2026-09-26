@@ -688,6 +688,9 @@
   (define-values (ns nc) (scan-indent source offset column content-end))
   (define header (car (mdata-ref leaf 'lines))) ; lines are kept newest first
   (and (< (- nc column) 4) (= 0 (third header))
+       ;; a delimiter row holds only these: prose fails at its first character
+       (for/and ([c (in-string source ns content-end)]) (memv c '(#\| #\- #\: #\space #\tab)))
+       (for/or ([c (in-string source ns content-end)]) (eqv? c #\-))
        (let-values ([(dcells dpipes) (split-table-row source ns content-end)])
          (define aligns (for/list ([c (in-list dcells)]) (delimiter-cell-alignment source c)))
          (define hstart (first header)) (define hend (+ (first header) (second header)))
@@ -750,10 +753,10 @@
   (define dstart (let loop ([i (car delim)]) (if (and (< i (cdr delim)) (space-or-tab? (string-ref source i))) (loop (add1 i)) i)))
   (define dend (let loop ([i (cdr delim)]) (if (and (> i dstart) (space-or-tab? (string-ref source (sub1 i)))) (loop (sub1 i)) i)))
   (define-values (rows row-pipes)
-    (for/fold ([rows '()] [pipes '()] #:result (values (reverse rows) pipes))
+    (for/fold ([rows '()] [pipes '()] #:result (values (reverse rows) (append* (reverse pipes))))
               ([r (in-list (reverse (mdata-ref b 'rows '())))])
       (define-values (cells ps) (row-cells r))
-      (values (cons cells rows) (append pipes ps))))
+      (values (cons cells rows) (cons ps pipes))))
   (table (mblk-start b) (mblk-end b)
          (sort (append head-pipes (list (token 'table-delim-row dstart dend)) row-pipes) < #:key token-start)
          aligns head rows))
@@ -970,8 +973,10 @@
 ;; `---` as the first line, then lines up to a `---` or `...` line: a front-matter block and the
 ;; lines after it. Unterminated, it is not front matter and every line goes to the block parser.
 (define (fence-line? source lr strs)
-  (define str (substring source (line-record-start lr) (line-record-content-end lr)))
-  (member (string-trim str #:left? #f) strs))
+  (define ls (line-record-start lr)) (define le (line-record-content-end lr))
+  (and (>= (- le ls) 3)
+       (member (substring source ls (+ ls 3)) strs)
+       (blank-from? source (+ ls 3) le)))
 (define (take-front-matter source lines)
   (cond
     [(and (pair? lines) (fence-line? source (car lines) '("---")))

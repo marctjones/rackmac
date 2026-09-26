@@ -479,7 +479,8 @@
          [(#\newline) (handle-newline pos)]
          [(#\\) (handle-backslash pos)]
          [(#\`) (handle-backticks pos)]
-         [(#\* #\_ #\~) (handle-delim-run pos (string-ref s pos))] ; `~` only special with strike
+         [(#\* #\_) (handle-delim-run pos (string-ref s pos))]
+         [(#\~) (if strike? (handle-delim-run pos #\~) (scan-text pos))]
          [(#\[) (handle-open-bracket pos)]
          [(#\!) (handle-bang pos)]
          [(#\]) (handle-close-bracket pos)]
@@ -554,21 +555,27 @@
   (define (text-between x y) ; the text node for [x, y), which never splits a token piece
     (define-values (vals toks)
       (for/fold ([vals '()] [toks '()]) ([p (in-list pieces)] #:when (and (< (nd-start p) y) (> (nd-end p) x)))
-        (values (cons (if (null? (nd-tokens p))
-                          (substring s (max x (nd-start p)) (min y (nd-end p)))
-                          (nd-value p))
+        (values (cons (if (or (pair? (nd-tokens p)) (and (<= x (nd-start p)) (<= (nd-end p) y)))
+                          (nd-value p) ; whole (a plain piece's value is its source slice)
+                          (substring s (max x (nd-start p)) (min y (nd-end p))))
                       vals)
                 (append (reverse (nd-tokens p)) toks))))
     (text x y (reverse toks) (nul->replacement (apply string-append (reverse vals)))))
+  ;; every literal holds one of these (`www.` a period, a scheme a colon, an email `@`, a tag
+  ;; `#`, a date `-`): runs without any are passed over in one tight scan
+  (define (trigger? c) (case c [(#\. #\@ #\: #\# #\-) #t] [else #f]))
   (define matches
     (if (or in-link?
-            (not (or (extension-set-autolink-literal ext) (extension-set-tags ext) (extension-set-dates ext))))
+            (not (or (extension-set-autolink-literal ext) (extension-set-tags ext) (extension-set-dates ext)))
+            (not (for/or ([c (in-string s S E)]) (trigger? c))))
         '()
         (find-literals s S E
                        (for*/list ([p (in-list pieces)] #:unless (null? (nd-tokens p))) (cons (nd-start p) (nd-end p)))
                        ext (inline-options-date-keywords opts))))
   (let loop ([pos S] [ms matches] [acc '()])
     (cond
+      [(and (null? ms) (= pos S)) ; no literals: the run is one text node, as without extensions
+       (list (text S E (append* (map nd-tokens pieces)) (nul->replacement (apply string-append (map nd-value pieces)))))]
       [(null? ms) (reverse (if (< pos E) (cons (text-between pos E) acc) acc))]
       [else
        (define m (car ms))

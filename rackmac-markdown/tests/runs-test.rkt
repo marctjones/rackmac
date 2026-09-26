@@ -7,7 +7,7 @@
 ;; disjoint and in order; `block-layouts` has one entry per leaf block and empty list item; and
 ;; `block-at` finds the innermost block. Plus hand-checked expectations on small documents.
 (require json racket/list racket/runtime-path rackunit
-         "../main.rkt" "notes-gen.rkt")
+         "../main.rkt" "notes-gen.rkt" "ext-corpus.rkt")
 
 (define-runtime-path spec-path "spec/spec-0.31.2.json")
 (define fixtures
@@ -18,6 +18,7 @@
 (define (block-children b)
   (cond [(document? b) (document-children b)] [(block-quote? b) (block-quote-children b)]
         [(list-block? b) (list-block-children b)] [(list-item? b) (list-item-children b)]
+        [(table? b) (append (table-head b) (apply append (table-rows b)))]
         [else '()]))
 (define (inline-children x)
   (cond [(emph? x) (emph-children x)] [(strong? x) (strong-children x)] [(strike? x) (strike-children x)]
@@ -49,9 +50,13 @@
        (define c (for/first ([c (in-list (children-of x))]
                              #:when (let-values ([(s e) (span c)]) (<= s p (sub1 e))))
                    c))
+       ;; a done or cancelled task item's first child carries the task role, outside its own
+       (define task (and c (list-item? x) (eq? c (car (list-item-children x)))
+                         (case (list-item-task x) [(done) 'task-done] [(cancelled) 'task-cancelled] [else #f])))
        (cond
          [c (define r (role-of c))
-            (loop c (if r (append roles (list r)) roles) (if r c node))]
+            (define added (append (if task (list task) '()) (if r (list r) '())))
+            (loop c (append roles added) (if (pair? added) c node))]
          [else (values roles node)])])))
 
 (define (check-runs! doc)
@@ -112,6 +117,16 @@
   (random-seed 322)
   (for ([f (in-list fixtures)])
     (define doc (parse-document f))
+    (check-runs! doc)
+    (check-tokens! doc)
+    (check-layouts-and-block-at! doc)))
+
+(define-runtime-path gfm-path "spec/gfm-0.29-extensions.json")
+(test-case "runs, tokens, layouts with all extensions: spec and GFM examples, notes, the corpus"
+  (random-seed 320)
+  (for ([f (in-list (append fixtures ext-corpus
+                            (map (lambda (e) (hash-ref e 'markdown)) (call-with-input-file gfm-path read-json))))])
+    (define doc (parse-document f #:extensions all-extensions))
     (check-runs! doc)
     (check-tokens! doc)
     (check-layouts-and-block-at! doc)))
