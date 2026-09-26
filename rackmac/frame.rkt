@@ -219,6 +219,10 @@
   (add-hook! 'text-changed (lambda (b) (send status-bar refresh)))
   (add-hook! 'echo (lambda (s) (send status-bar set-message! s) (send status-bar refresh)))
   (add-hook! 'command-registered (lambda (n) (rebuild-menus!)))
+  ;; #335: a top menu can come and go with the current document's Language ("Format" for
+  ;; prose); rebuilding on every switch is what a mode-scoped menu costs, same as the toolbar.
+  (add-hook! 'current-buffer-changed (lambda (b) (rebuild-menus!)))
+  (add-hook! 'mode-changed (lambda (b) (when (eq? b (current-buffer)) (rebuild-menus!))))
   (add-hook! 'focus-editor focus-editor!)
   (add-hook! 'theme-changed
              (lambda () (send canvas set-canvas-background (canvas-background))
@@ -277,7 +281,10 @@
 
 ;; ---- menus (generated from command metadata) -----------------------------
 
-(define menu-titles '("File" "Edit" "View" "Tools" "Help"))
+;; "Format" (#335, docs/UI-DESIGN.md §2.3) sits between Edit and View, but only while it would
+;; hold something usable: unlike the other fixed menus, every one of its commands is
+;; `#:when`-scoped to prose documents, so `title-applies?` below drops it for a Racket document.
+(define menu-titles '("File" "Edit" "Format" "View" "Tools" "Help"))
 
 ;; RM-065: menu items enable and disable from #:when. menu% has no per-item enabled hook,
 ;; so each top menu's demand-callback (run right before it opens) walks its own items and
@@ -321,6 +328,16 @@
 ;; carry a menu-order, so the two interleave and group into separators exactly the same way.
 (define (row-order r) (if (command? r) (command-menu-order r) (submenu-spec-order r)))
 
+;; A top menu shows only while it would hold something usable now: at least one command whose
+;; #:when passes (or none at all, since a menu with no #:when is always usable), or a submenu
+;; (which has no #:when of its own -- its contents decide their own state when it opens). File,
+;; Edit, View, Tools and Help commands mostly have no #:when, so this is a no-op for them; it is
+;; how "Format" (menu-titles above) disappears for a document that is not prose.
+(define (title-applies? title with-menu)
+  (define cmds (filter (lambda (c) (equal? (command-menu c) title)) with-menu))
+  (define subs (filter (lambda (s) (equal? (submenu-spec-parent s) title)) (hash-values submenus)))
+  (or (pair? subs) (for/or ([c (in-list cmds)]) (command-enabled? c))))
+
 (define (rebuild-menus!)
   (when menu-bar
     (for ([m (send menu-bar get-items)]) (send m delete))
@@ -328,10 +345,11 @@
     (hash-clear! menu-objects)
     (define with-menu (filter command-menu (all-commands)))
     (define sub-parents (map submenu-spec-parent (hash-values submenus)))
-    (define titles (append menu-titles
-                           (remove-duplicates
-                            (filter (lambda (t) (not (member t menu-titles)))
-                                    (append (map command-menu with-menu) sub-parents)))))
+    (define known (append menu-titles
+                          (remove-duplicates
+                           (filter (lambda (t) (not (member t menu-titles)))
+                                   (append (map command-menu with-menu) sub-parents)))))
+    (define titles (filter (lambda (t) (title-applies? t with-menu)) known))
     (for ([title (in-list titles)])
       (define cmds (filter (lambda (c) (equal? (command-menu c) title)) with-menu))
       (define subs (filter (lambda (s) (equal? (submenu-spec-parent s) title)) (hash-values submenus)))

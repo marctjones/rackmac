@@ -3,7 +3,7 @@
 ;; registry for the current document's Language. Buttons dim when their command's #:when
 ;; says it does not apply; hovering shows the command and its shortcut in the status bar.
 (require racket/class racket/gui/base racket/list racket/string
-         "../toolbar.rkt" "../command.rkt" "../hook.rkt" "icons.rkt" "layout.rkt")
+         "../toolbar.rkt" "../command.rkt" "../hook.rkt" "icons.rkt" "layout.rkt" "context-menu.rkt")
 (provide toolbar-panel% toolbar-hint)
 
 (define (toolbar-hint name)
@@ -26,28 +26,44 @@
     (define/public (button-for name)
       (for/first ([(b n) (in-hash buttons)] #:when (eq? n name)) b))
 
-    (define (icon-for c [name (command-icon c)])
+    ;; `tile` overrides the letter tile a plain command would otherwise get from its own title
+    ;; (colliding titles, e.g. "Bold" and "Bulleted List" both start with B, #336/#332), and
+    ;; always wins over the command's own #:icon: a command can need a real icon for #:menu
+    ;; (icons-test.rkt) while its toolbar button still shows a plain letter, as Bold and Italic
+    ;; do (decision #332).
+    (define (icon-for c [name (command-icon c)] #:tile [tile #f])
       (define scale (or (get-display-backing-scale) 1.0))
       (define color (get-label-foreground-color))
-      (if (and name (icon-name? name))
-          (icon-bitmap name #:scale scale #:color color)
-          (letter-tile-bitmap (substring (command-title c) 0 1) #:scale scale #:color color)))
+      (cond
+        [tile (letter-tile-bitmap tile #:scale scale #:color color)]
+        [(and name (icon-name? name)) (icon-bitmap name #:scale scale #:color color)]
+        [else (letter-tile-bitmap (substring (command-title c) 0 1) #:scale scale #:color color)]))
 
     ;; #333: while a command's #:checked state is on, its button shows #:checked-title and
     ;; #:checked-icon instead (button% has no pressed state; a swapped label is the native way).
     (define shown-checked (make-hasheq))     ; button% -> the checked state its label shows
     (define (icon-name-for c on?) (or (and on? (command-checked-icon c)) (command-icon c)))
     (define (title-for c on?) (or (and on? (command-checked-title c)) (command-title c)))
-    (define (label-for c end? on?)
-      (define icon (icon-for c (icon-name-for c on?)))
+    (define (label-for c end? on? tile)
+      (define icon (icon-for c (icon-name-for c on?) #:tile tile))
       (if end? (list icon (string-trim (title-for c on?) "…") 'left) icon))
 
-    (define (make-button name end?)
+    ;; A toolbar item can name several other commands instead of running one itself (#336's
+    ;; Heading button: Heading 1-3, Body Text): its click opens a popup-menu% below the button
+    ;; (ui/context-menu.rkt, the same one the editor's right-click menu uses) rather than
+    ;; running `name`, which then serves only as the button's title, hover hint and #:when.
+    (define (make-button it end?)
+      (define name (toolbar-item-command it))
       (define c (find-command name))
       (and c
-           (let* ([on? (command-checked? c)]
-                  [b (new button% [parent row] [label (label-for c end? on?)]
-                          [callback (lambda (btn e) (run-command/safe name) (run-hook 'focus-editor))])])
+           (let* ([popup (toolbar-item-items it)]
+                  [on? (and (not popup) (command-checked? c))]
+                  [b (new button% [parent row] [label (label-for c end? on? (toolbar-item-label it))]
+                          [callback (lambda (btn e)
+                                      (cond
+                                        [popup
+                                         (popup-menu-at! btn (build-popup-menu (list popup)) 0 (send btn get-height))]
+                                        [else (run-command/safe name) (run-hook 'focus-editor)]))])])
              (hash-set! buttons b name)
              (hash-set! shown-checked b (cons on? end?))
              b)))
@@ -64,7 +80,7 @@
         (define end? (toolbar-item-end? (car g)))
         (when (and (> i 0) (not end?)) (new pane% [parent row] [min-width toolbar-group-gap] [stretchable-width #f]))
         (when end? (new pane% [parent row] [stretchable-width #t]))           ; push to the right
-        (for ([it g]) (make-button (toolbar-item-command it) end?)))
+        (for ([it g]) (make-button it end?)))
       (send this change-children (lambda (cs) (list new-row)))
       (refresh-enabled!))
 

@@ -4,7 +4,7 @@
 (require racket/list racket/string "command.rkt" "keymap.rkt" "platform.rkt")
 (provide shortcut-rows shortcuts-markdown)
 
-(define menu-order '("File" "Edit" "View" "Tools" "Help" #f))
+(define menu-order '("File" "Edit" "Format" "View" "Tools" "Help" #f))
 
 (define (show plat name)
   (define strs (default-key-strings name plat))

@@ -21,6 +21,9 @@
          "pdf-export.rkt"                ; #279: File > Export as PDF…
          ;; feature modules: one per line, so parallel work doesn't collide here
          "spell.rkt"
+         "md-format.rkt"
+         "md-lists.rkt"
+         "md-toolbar.rkt"
          )
 (provide main)
 

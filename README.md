@@ -195,6 +195,19 @@ everything, including commands without a shortcut.
 | Edit | Indent Lines | ⌘] | Ctrl+] |
 | Edit | Outdent Lines | ⌘[, ⇧⇥ | Ctrl+[, Shift+Tab |
 | Edit | Insert Date | ⌃⇧D | Alt+Shift+D |
+| Format | Bold | ⌘B | Ctrl+B |
+| Format | Italic | ⌘I | Ctrl+I |
+| Format | Inline Code | ⇧⌘C | Ctrl+Shift+C |
+| Format | Insert Link… | ⌘K | Ctrl+K |
+| Format | Heading 1 | ⌥⌘1 | — |
+| Format | Heading 2 | ⌥⌘2 | — |
+| Format | Heading 3 | ⌥⌘3 | — |
+| Format | Body Text | ⌥⌘0 | — |
+| Format | Bulleted List | ⇧⌘8 | Ctrl+Shift+8 |
+| Format | Numbered List | ⇧⌘7 | Ctrl+Shift+7 |
+| Format | Checklist | ⇧⌘L | Ctrl+Shift+L |
+| Format | Quote | ⇧⌘9 | Ctrl+Shift+9 |
+| Format | Mark Done | ⇧⌘U | Ctrl+Shift+U |
 | View | Zoom In | ⌘=, ⇧⌘= | Ctrl+=, Ctrl+Shift+= |
 | View | Zoom Out | ⌘- | Ctrl+- |
 | View | Actual Size | ⌘0 | Ctrl+0 |

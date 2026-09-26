@@ -7,8 +7,14 @@
          toolbar-items toolbar-items-for toolbar-groups)
 
 ;; group: a symbol; groups appear in the order they were first used. end?: pushed to the
-;; right-hand end of the bar (e.g. "Search commands").
-(struct toolbar-item (command group mode end?) #:transparent)
+;; right-hand end of the bar (e.g. "Search commands"). items: #f for an ordinary button that
+;; runs `command`, or a list of other command names (#336's Heading button: Heading 1-3, Body
+;; Text) shown in a popup-menu% below the button instead, with `command` naming a backing
+;; command used only for the button's title, hover hint and #:when. label: #f to derive the
+;; button's letter tile from the command's own title when it has no #:icon, or an explicit
+;; short override (colliding titles otherwise give the same tile, e.g. "Bold" and "Bulleted
+;; List" both start with B; docs/UI-DESIGN.md #332 tracks real icons for these).
+(struct toolbar-item (command group mode end? items label) #:transparent)
 
 (define items '())          ; in insertion order
 (define groups '())         ; group symbols, first-use order
@@ -19,11 +25,12 @@
 (define (changed!) (run-hook 'toolbar-changed))
 
 ;; Adding the same command again (for the same mode) replaces it rather than duplicating.
-(define (add-toolbar-item! command #:group [group 'main] #:mode [mode #f] #:end? [end? #f])
+(define (add-toolbar-item! command #:group [group 'main] #:mode [mode #f] #:end? [end? #f]
+                            #:items [popup-items #f] #:label [label #f])
   (unless (symbol? command) (raise-argument-error 'add-toolbar-item! "symbol?" command))
   (define old items)
   (define old-groups groups)
-  (define it (toolbar-item command group mode end?))
+  (define it (toolbar-item command group mode end? popup-items label))
   (set! items (append (filter (lambda (x) (not (and (eq? (toolbar-item-command x) command)
                                                     (eq? (toolbar-item-mode x) mode))))
                               items)
