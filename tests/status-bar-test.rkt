@@ -113,7 +113,7 @@
 
 (define (model) (send sb current-model))
 (define (seg-text name) (define s (findf (lambda (s) (eq? (seg-view-name s) name)) (model))) (and s (seg-view-text s)))
-(define (doc text [mode 'text-mode])
+(define (doc text [mode 'racket-mode])      ; code: every segment shows (#339)
   (define b (new-buffer! "sb"))
   (set-current-buffer! b)
   (send b set-mode! mode)
@@ -127,7 +127,7 @@
   (check-equal? (seg-text 'line-col) "Ln 2, Col 3"))
 
 (test-case "word count is shown for prose Languages, not for code, and selection wins"
-  (define b (doc "one two three four"))
+  (define b (doc "one two three four" 'text-mode))
   (check-equal? (seg-text 'words) "4 words")
   (send b set-mode! 'racket-mode)
   (check-false (seg-text 'words) "no word count for Racket")
@@ -149,10 +149,26 @@
   (display-to-file #"a\nb" lf #:exists 'truncate)
   (call-with-output-file crlf #:exists 'truncate (lambda (o) (write-bytes #"a\r\nb" o)))
   (set-current-buffer! (open-file! lf))
-  (check-equal? (seg-text 'eol) "LF")
+  (check-false (seg-text 'eol) "an ordinary note (LF) doesn't show line endings")
   (set-current-buffer! (open-file! crlf))
-  (check-equal? (seg-text 'eol) "CRLF")
-  (delete-file lf) (delete-file crlf))
+  (check-equal? (seg-text 'eol) "CRLF" "an unusual one does")
+  (define rkt (make-temporary-file "sb-lf~a.rkt"))
+  (display-to-file #"a\nb" rkt #:exists 'truncate)
+  (set-current-buffer! (open-file! rkt))
+  (check-equal? (seg-text 'eol) "LF" "code always shows them")
+  (delete-file lf) (delete-file crlf) (delete-file rkt))
+
+(test-case "notes show words and Language, like a word processor; code keeps position, encoding and line endings (#339)"
+  (doc "one two" 'markdown-mode)
+  (check-false (seg-text 'line-col))
+  (check-false (seg-text 'encoding) "UTF-8 is the ordinary case: hidden")
+  (check-false (seg-text 'eol))
+  (check-equal? (seg-text 'words) "2 words")
+  (check-equal? (seg-text 'language) "Markdown")
+  (doc "(x)" 'racket-mode)
+  (check-equal? (seg-text 'line-col) "Ln 1, Col 1")
+  (check-equal? (seg-text 'encoding) "UTF-8")
+  (check-equal? (seg-text 'eol) "LF"))
 
 (test-case "zoom is a percentage of the default size, and follows Zoom In"
   (doc "")

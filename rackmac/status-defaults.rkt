@@ -31,15 +31,23 @@
 (define (prose-mode? mode-sym) (and (memq 'text-mode (map mode-name (mode-chain mode-sym))) #t))
 
 ;; ---- segments --------------------------------------------------------------
+;; #339: notes show words and Language, like a word processor; position, encoding and line
+;; endings are for code. A note whose encoding or line endings are unusual (not UTF-8, not LF)
+;; still shows them, since that matters when the file goes to someone else.
+
+(define (prose-document?) (prose-mode? (send (current-buffer) get-mode)))
 
 (add-status-segment! 'line-col
   (lambda ()
     (define b (current-buffer))
-    (define pos (send b get-start-position))
-    (define para (send b position-paragraph pos))
-    (define col (- pos (send b paragraph-start-position para)))
-    (format "Ln ~a, Col ~a" (add1 para) (add1 col)))
+    (and (not (prose-document?)) (line-col-text b)))
   #:command 'goto-line #:hint "Click to go to a line" #:priority 100)
+
+(define (line-col-text b)
+  (define pos (send b get-start-position))
+  (define para (send b position-paragraph pos))
+  (define col (- pos (send b paragraph-start-position para)))
+  (format "Ln ~a, Col ~a" (add1 para) (add1 col)))
 
 (add-status-segment! 'words
   (lambda ()
@@ -51,11 +59,15 @@
   #:priority 10)
 
 (add-status-segment! 'encoding
-  (lambda () (encoding-label (send (current-buffer) local-ref 'encoding 'utf-8)))
+  (lambda ()
+    (define enc (send (current-buffer) local-ref 'encoding 'utf-8))
+    (and (not (and (prose-document?) (eq? enc 'utf-8))) (encoding-label enc)))
   #:command 'show-encoding #:hint "Click to see the file's encoding" #:priority 20)
 
 (add-status-segment! 'eol
-  (lambda () (eol-label (send (current-buffer) local-ref 'eol "\n")))
+  (lambda ()
+    (define eol (send (current-buffer) local-ref 'eol "\n"))
+    (and (not (and (prose-document?) (equal? eol "\n"))) (eol-label eol)))
   #:command 'set-line-endings #:hint "Click to change line endings" #:priority 30)
 
 (add-status-segment! 'language
