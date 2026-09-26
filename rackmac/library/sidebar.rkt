@@ -187,6 +187,7 @@
   #:aliases ("rename file" "rename folder" "rename note")
   #:help "Rename the file or folder chosen in the Library."
   #:title "Rename…"
+  (define kind (target-kind))   ; read now: the rename's buffers-changed refresh clears the target
   (define old (string->path (target-path)))
   (define name ((ask-library-name) "Rename" "New name:" (base-name old)))
   (define clean (and name (sanitize-name name)))
@@ -199,7 +200,7 @@
      (with-handlers ([exn:fail? (lambda (e) (message "Could not rename: ~a" (exn-message e)))])
        (rename-file-or-directory old new)
        (retarget-buffers! old new)
-       (set-library-target! (list (target-kind) (path->string new)))
+       (set-library-target! (list kind (path->string new)))
        (message "Renamed to ~a." clean))
      (library-changed!)]))
 
