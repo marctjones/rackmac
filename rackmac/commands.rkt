@@ -57,20 +57,36 @@
          #t]
         [else (save-buffer-as! b)]))
 
-;; #t when it is fine to discard/close `b` (saving first if the user asks).
-(define (confirm-close-buffer? b)
-  (or (not (send b is-modified?))
-      (case (ask-save b)
-        [(save) (save-buffer! b)]
-        ;; Don't Save means discard, as in Word and Pages: recovery drops its snapshot too
-        ;; (recovery.rkt); only a crash or a kill leaves one behind.
-        [(discard) (run-hook 'changes-discarded b) #t]
-        [else #f])))
+;; 'ok (nothing to lose, or saved), 'discard (Don't Save) or #f (Cancel, or the save failed).
+(define (ask-close b)
+  (cond [(not (send b is-modified?)) 'ok]
+        [else (case (ask-save b)
+                [(save) (and (save-buffer! b) 'ok)]
+                [(discard) 'discard]
+                [else #f])]))
 
+;; #t when it is fine to discard/close `b` (saving first if the user asks).
+;; Don't Save means discard, as in Word and Pages: recovery drops its snapshot too
+;; (recovery.rkt); only a crash or a kill leaves one behind.
+(define (confirm-close-buffer? b)
+  (case (ask-close b)
+    [(ok) #t]
+    [(discard) (run-hook 'changes-discarded b) #t]
+    [else #f]))
+
+;; Don't Save answers are only acted on once the whole quit is confirmed: a Cancel on a later
+;; document keeps every document open, and those must keep their recovery snapshots (#76).
 (define (confirm-quit?)
-  (for/and ([b (in-list (unsaved-buffers))])
-    (set-current-buffer! b)
-    (confirm-close-buffer? b)))
+  (define discarded '())
+  (define ok?
+    (for/and ([b (in-list (unsaved-buffers))])
+      (set-current-buffer! b)
+      (case (ask-close b)
+        [(ok) #t]
+        [(discard) (set! discarded (cons b discarded)) #t]
+        [else #f])))
+  (when ok? (for ([b (in-list (reverse discarded))]) (run-hook 'changes-discarded b)))
+  ok?)
 
 (define-command (new-document)
   #:icon "new"
