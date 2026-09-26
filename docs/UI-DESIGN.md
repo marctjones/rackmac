@@ -425,6 +425,19 @@ through `pandoc -f html -t gfm --wrap=none` into Markdown, and **Copy as Rich Te
 pasteboard so Word and Outlook receive headings and lists. If no: paste stays plain text (Word always supplies it)
 and Copy as Rich Text writes an HTML file and offers Reveal; both are documented in the issue's outcome.
 
+_Spike result (#282, 2026-09-26, macOS, Racket 9.3):_ **not through racket/gui, yes through the Objective-C runtime.**
+racket/gui's Cocoa clipboard maps every format name except `"TEXT"` to `org.racket-lang.<name>`
+(`mred/private/wx/cocoa/clipboard.rkt`, `map-type`), so `get-clipboard-data "public.html"` always returns `#f` and a
+`clipboard-client%` can only offer Racket-private types. Reading `NSPasteboard generalPasteboard`'s
+`dataForType:` directly through `ffi/unsafe/objc` (in the standard distribution; gui-lib uses it itself) returns
+`public.html` and `public.rtf` byte for byte, with `public.utf8-plain-text` beside them (probe:
+`docs/spikes/clipboard-objc.rkt`, run after placing HTML, RTF and text on the pasteboard). Writing is the
+mirror image (`clearContents`, `setData:forType:` per type), so Copy as Rich Text can put HTML and plain Markdown
+together. Consequences: `paste-from-word` (#307) and `copy-rich` (#308) are built on a small `rackmac/pasteboard.rkt`
+(macOS only, a parameter so tests run anywhere; Windows keeps plain text until its catch-up); this is the same kind of
+narrow FFI as spell check (#351) and bundling fonts (#330). **Verify** with a real Word or Outlook copy (they add
+Microsoft-specific types too) in the live check (#283).
+
 ### 2.7 Code documents
 
 _Changed 2026-09-25 (revised from "editor" and "gutter")._ A document whose Language descends from `prog-mode`
