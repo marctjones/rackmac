@@ -114,6 +114,20 @@
       (run-hook 'buffers-changed)
       (run-hook 'after-save this))
 
+    ;; ---- clipboard ---------------------------------------------------------
+    ;; Copy puts the document's characters on the clipboard as plain text, never text%'s own
+    ;; styled snips (#334, docs/UI-DESIGN.md §2.2.1): a note's Formatted view is only styling, so
+    ;; a colleague gets readable Markdown, and pasting into another document (a code file, the
+    ;; other view) carries no heading sizes or fonts; the destination styles it. Snips (later
+    ;; checkboxes, rules) contribute their text. text%'s cut calls this copy.
+    (define/override (copy [extend? #f] [time 0] [start 'start] [end 'end])
+      (define s (if (symbol? start) (send this get-start-position) start))
+      (define e (min (if (symbol? end) (send this get-end-position) end) (send this last-position)))
+      (when (< s e)
+        (define text (send this get-text s e #t))
+        (define before (and extend? (send the-clipboard get-clipboard-string time)))
+        (send the-clipboard set-clipboard-string (if before (string-append before text) text) time)))
+
     ;; ---- input -----------------------------------------------------------
     (define/override (on-char ev)
       (unless (dispatch-key-event this ev)
