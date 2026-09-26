@@ -4,7 +4,7 @@
 ;; walks one line at a time. Line endings: \n, \r\n, and lone \r are all accepted as terminators
 ;; (the design normalizes to \n on load; this module tolerates the others for other callers and
 ;; for spec text).
-(provide build-line-index offset->line+col line+col->offset
+(provide build-line-index lines->line-index offset->line+col line+col->offset
          source-lines line-record-start line-record-content-end line-record-end)
 
 ;; A vector of line-start offsets, index 0 is always 0 (or the whole vector is #(0) for "").
@@ -23,6 +23,16 @@
           (define skip (if (and (< next len) (eqv? (string-ref source next) #\newline)) 2 1))
           (loop (+ i skip) (cons (+ i skip) starts))]
          [else (loop (add1 i) starts)])])))
+
+;; The same vector from `source-lines`' records, saving the parser a second pass over the text:
+;; each record's start, plus the empty line after a final terminator.
+(define (lines->line-index records)
+  (define last-record (let loop ([rs records]) (if (null? (cdr rs)) (car rs) (loop (cdr rs)))))
+  (define starts (for/list ([r (in-list records)]) (line-record-start r)))
+  (list->vector
+   (if (> (line-record-end last-record) (line-record-content-end last-record))
+       (append starts (list (line-record-end last-record)))
+       starts)))
 
 ;; Binary search: the greatest index i such that (vector-ref starts i) <= offset.
 (define (line-index-of starts offset)

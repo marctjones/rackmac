@@ -393,22 +393,31 @@
 
 (define (leaf-lines b) (reverse (mdata-ref b 'lines '())))
 
-;; Builds §1.3 segments and the joined content string from a leaf's accumulated lines.
+;; Builds §1.3 segments and the joined content string from a leaf's accumulated lines. The
+;; content is written into one string of the final length (per-line substrings joined afterwards
+;; cost twice the allocation, and this runs for every leaf on every keystroke, design §3.1).
 (define (build-segments+content source lines)
-  (let loop ([lines lines] [content-pos 0] [segs '()] [parts '()])
+  (define total
+    (let loop ([ls lines] [n 0])
+      (if (null? ls) (max 0 (sub1 n)) (loop (cdr ls) (+ n (cadr (car ls)) (caddr (car ls)) 1)))))
+  (define content (make-string total #\space))
+  (let loop ([lines lines] [content-pos 0] [segs '()])
     (cond
-      [(null? lines) (values (reverse segs) (string-join (reverse parts) "\n"))]
+      [(null? lines) (values (reverse segs) content)]
       [else
-       (match-define (list src-start src-len vindent) (car lines))
-       (define real-text (substring source src-start (+ src-start src-len)))
-       (define line-text (string-append (make-string vindent #\space) real-text))
+       (define l (car lines))
+       (define src-start (car l)) (define src-len (cadr l)) (define vindent (caddr l))
+       (define text-pos (+ content-pos vindent))
+       (string-copy! content text-pos source src-start (+ src-start src-len))
+       (define next (+ text-pos src-len))
+       (when (< next total) (string-set! content next #\newline))
        (define segs2
          (if (> vindent 0)
-             (list* (segment (+ content-pos vindent) src-len src-start src-len)
+             (list* (segment text-pos src-len src-start src-len)
                     (segment content-pos vindent src-start 0)
                     segs)
              (cons (segment content-pos src-len src-start src-len) segs)))
-       (loop (cdr lines) (+ content-pos (string-length line-text) 1) segs2 (cons line-text parts))])))
+       (loop (cdr lines) (add1 next) segs2)])))
 
 ;; Strips trailing spaces/tabs from the LAST accumulated line only (spec, "Paragraphs": raw
 ;; content has "final whitespace" removed; a non-last line's trailing spaces are left for the
@@ -735,7 +744,7 @@
 (define (parse-blocks source #:extensions [extensions no-extensions]
                       #:inline-parser [inline-parser default-inline-parser])
   (define lines (source-lines source))
-  (define line-idx (build-line-index source))
+  (define line-idx (lines->line-index lines))
   (define doc (make-mblk 'document 0 '()))
   (for ([lr (in-list lines)]) (process-line! doc source lr))
   (close-all! doc)
@@ -840,6 +849,11 @@
 (define (strip-link-ref-defs source lines refmap)
   ;; The paragraph is joined once and definitions are read from successive offsets, keeping a
   ;; paragraph of 50,000 definitions linear (tests/pathological-test.rkt, "many references").
+  (if (starts-with-bracket? source lines)
+      (strip-link-ref-defs* source lines refmap)
+      (values lines '())))
+
+(define (strip-link-ref-defs* source lines refmap)
   (define text (line-join source lines))
   (let loop ([lines lines] [pos 0] [defs '()])
     (cond
@@ -866,6 +880,12 @@
 (define (only-link-ref-defs? source lines)
   (define-values (remaining defs) (strip-link-ref-defs source lines (make-hash)))
   (null? remaining))
+
+;; Every definition starts with `[` at the paragraph's first character: most paragraphs are
+;; ruled out here without joining their lines.
+(define (starts-with-bracket? source lines)
+  (and (pair? lines)
+       (let ([l (car lines)]) (and (> (cadr l) 0) (eqv? (string-ref source (car l)) #\[)))))
 
 (define (non-empty-normalized? s) (> (string-length s) 0))
 
