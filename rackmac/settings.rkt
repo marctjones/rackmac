@@ -17,12 +17,16 @@
 (require racket/list "owner.rkt" "hook.rkt" "platform.rkt" "store.rkt")
 (provide define-setting setting-ref setting-set! find-setting all-settings
          setting-name setting-doc setting-category setting-scope setting-default setting-contract
-         settings-file-path)
+         setting-choices settings-file-path)
 
 ;; contract: a plain predicate (any/c -> boolean?), not a racket/contract value -- consistent
 ;; with #:when elsewhere in this codebase (command.rkt), and simple enough that a bad value can
 ;; always be reported instead of raised (below).
-(struct setting (name contract default doc category scope) #:transparent)
+;;
+;; choices (#291, settings-dialog-min): #f for an open-ended setting, or a list of (value . label)
+;; pairs for one with a finite set of values -- the Settings dialog uses it to draw a `choice%`
+;; with friendly labels (e.g. editor-theme's System/Light/Dark) instead of a text field.
+(struct setting (name contract default doc category scope choices) #:transparent)
 
 (define registry (make-hasheq))            ; name -> setting
 (define global-values (make-hasheq))       ; name -> current global value
@@ -40,15 +44,22 @@
   (values (not (eq? v no-value)) v))
 
 (define (register-setting! name #:contract pred #:default default #:doc [doc ""]
-                           #:category [category "General"] #:scope [scope 'global])
+                           #:category [category "General"] #:scope [scope 'global]
+                           #:choices [choices #f])
   (unless (and (procedure? pred) (procedure-arity-includes? pred 1))
     (raise-argument-error 'define-setting "(-> any/c boolean?)" pred))
   (unless (memq scope '(global document))
     (raise-argument-error 'define-setting "(or/c 'global 'document)" scope))
   (unless (pred default)
     (raise-argument-error 'define-setting "a #:default satisfying #:contract" default))
+  (when choices
+    (unless (and (list? choices) (pair? choices)
+                (andmap (lambda (c) (and (pair? c) (string? (cdr c)))) choices))
+      (raise-argument-error 'define-setting "(listof (cons/c any/c string?))" choices))
+    (unless (member default (map car choices))
+      (raise-argument-error 'define-setting "a #:default among #:choices" default)))
   (define old (hash-ref registry name #f))
-  (hash-set! registry name (setting name pred default doc category scope))
+  (hash-set! registry name (setting name pred default doc category scope choices))
   ;; Seed the global value from disk every time a setting is (re)registered -- global values
   ;; are write-through (setting-set! saves immediately), so the file is always the source of
   ;; truth and reloading (Reload Extensions, or a real restart) picking it back up is exactly

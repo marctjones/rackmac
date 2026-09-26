@@ -8,7 +8,8 @@
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/list racket/string
          "../rackmac/command.rkt" "../rackmac/commands.rkt" "../rackmac/mode.rkt"
-         "../rackmac/keymap.rkt" "../rackmac/editor.rkt" "../rackmac/picker.rkt")
+         "../rackmac/keymap.rkt" "../rackmac/editor.rkt" "../rackmac/picker.rkt"
+         "../rackmac/ui/settings-dialog.rkt")
 
 (define golden-names
   '(about close-tab close-other-tabs close-tabs-to-right command-palette copy copy-tab-path
@@ -56,8 +57,9 @@
   (check-eq? (top "remove line") 'delete-line)
   (check-eq? (top "home") 'line-start)
   (check-eq? (top "dark mode") 'toggle-theme)
-  (check-eq? (top "settings") 'customize-with-code)
-  (check-eq? (top "preferences") 'customize-with-code)
+  (check-eq? (top "settings") 'open-settings)
+  (check-eq? (top "preferences") 'open-settings)
+  (check-eq? (top "edit as code") 'customize-with-code)
   (check-eq? (top "run code") 'run-selection)
   (check-not-false (memq 'paste (palette-matches "paste")) "the ordinary word still works")
   (check-equal? (palette-matches "zzzzqqq") '() "no match gives an empty list"))

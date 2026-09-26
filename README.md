@@ -173,7 +173,7 @@ everything, including commands without a shortcut.
 | File | Save All | ⌥⌘S | — |
 | File | Next Tab | ⌃⇥, ⌥⌘→, ⇧⌘] | Ctrl+Tab, Ctrl+PgDn |
 | File | Previous Tab | ⌃⇧⇥, ⌥⌘←, ⇧⌘[ | Ctrl+Shift+Tab, Ctrl+PgUp |
-| File | Customize with Code | ⌘, | Ctrl+, |
+| File | Settings… | ⌘, | Ctrl+, |
 | File | Quit | ⌘Q | Alt+F4 |
 | Edit | Undo | ⌘Z | Ctrl+Z |
 | Edit | Redo | ⇧⌘Z | Ctrl+Y, Ctrl+Shift+Z |

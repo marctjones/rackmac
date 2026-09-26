@@ -346,11 +346,14 @@
 TEMPLATE
   )
 
+;; #291 (settings-dialog-min): ⌘, moves to the Settings dialog's `open-settings`
+;; (rackmac/ui/settings-dialog.rkt), which is also where "settings"/"preferences" now find
+;; a command; this one keeps the words that name it as the code escape hatch.
 (define-command (customize-with-code)
   #:icon "settings"
-  #:aliases ("init file" "open init file" "config" "settings file" "customize" "settings" "preferences")
+  #:aliases ("init file" "open init file" "config" "settings file" "customize" "edit as code")
   #:help "Open the file that customizes Rackmac with Racket code."
-  #:title "Customize with Code" #:menu "File" #:menu-order 40 #:keys ("Mod-,")
+  #:title "Customize with Code" #:menu "File" #:menu-order 40
   #:doc "Open (creating from a template if needed) the init file that customizes Rackmac."
   (define p (init-file-path))
   (unless (file-exists? p)
