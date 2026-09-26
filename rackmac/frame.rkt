@@ -3,13 +3,14 @@
 ;; menu bar generated from command metadata. Key handling lives in buffer%/input.rkt;
 ;; menus deliberately carry no shortcuts of their own, so a key never fires twice.
 (require racket/class racket/gui/base racket/list racket/string
-         "editor.rkt" "command.rkt" "keymap.rkt" "hook.rkt" "theme.rkt" "platform.rkt"
+         "editor.rkt" "command.rkt" "keymap.rkt" "hook.rkt" "theme.rkt" "platform.rkt" "owner.rkt"
          "ui/layout.rkt" "ui/toolbar-panel.rkt" "ui/status-bar.rkt" "ui/context-menu.rkt" "ui/find-bar.rkt")
 (provide make-main-frame show-find-bar! hide-find-bar!
          find! replace-current! replace-all! focus-editor! main-frame main-canvas main-tabs
          set-find-options! main-find-bar tab-strip-style
          main-toolbar toolbar-shown? set-toolbar-shown! main-status-bar
-         menu-for-title menu-item-for refresh-menu-enabled! tab-context-menu-groups)
+         menu-for-title menu-item-for refresh-menu-enabled! tab-context-menu-groups
+         register-submenu!)
 
 (define frame #f)
 (define (main-frame) frame)
@@ -211,7 +212,7 @@
 ;; sets them from command-enabled?. menu-item-for and menu-for-title let tests trigger that
 ;; the same way the GUI does: (send (menu-for-title "Edit") on-demand), then is-enabled?.
 (define menu-items (make-hasheq))     ; command name -> menu-item%
-(define menu-objects (make-hash))     ; title string -> menu%
+(define menu-objects (make-hash))     ; title string -> menu% (top-level menus AND submenus)
 (define (menu-item-for name) (hash-ref menu-items name #f))
 (define (menu-for-title title) (hash-ref menu-objects title #f))
 
@@ -220,28 +221,63 @@
     (define c (find-command name))
     (send item enable (and c (command-enabled? c)))))
 
+;; A submenu (File > Open Recent, #275) is a menu item that opens a nested menu% instead of
+;; running a command. `populate!` is called with that menu% right before it opens (its own
+;; demand-callback, same mechanism as the top-level menus above) and is expected to add its
+;; items fresh each time -- "rebuilt from the store on demand" -- so it is never built once and
+;; left stale. Registered once by the feature that owns it (e.g. rackmac/library/open-recent.rkt)
+;; and, like every other registry here, undoable so an extension's own submenu unloads with it.
+(struct submenu-spec (title parent order populate!))
+(define submenus (make-hash))         ; title -> submenu-spec
+
+(define (register-submenu! title #:menu parent #:menu-order order populate!)
+  (define old (hash-ref submenus title #f))
+  (hash-set! submenus title (submenu-spec title parent order populate!))
+  (register-undo! 'submenu
+                  (lambda ()
+                    (if old (hash-set! submenus title old) (hash-remove! submenus title))
+                    (rebuild-menus!)))
+  (rebuild-menus!))
+
+(define (populate-submenu! m spec)
+  (for ([i (send m get-items)]) (send i delete))
+  ((submenu-spec-populate! spec) m))
+
+;; A row is either a command% (from the ordinary command registry) or a submenu-spec; both
+;; carry a menu-order, so the two interleave and group into separators exactly the same way.
+(define (row-order r) (if (command? r) (command-menu-order r) (submenu-spec-order r)))
+
 (define (rebuild-menus!)
   (when menu-bar
     (for ([m (send menu-bar get-items)]) (send m delete))
     (hash-clear! menu-items)
     (hash-clear! menu-objects)
     (define with-menu (filter command-menu (all-commands)))
+    (define sub-parents (map submenu-spec-parent (hash-values submenus)))
     (define titles (append menu-titles
                            (remove-duplicates
-                            (filter (lambda (t) (not (member t menu-titles))) (map command-menu with-menu)))))
+                            (filter (lambda (t) (not (member t menu-titles)))
+                                    (append (map command-menu with-menu) sub-parents)))))
     (for ([title (in-list titles)])
-      (define cmds (sort (filter (lambda (c) (equal? (command-menu c) title)) with-menu)
-                         < #:key command-menu-order))
-      (unless (null? cmds)
+      (define cmds (filter (lambda (c) (equal? (command-menu c) title)) with-menu))
+      (define subs (filter (lambda (s) (equal? (submenu-spec-parent s) title)) (hash-values submenus)))
+      (define rows (sort (append cmds subs) < #:key row-order))
+      (unless (null? rows)
         (define m (new menu% [label title] [parent menu-bar]
                        [demand-callback (lambda (menu) (refresh-menu-enabled!))]))
         (hash-set! menu-objects title m)
-        (for/fold ([prev #f]) ([c (in-list cmds)])
-          (define group (quotient (command-menu-order c) 10))
+        (for/fold ([prev #f]) ([r (in-list rows)])
+          (define group (quotient (row-order r) 10))
           (when (and prev (not (= group prev))) (new separator-menu-item% [parent m]))
-          (define item (new menu-item% [label (command-menu-label (command-name c))] [parent m]
-                            [callback (lambda (i e) (run-command/safe (command-name c)))]))
-          (hash-set! menu-items (command-name c) item)
+          (cond
+            [(command? r)
+             (define item (new menu-item% [label (command-menu-label (command-name r))] [parent m]
+                               [callback (lambda (i e) (run-command/safe (command-name r)))]))
+             (hash-set! menu-items (command-name r) item)]
+            [else
+             (define sm (new menu% [label (submenu-spec-title r)] [parent m]
+                             [demand-callback (lambda (menu) (populate-submenu! menu r))]))
+             (hash-set! menu-objects (submenu-spec-title r) sm)])
           group)))))
 
 ;; ---- find / replace bar ----------------------------------------------------------
