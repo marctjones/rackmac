@@ -342,6 +342,14 @@ Both edit the same `text%`; the file never changes shape.
   inside one edit sequence so it paints once; cursor and scroll position are kept; nothing enters undo. A 5,000-line
   note switches in well under a second (acceptance in `md-view-toggle`).
 
+_As built (#269, 2026-09-26):_ `rackmac/md-view.rkt` (the views; markdown-mode's highlighter, `#:on-enable` and
+`#:on-disable`) and `rackmac/md-view-commands.rkt` (`toggle-markdown-view`). The view is the document local
+`markdown-view`; Source shadows `document-style` ("Standard"), `restyle-edit`/`restyle-flush` (#f: whole-document
+recoloring shortly after typing stops, as before #266) and `center-measure` (#f: the canvas keeps the code insets; the
+80-column wrap stays). Formatted removes the shadows. The status segment sits right after the Language. Windows has no
+shortcut yet (Ctrl+Alt+letter is AltGr; Ctrl+U is Underline). The per-document memory is on only in the app
+(`enable-markdown-view-memory!`, like recents tracking). A 227 KB, 5,000-line note switches in about 0.5 s each way.
+
 ### 2.3 Format group and Format menu
 
 _Changed 2026-09-25 (new)._

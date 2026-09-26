@@ -11,10 +11,9 @@
     [(comment) (send d set-delta-foreground (theme-color 'comment)) (send d set-style-on 'italic)]
     [(heading) (send d set-delta-foreground (theme-color 'heading)) (send d set-weight-on 'bold)]
     [(error) (send d set-delta-foreground (theme-color 'error))]
-    ;; inline code in a note: the code face on the serif page, a little smaller to match x-heights
-    ;; (a multiplier, since size-add cannot be negative)
-    [(code) (send d set-delta-foreground (theme-color 'string)) (send d set-delta-face mono-face 'modern)
-            (send d set-size-mult 0.93)]
+    ;; inline code in the Markdown Source view (md-view.rkt): colored only, since that view is
+    ;; all mono and every character keeps the same size
+    [(code) (send d set-delta-foreground (theme-color 'string))]
     [else (send d set-delta-foreground (theme-color key))])
   d)
 

@@ -200,6 +200,7 @@ everything, including commands without a shortcut.
 | View | Actual Size | ⌘0 | Ctrl+0 |
 | View | Toggle Word Wrap | — | Alt+Z |
 | View | Toggle Full Screen | ⌃⌘F | F11 |
+| View | Show Markdown Source | ⌥⌘U | — |
 | View | Command Palette… | ⇧⌘P | Ctrl+Shift+P, Alt+Q |
 | Tools | Run Selection | ⌘↩ | Ctrl+Enter |
 | Tools | Run Document | ⇧⌘↩ | Ctrl+Shift+Enter |

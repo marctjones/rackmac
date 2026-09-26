@@ -79,6 +79,8 @@
     (define/public (local-ref var [default #f])
       (hash-ref locals var (lambda () (mode-local major var default))))
     (define/public (local-set! var val) (hash-set! locals var val))
+    ;; Drop the document's own value, so the Language's (if any) shows through again.
+    (define/public (local-remove! var) (hash-remove! locals var))
 
     ;; ---- files -----------------------------------------------------------
     (define/public (load-path! p)

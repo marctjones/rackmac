@@ -11,12 +11,15 @@
          "ui/settings-dialog.rkt"
          "tools-menu.rkt"
          "insert-date.rkt"
+         "md-view.rkt"
+         "md-view-commands.rkt"
          ;; feature modules: one per line, so parallel work doesn't collide here
          )
 (provide main)
 
 (define (main args)
   (enable-recent-tracking!)          ; #274: recents.rktd, off until a real run asks for it
+  (enable-markdown-view-memory!)     ; #269: each note's view, remembered in recents.rktd
   (enable-autosave-recovery!)        ; #75: the autosave timer, off until a real run asks for it
   ;; Cmd+Q on macOS and Finder "Open With" arrive through these handlers.
   (application-quit-handler (lambda () (run-command/safe 'quit)))
