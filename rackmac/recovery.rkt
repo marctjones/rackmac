@@ -17,7 +17,7 @@
 ;; are offered back through `recover-on-launch!`, which asks `recovery-decide!` (a parameter,
 ;; like commands.rkt's confirm-* dialogs) what to do with each one, so tests and scripts can
 ;; answer without the real window.
-(require racket/class racket/gui/base racket/path racket/file racket/os
+(require racket/class racket/gui/base racket/path racket/file racket/os racket/list racket/port racket/system
          "hook.rkt" "settings.rkt" "platform.rkt" "fileio.rkt" "editor.rkt" "mode.rkt")
 (provide (struct-out snapshot) recovery-dir list-snapshots delete-snapshot!
          recovery-decide! recover-on-launch! enable-autosave-recovery!
@@ -280,8 +280,29 @@
 ;; can answer without the real dialog -- (listof snapshot) -> (listof (cons id 'restore/'discard)).
 (define recovery-decide! (make-parameter recovery-dialog))
 
+;; #t when process `pid` exists. macOS/Linux: `kill -0` (sends nothing, only checks). Where
+;; that cannot be run (Windows, deferred) the answer is #f, so snapshots are still offered as
+;; before: skipping them there would turn recovery off entirely. A pid reused by an unrelated
+;; process after a reboot makes a snapshot wait (hidden, not deleted) until that process ends.
+(define kill-program
+  (for/or ([p (list "/bin/kill" "/usr/bin/kill")]) (and (file-exists? p) p)))
+(define (process-running? pid)
+  (and kill-program
+       (with-handlers ([exn:fail? (lambda (e) #f)])
+         (parameterize ([current-output-port (open-output-nowhere)]
+                        [current-error-port (open-output-nowhere)])
+           (system* kill-program "-0" (number->string pid))))))
+
+;; A snapshot another Rackmac is still keeping up to date: not ours to offer, nor to discard.
+(define (owned-by-running-instance? s)
+  (define owner (snapshot-owner s))
+  (and owner (not (= owner (getpid))) (process-running? owner)))
+
 (define (recover-on-launch!)
-  (define snaps (list-snapshots))
+  (define-values (live snaps) (partition owned-by-running-instance? (list-snapshots)))
+  (when (pair? live)
+    (log-message "Left ~a automatic backup~a alone: ~a to another copy of Rackmac that is still running."
+                 (length live) (if (= (length live) 1) "" "s") (if (= (length live) 1) "it belongs" "they belong")))
   (when (pair? snaps)
     (define decisions ((recovery-decide!) snaps))
     ;; One snapshot that cannot be restored is moved aside and reported; the rest still are.

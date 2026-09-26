@@ -5,7 +5,7 @@
 ;; cache, so a struct-serialization bug cannot hide behind an in-memory assertion. #78's
 ;; crash-and-kill test lives in crash-test.rkt, which drives a real subprocess.
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
-(require rackunit racket/file racket/class racket/path racket/list racket/gui/base
+(require rackunit racket/file racket/class racket/path racket/list racket/gui/base racket/os
          "../rackmac/recovery.rkt" "../rackmac/editor.rkt" "../rackmac/hook.rkt"
          "../rackmac/settings.rkt" "../rackmac/platform.rkt" "../rackmac/commands.rkt"
          "../rackmac/command.rkt")
@@ -501,3 +501,28 @@
                 (regexp-match? (regexp (format "^~a[.]rktd[.]corrupt-" bad-id)) (path->string f))))
   (check-regexp-match #rx"could not be restored" (activity-since before))
   (check-not-false (snapshot-for ok-id)))
+
+(test-case "a second Rackmac leaves a running one's snapshots alone; once it has exited they are offered"
+  (clear-recovery!)
+  (define-values (sp o i e) (subprocess #f #f #f (string->path "/bin/sleep") "60"))  ; a live process
+  (for ([port (list o i e)]) (if (input-port? port) (close-input-port port) (close-output-port port)))
+  (define-values (done o2 i2 e2) (subprocess #f #f #f (string->path "/usr/bin/true")))
+  (subprocess-wait done)                                                            ; an exited one
+  (for ([port (list o2 i2 e2)]) (if (input-port? port) (close-input-port port) (close-output-port port)))
+  (write-raw-snapshot! "3-1" #f "untitled" 'text-mode 0 (current-seconds) "live elsewhere" #f (subprocess-pid sp))
+  (write-raw-snapshot! "3-2" #f "untitled" 'text-mode 0 (current-seconds) "owner crashed" #f (subprocess-pid done))
+  (write-raw-snapshot! "3-3" #f "untitled" 'text-mode 0 (current-seconds) "ours" #f (getpid))
+  (define (offered-ids)
+    (define seen '())
+    (parameterize ([recovery-decide! (lambda (snaps) (set! seen (sort (map snapshot-id snaps) string<?))
+                                       (for/list ([s snaps]) (cons (snapshot-id s) 'discard)))])
+      (recover-on-launch!))
+    seen)
+  (dynamic-wind
+   void
+   (lambda ()
+     (check-equal? (offered-ids) '("3-2" "3-3") "the running process's snapshot is not offered")
+     (check-not-false (snapshot-for "3-1") "and Discard on the others did not delete it"))
+   (lambda () (subprocess-kill sp #t) (subprocess-wait sp)))
+  (check-equal? (offered-ids) '("3-1") "its owner has exited: offered now")
+  (check-false (snapshot-for "3-1")))
