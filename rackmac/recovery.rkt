@@ -8,7 +8,10 @@
 ;;
 ;; An autosave timer (#75) debounces per document: each edit restarts a one-shot timer at the
 ;; `autosave-interval` setting (off when #f), matching buffer.rkt's own highlight-timer
-;; pattern; when it fires, a still-modified document's snapshot is (re)written.
+;; pattern; when it fires, a still-modified document's snapshot is (re)written. Saving, or
+;; closing a document that is no longer modified, deletes its snapshot (#76); closing WITHOUT
+;; saving (Don't Save) leaves the snapshot in place -- that unsaved text is exactly what
+;; recovery exists for.
 (require racket/class racket/gui/base racket/file
          "hook.rkt" "settings.rkt" "platform.rkt" "fileio.rkt" "editor.rkt")
 (provide (struct-out snapshot) recovery-dir list-snapshots delete-snapshot!
@@ -105,6 +108,15 @@
                     (hash-set! timers b t) t)))
     (send t start (inexact->exact (round (* secs 1000))) #t)))
 
-(define (on-text-changed b) (schedule-autosave! b))
+;; ---- save/close (#76) ----------------------------------------------------------------------
 
-(define (enable-autosave-recovery!) (add-hook! 'text-changed on-text-changed))
+(define (on-text-changed b) (schedule-autosave! b))
+(define (on-after-save b) (forget-buffer-snapshot! b))
+;; A document closed while still modified was closed with Don't Save: its snapshot is exactly
+;; the unsaved text recovery exists for, so it is left alone.
+(define (on-before-close b) (unless (send b is-modified?) (forget-buffer-snapshot! b)))
+
+(define (enable-autosave-recovery!)
+  (add-hook! 'text-changed on-text-changed)
+  (add-hook! 'after-save on-after-save)
+  (add-hook! 'before-close-buffer on-before-close))

@@ -1,7 +1,8 @@
 #lang racket/base
-;; Recovery store and autosave timer (#74, #75): every check here does a real disk round trip
-;; through rackmac/recovery.rkt -- list-snapshots always re-reads recovery/*.rktd from disk,
-;; never a cache, so a struct-serialization bug cannot hide behind an in-memory assertion.
+;; Recovery store, autosave timer, and save/close cleanup (#74, #75, #76): every check here
+;; does a real disk round trip through rackmac/recovery.rkt -- list-snapshots always re-reads
+;; recovery/*.rktd from disk, never a cache, so a struct-serialization bug cannot hide behind
+;; an in-memory assertion.
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/file racket/class racket/path racket/list racket/gui/base
          "../rackmac/recovery.rkt" "../rackmac/editor.rkt" "../rackmac/hook.rkt"
@@ -137,3 +138,35 @@
   (define id (buffer-recovery-id b))
   (check-not-false id)
   (check-equal? (snapshot-text (snapshot-for id)) "ab" "one write, with the final text"))
+
+;; ---- #76: delete on save and close -----------------------------------------------------------
+
+(test-case "saving a document deletes its recovery snapshot"
+  (define p (doc-path 3))
+  (display-to-file "v1" p #:exists 'truncate)
+  (define b (open-file! p))
+  (send b insert "!" (send b last-position))
+  (snapshot-buffer! b)
+  (define id (buffer-recovery-id b))
+  (check-not-false (snapshot-for id) "the snapshot exists before save")
+  (send b save-to! p)
+  (check-false (snapshot-for id) "save-to! ran the after-save hook, which deleted it"))
+
+(test-case "closing a document that is no longer modified deletes its snapshot"
+  (define b (new-buffer! "untitled"))
+  (send b insert "temp")
+  (snapshot-buffer! b)
+  (define id (buffer-recovery-id b))
+  (check-not-false (snapshot-for id))
+  (send b set-modified #f)                ; as if it had just been saved
+  (kill-buffer! b)
+  (check-false (snapshot-for id) "before-close-buffer deleted it because it was not modified"))
+
+(test-case "closing WITHOUT saving preserves the snapshot for recovery"
+  (define b (new-buffer! "untitled"))
+  (send b insert "unsaved work")
+  (snapshot-buffer! b)
+  (define id (buffer-recovery-id b))
+  (check-true (send b is-modified?))
+  (kill-buffer! b)                        ; Don't Save: still modified when it closes
+  (check-not-false (snapshot-for id) "the snapshot survives so the text can be recovered"))
