@@ -5,7 +5,9 @@
 ;; after every edit `parser-reparse!` must equal `parse-document` on the new text (`equal?` on
 ;; the transparent structs: absolute positions and every inline tree included), and the change
 ;; report must be sound: every leaf block it does not name has the inline tree of the old leaf
-;; it came from, shifted by the edit.
+;; it came from, shifted by the edit; every character outside the report's ranges, the spans of
+;; the leaves it names and the inserted text has the role stack (`style-runs`) its old character
+;; had; and every leaf outside the report's blocks keeps its layout (kind, depth, list level).
 ;;
 ;; 10,000 edits by default, from a fixed seed. To run more, or another seed:
 ;;   RACKMAC_MD_EDITS=200000 RACKMAC_MD_SEED=7 raco test rackmac-markdown/tests/incremental-test.rkt
@@ -77,7 +79,38 @@
     (when o
       (check-equal? (map (lambda (x) (relative x (block-start b))) (block-inlines b))
                     (map (lambda (x) (relative x (block-start o))) (block-inlines o))
-                    (format "unreported leaf at ~a changed its inlines" (block-start b))))))
+                    (format "unreported leaf at ~a changed its inlines" (block-start b)))))
+  ;; role stacks, character by character
+  (define (roles-vector doc)
+    (define v (make-vector (string-length (document-text doc)) #f))
+    (for* ([r (in-list (style-runs doc))] [i (in-range (run-start r) (run-end r))]) (vector-set! v i (run-roles r)))
+    v)
+  (define old-roles (roles-vector old))
+  (define new-roles (roles-vector new))
+  (define restyled (make-vector len #f))
+  (define (mark! s e) (for ([i (in-range s (min e len))]) (vector-set! restyled i #t)))
+  (for ([r (in-list (change-report-ranges rep))]) (mark! (car r) (cdr r)))
+  (for ([b (in-list (change-report-inline-changed rep))]) (mark! (block-start b) (block-end b)))
+  (define ins-end (+ es (string-length (edit-text e))))
+  (mark! es ins-end)
+  (for ([p (in-range len)] #:unless (vector-ref restyled p))
+    (define q (if (< p es) p (- p delta)))
+    (unless (equal? (vector-ref new-roles p) (vector-ref old-roles q))
+      (fail-check (format "unreported restyle at ~a: ~a, was ~a at ~a" p (vector-ref new-roles p) (vector-ref old-roles q) q))))
+  ;; layouts of leaves outside the report's blocks
+  (define (inside-reported? l)
+    (for/or ([b (in-list (change-report-blocks rep))]) (<= (block-start b) (layout-start l) (block-end b))))
+  (define old-layouts
+    (for/hash ([l (in-list (block-layouts old))]
+               #:when (or (< (layout-start l) es) (>= (layout-start l) ee)))
+      (values (if (>= (layout-start l) ee) (+ (layout-start l) delta) (layout-start l)) l)))
+  (for ([l (in-list (block-layouts new))] #:unless (inside-reported? l))
+    (define o (hash-ref old-layouts (layout-start l) #f))
+    (check-not-false o (format "unreported layout at ~a has no old counterpart" (layout-start l)))
+    (when o
+      (check-equal? (list (layout-kind l) (layout-depth l) (layout-list-level l) (layout-ordered? l))
+                    (list (layout-kind o) (layout-depth o) (layout-list-level o) (layout-ordered? o))
+                    (format "unreported layout change at ~a" (layout-start l))))))
 
 ;; --- the property -------------------------------------------------------------------------------
 

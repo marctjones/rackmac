@@ -301,7 +301,9 @@
            [(list-item? o)
             (and (list-item? n)
                  (let ([m (point-map (list-item-marker-end o))]) (and m (= m (list-item-marker-end n))))
-                 (item-headers-eq? o n))]
+                 (item-headers-eq? o n)
+                 ;; an empty item is a paragraph of its own for layout (runs.rkt)
+                 (eq? (null? (list-item-children o)) (null? (list-item-children n))))]
            [else #f])))
 
   ;; --- sequence diff: common prefix, common suffix, and what is left between them ---
@@ -322,6 +324,9 @@
       [(and (= (- o1 o0) 1) (= (- n1 n0) 1)
             (container-header-same? (vector-ref ov o0) (vector-ref nv n0)))
        (define o (vector-ref ov o0)) (define n (vector-ref nv n0))
+       ;; characters entering or leaving the container's span (a quote's role covers it all)
+       (let ([oe (clamp-end (block-end o))] [ne (block-end n)])
+         (add-range! (min oe ne) (max oe ne)))
        (diff-tokens! (block-tokens o) (block-tokens n))
        (diff-children! (block-kids o) (block-kids n))]
       [(or (< o0 o1) (< n0 n1))
