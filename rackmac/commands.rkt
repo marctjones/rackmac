@@ -13,6 +13,13 @@
 (define (t) (current-buffer))
 (define (ext?) (extending-selection?))
 
+;; run-code-only (#288): a code Language is one whose chain includes prog-mode, the mirror of
+;; status-defaults.rkt's `prose-mode?` (text-mode). Run Selection/Run Document, Toggle Comment
+;; and Indent/Outdent Lines are for code only; a note's Tab and Enter serve lists instead
+;; (md-lists-enter, a later issue) and ⌘Return does nothing (Run Selection/Document are not
+;; even bound outside a code Language's own keymap -- see #:key-keymap code-keymap below).
+(define (code-language? [b (t)]) (and (memq 'prog-mode (map mode-name (mode-chain (send b get-mode)))) #t))
+
 (define-syntax-rule (edit-group b body ...)
   (let ([buf b])
     (send buf begin-edit-sequence)
@@ -523,6 +530,7 @@ TEMPLATE
 ;; Lines --------------------------------------------------------------------
 
 (define-command (toggle-comment)
+  #:when code-language?
   #:icon "comment"
   #:aliases ("uncomment")
   #:help "Turn the selected lines into comments, or back into code."
@@ -648,6 +656,7 @@ TEMPLATE
         (send b insert (indent-string b) (send b paragraph-start-position p))))))
 
 (define-command (indent-lines)
+  #:when code-language?
   #:icon "indent"
   #:aliases ("indent region")
   #:help "Indent the selected lines."
@@ -655,6 +664,7 @@ TEMPLATE
   (indent-selected-lines!))
 
 (define-command (outdent-lines)
+  #:when code-language?
   #:icon "outdent"
   #:aliases ("unindent" "dedent")
   #:help "Remove one level of indent from the selected lines."
@@ -862,10 +872,12 @@ TEMPLATE
   (line-text b (send b position-paragraph (send b get-start-position))))
 
 (define-command (run-selection)
+  #:when code-language?
   #:icon "run"
   #:aliases ("evaluate selection" "evaluate" "run code")
   #:help "Run the selected Racket code, or the current line."
-  #:title "Run Selection" #:menu "Tools" #:menu-order 10 #:keys ("Mod-Enter")
+  #:title "Run Selection" #:menu "Tools" #:menu-order 10
+  #:keys ("Mod-Enter") #:key-keymap code-keymap
   #:doc "Evaluate the selected Racket code (or the current line) in the running editor."
   (define b (t))
   (define code (let ([s (selection-string b)]) (if (string=? s "") (current-line-text b) s)))
@@ -873,10 +885,12 @@ TEMPLATE
   (message "~a" (if (string=? r "") "(no output)" r)))
 
 (define-command (run-document)
+  #:when code-language?
   #:icon "run-all"
   #:aliases ("evaluate document" "run file")
   #:help "Run the whole document as Racket code."
-  #:title "Run Document" #:menu "Tools" #:menu-order 11 #:keys ("Mod-Shift-Enter")
+  #:title "Run Document" #:menu "Tools" #:menu-order 11
+  #:keys ("Mod-Shift-Enter") #:key-keymap code-keymap
   (define r (eval-string (buffer-string)))
   (message "~a" (if (string=? r "") "Evaluated document" r)))
 

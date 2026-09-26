@@ -1,6 +1,7 @@
 #lang racket/base
 ;; Built-in modes. Every one uses the same public define-mode that user code gets.
 (require "mode.rkt" "keymap.rkt" "highlight.rkt" "md-style.rkt" "ui/layout.rkt")
+(provide code-keymap)
 
 (define-mode text-mode
   #:label "Plain Text"
@@ -8,9 +9,15 @@
   #:locals `((wrap-lines . #t) (indent-string . "  ") (measure . ,prose-measure)
              (document-style . "Prose") (line-spacing . 4)))
 
+;; run-code-only (#288): Run Selection/Run Document (rackmac/commands.rkt, bound here via
+;; #:key-keymap) live only for prog-mode and its children -- ⌘Return does nothing in a note
+;; because it is simply unbound there, not merely disabled.
+(define code-keymap (make-keymap 'code))
+
 (define-mode prog-mode
   #:label "Code"
   #:doc "Parent of programming modes. No line wrapping."
+  #:keymap code-keymap
   #:locals '((wrap-lines . #f) (indent-string . "  ")))
 
 (define-mode racket-mode
