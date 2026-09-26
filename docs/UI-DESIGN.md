@@ -281,6 +281,14 @@ styles, paragraph margins and a few snips (§5.3):
 | YAML front matter | collapsed to one dim line "title · tags" with a disclosure; open shows the block in `mono` | v0.4 fold snip |
 | markup hidden on inactive lines | **not in v0.3**; a v0.4 experiment (`md-hide-markup`) using zero-width snips; the owner decides the default (REPLAN §9) | — |
 
+_As built (#266, #268, 2026-09-26):_ `rackmac/md-style.rkt`. Each run's role stack from `style-runs` folds into
+one delta style derived from the document's base style ("Prose"); the single-role ones are named ("Heading 1".."6",
+"Markup", "Strong", "Emphasis", "Code", "Code Block", "Link", "Quote"). Join styles are not used: snip-lib's join
+update stores the transparent-text flag on the shift style, so joined styles painted a white text background.
+Indents: 24 px per quote or list level, an item's first line hanging 16 px. Code backgrounds cover the characters
+only (`text%` has no full-width paragraph fill). On a 282 KB, 5,000-line note: 5-6 ms CPU per keystroke (one
+paragraph restyled), about 0.65 s for the first render.
+
 Behavior: Enter continues lists and checklists; Enter on an empty item ends the list; Tab/Shift+Tab indent and
 outdent an item; typing `[[` opens the note picker (v0.4); a smart-typing setting is **off** (lawyers paste
 citations with straight quotes; the file is Markdown, not typography). The find row, selection, undo, zoom and
