@@ -8,10 +8,16 @@
 ;; both explicitly, which keeps this module beneath buffer.rkt/editor.rkt so v0.4 can migrate
 ;; #:locals onto it later without a require cycle.
 ;;
-;; Persistence of the global value to settings.rktd is "settings-store" (#271, a later commit).
-(require racket/list "owner.rkt" "hook.rkt")
+;; The global value persists to settings.rktd in the config dir ("settings-store" #271), via
+;; rackmac/store.rkt: get-preference/put-preferences with their filename argument, made
+;; corruption-safe there. Document and Language overrides are session-only for v0.3 -- no
+;; issue asks for them to survive a restart, and persisting per-document overrides would mean
+;; writing to the settings file on every document's worth of state; a later issue can add that
+;; deliberately.
+(require racket/list "owner.rkt" "hook.rkt" "platform.rkt" "store.rkt")
 (provide define-setting setting-ref setting-set! find-setting all-settings
-         setting-name setting-doc setting-category setting-scope setting-default setting-contract)
+         setting-name setting-doc setting-category setting-scope setting-default setting-contract
+         settings-file-path)
 
 ;; contract: a plain predicate (any/c -> boolean?), not a racket/contract value -- consistent
 ;; with #:when elsewhere in this codebase (command.rkt), and simple enough that a bad value can
@@ -24,6 +30,8 @@
 ;; A document is any value the caller treats as one (a buffer% instance in practice); a weak
 ;; hash means a closed document's overrides do not keep it alive or leak.
 (define document-overrides (make-weak-hasheq))   ; document -> hasheq(name -> value)
+
+(define (settings-file-path) (build-path (config-dir) "settings.rktd"))
 
 ;; Distinguishes "no override recorded" from "recorded, value is #f".
 (define no-value (gensym 'no-value))
@@ -41,7 +49,18 @@
     (raise-argument-error 'define-setting "a #:default satisfying #:contract" default))
   (define old (hash-ref registry name #f))
   (hash-set! registry name (setting name pred default doc category scope))
-  (unless (hash-has-key? global-values name) (hash-set! global-values name default))
+  ;; Seed the global value from disk every time a setting is (re)registered -- global values
+  ;; are write-through (setting-set! saves immediately), so the file is always the source of
+  ;; truth and reloading (Reload Extensions, or a real restart) picking it back up is exactly
+  ;; the same read.
+  (define loaded (store-ref (settings-file-path) name no-value))
+  (hash-set! global-values name
+             (cond [(eq? loaded no-value) default]
+                   [(pred loaded) loaded]
+                   [else (report-error! 'define-setting
+                                        (format "~a: stored value ~v does not satisfy its contract; using the default ~v"
+                                                name loaded default))
+                         default]))
   (register-undo! 'setting
                   (lambda ()
                     (if old (hash-set! registry name old) (hash-remove! registry name))
@@ -97,4 +116,5 @@
      (run-hook 'setting-changed name)]
     [else
      (hash-set! global-values name val)
+     (store-set! (settings-file-path) name val)
      (run-hook 'setting-changed name)]))

@@ -1,10 +1,13 @@
 #lang racket/base
 ;; define-setting/setting-ref/setting-set! (#270): resolution order, contracts reported
 ;; instead of raised, per-Language overrides, and extension unload. Persistence to
-;; settings.rktd (#271) has its own test-cases appended below in a later commit.
+;; settings.rktd (#271) is tested at the bottom: restart survival and a corrupt file.
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
-(require rackunit
-         "../rackmac/settings.rkt" "../rackmac/owner.rkt" "../rackmac/hook.rkt")
+(require rackunit racket/file
+         "../rackmac/settings.rkt" "../rackmac/owner.rkt" "../rackmac/hook.rkt" "../rackmac/platform.rkt")
+
+(define dir (make-temporary-file "rackmac-settings~a" 'directory))
+(void (putenv "RACKMAC_HOME" (path->string dir)))
 
 (test-case "a setting reads its default until set"
   (define-setting st-basic #:contract string? #:default "hi" #:doc "d")
@@ -76,3 +79,32 @@
   (parameterize ([error-reporter (lambda (who e) (set! seen e))])
     (check-false (setting-ref 'st-ext)))
   (check-regexp-match #rx"unknown setting" seen))
+
+;; ---- persistence (#271: settings-store) -----------------------------------------------
+
+(test-case "a global value survives a simulated restart (reload from settings.rktd)"
+  (define ext (make-extension "persist-ext"))
+  (parameterize ([current-extension ext])
+    (define-setting st-persist #:contract string? #:default "a" #:doc "d"))
+  (setting-set! 'st-persist "b")
+  (unload-extension! ext)                      ; the extension (and its in-memory setting) is gone
+  (define ext2 (make-extension "persist-ext"))  ; a fresh load, as Reload Extensions would do
+  (parameterize ([current-extension ext2])
+    (define-setting st-persist #:contract string? #:default "a" #:doc "d"))
+  (check-equal? (setting-ref 'st-persist) "b" "the value came back from settings.rktd")
+  (unload-extension! ext2))
+
+(test-case "a corrupt settings.rktd is quarantined and reported, never fatal"
+  (define path (settings-file-path))
+  (make-directory* (let-values ([(base n d?) (split-path path)]) base))
+  (display-to-file "(this is not )) a valid preferences file(" path #:exists 'truncate)
+  (define reports '())
+  (parameterize ([error-reporter (lambda (who e) (set! reports (cons (list who e) reports)))])
+    (define-setting st-after-corrupt #:contract string? #:default "fallback" #:doc "d"))
+  (check-equal? (setting-ref 'st-after-corrupt) "fallback" "never raised; the default is used")
+  (check-true (pair? reports) "the corruption was reported")
+  (check-true (ormap (lambda (r) (regexp-match? #rx"valid preferences file|could not be read" (cadr r))) reports))
+  (define dir* (let-values ([(base n d?) (split-path path)]) base))
+  (check-true (ormap (lambda (p) (regexp-match? #rx"settings[.]rktd[.]corrupt-" (path->string p)))
+                     (directory-list dir*))
+             "the corrupt file was renamed aside"))
