@@ -53,4 +53,7 @@ Reassign if an agent's first report is weak.
 
 ## In flight
 
-(updated as agents start and finish)
+- Lane P (Opus): #318 mdlib-inlines in `../rackmac-mdlib` on `mdlib`.
+- Lane R (Sonnet): #270, #271, #274, #275 in `../rackmac-app` on `app`.
+- Lead: done #284 CI (green on macOS), README third-party licenses (#316), live window check (#283 comment).
+- Next for lead after lane R returns: review and merge, then lane R's next batch (autosave E3.M1 #74–#78).
