@@ -14,6 +14,7 @@
          "md-view.rkt"
          "md-view-commands.rkt"
          "md-links-open.rkt"
+         "pdf-export.rkt"                ; #279: File > Export as PDF…
          ;; feature modules: one per line, so parallel work doesn't collide here
          )
 (provide main)
