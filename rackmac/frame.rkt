@@ -121,7 +121,7 @@
       (cond
         [(and ed (context-click-event? ev))
          (send ed context-click! (send ev get-x) (send ev get-y))
-         (send this popup-menu (build-popup-menu (editor-menu-groups (send ed get-mode)))
+         (send this popup-menu (build-popup-menu (editor-menu-groups (send ed get-mode) ed))
                (send ev get-x) (send ev get-y))]
         [else (super on-event ev)]))))
 

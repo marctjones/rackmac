@@ -16,6 +16,7 @@
          "md-links-open.rkt"
          "pdf-export.rkt"                ; #279: File > Export as PDF…
          ;; feature modules: one per line, so parallel work doesn't collide here
+         "spell.rkt"
          )
 (provide main)
 
@@ -23,6 +24,7 @@
   (enable-recent-tracking!)          ; #274: recents.rktd, off until a real run asks for it
   (enable-markdown-view-memory!)     ; #269: each note's view, remembered in recents.rktd
   (enable-autosave-recovery!)        ; #75: the autosave timer, off until a real run asks for it
+  (enable-spell-checking!)           ; #351: the system spell checker; tests use a fake one
   ;; Cmd+Q on macOS and Finder "Open With" arrive through these handlers.
   (application-quit-handler (lambda () (run-command/safe 'quit)))
   (application-file-handler (lambda (p) (set-current-buffer! (open-file! p))))
