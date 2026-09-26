@@ -66,10 +66,15 @@
       (values html (- (current-process-milliseconds) t0))))
   (printf "  ~a: ~a ms (~a chars)\n" name (round ms) (string-length md))
   (test-case (format "pathological: ~a under 1 s" name)
-    (check-true (< ms 1000) (format "~a took ~a ms" name (round ms)))
+    (check-true (< ms budget-ms) (format "~a took ~a ms (budget ~a ms)" name (round ms) budget-ms))
     (when expected
       (check-true (regexp-match? expected html)
                   (format "~a: unexpected output ~s..." name (substring html 0 (min 200 (string-length html))))))))
+
+;; The design's budget is 1 s. Shared CI runners (GitHub sets CI=true) measure about 4x slower
+;; than a developer Mac for the same work, so they get 5x; a real quadratic blow-up is still
+;; caught there, since those take tens of seconds (nested quotes were 39 s before #318's fix).
+(define budget-ms (if (getenv "CI") 5000 1000))
 
 (printf "\n== pathological inputs (cmark's pathological_tests.py) ==\ninline:\n")
 (for ([c (in-list inline-cases)]) (apply time-case! c))
