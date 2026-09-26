@@ -94,7 +94,7 @@
       [l (define r (link-edit-range l))
          (send b set-position (car r) (cdr r))]
       [else
-       (define label (send b get-text s e))
+       (define label (send b document-text s e))
        (apply-md-edits! b (list (edit s e (string-append "[" label "](" ")"))))
        (define caret (+ s (string-length label) 3))     ; after "[label](" -- inside the empty URL
        (send b set-position caret caret)])))

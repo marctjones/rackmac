@@ -164,9 +164,11 @@
 
 ;; ---- helpers for scripts --------------------------------------------------
 
-(define (buffer-string [b (current-buffer)]) (send b get-text))
+;; buffer-string is position-aligned (find reports offsets into it); selection-string is the
+;; selection as the file holds it (#292).
+(define (buffer-string [b (current-buffer)]) (send b document-text #:keep-positions? #t))
 (define (selection-string [b (current-buffer)])
-  (send b get-text (send b get-start-position) (send b get-end-position)))
+  (send b document-text (send b get-start-position) (send b get-end-position)))
 (define (insert-text s [b (current-buffer)]) (send b insert s))
 (define (replace-selection! s [b (current-buffer)]) (send b insert s))
 (define (buffer-modified? [b (current-buffer)]) (send b is-modified?))

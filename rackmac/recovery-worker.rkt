@@ -41,6 +41,6 @@
     [("recover")
      (parameterize ([recovery-decide! recover-all]) (recover-on-launch!))
      (for ([b (in-list (all-buffers))] #:when (send b is-modified?))
-       (printf "---RECOVERED---\n~a\n---END---\n" (send b get-text)))
+       (printf "---RECOVERED---\n~a\n---END---\n" (send b document-text)))
      (flush-output)]
     [else (eprintf "usage: recovery-worker.rkt (edit <path> <text> <interval>) | recover\n") (exit 1)]))

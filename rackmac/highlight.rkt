@@ -2,7 +2,7 @@
 ;; Simple syntax coloring. Styles are applied outside the undo history and the
 ;; modified flag is restored, so highlighting never shows up as an edit.
 (require racket/class racket/gui/base racket/list racket/string
-         syntax-color/racket-lexer "theme.rkt")
+         syntax-color/racket-lexer "theme.rkt" "doc-text.rkt")
 (provide highlight-racket! highlight-markdown! clear-highlight!)
 
 (define (delta-for key)
@@ -37,7 +37,7 @@
     (values s #t)))
 
 (define (highlight-racket! t)
-  (define text (send t get-text))
+  (define text (text-source t #:keep-positions? #t))
   (with-styling t
     (lambda ()
       (clear-highlight! t)
@@ -59,7 +59,7 @@
           (loop))))))
 
 (define (highlight-markdown! t)
-  (define text (send t get-text))
+  (define text (text-source t #:keep-positions? #t))
   (with-styling t
     (lambda ()
       (clear-highlight! t)

@@ -3,7 +3,8 @@
 ;; name, file, major/minor modes and buffer-local variables. Keys are routed through
 ;; the keymap layers before text% sees them.
 (require racket/class racket/gui/base racket/string racket/list racket/file
-         "keymap.rkt" "mode.rkt" "hook.rkt" "input.rkt" "theme.rkt" "fileio.rkt" "platform.rkt")
+         "keymap.rkt" "mode.rkt" "hook.rkt" "input.rkt" "theme.rkt" "fileio.rkt" "platform.rkt"
+         "doc-text.rkt")
 (provide buffer% large-file-threshold)
 
 ;; Documents longer than this many characters open without syntax coloring (it re-lexes the
@@ -85,6 +86,13 @@
     ;; Drop the document's own value, so the Language's (if any) shows through again.
     (define/public (local-remove! var) (hash-remove! locals var))
 
+    ;; ---- the document's text (#292) ----------------------------------------
+    ;; What the file holds: decoration snips give their source markup and foreign snips (an
+    ;; image-snip%'s ".") nothing (doc-text.rkt). With #:keep-positions? #t, for readers that
+    ;; work in editor positions, each position of a foreign snip is U+FFFC instead.
+    (define/public (document-text [start 0] [end 'eof] #:keep-positions? [keep? #f])
+      (text-source this start end #:keep-positions? keep?))
+
     ;; ---- files -----------------------------------------------------------
     (define/public (load-path! p)
       (define-values (text enc eol note) (decode-file (file->bytes p)))
@@ -108,7 +116,7 @@
     ;; Encodes first, so an unsavable character aborts the save before anything is written;
     ;; then writes through a temp file and a rename, so a failed save leaves the original.
     (define/public (save-to! p)
-      (define bs (encode-text (send this get-text) (local-ref 'encoding 'utf-8) (local-ref 'eol "\n")))
+      (define bs (encode-text (document-text) (local-ref 'encoding 'utf-8) (local-ref 'eol "\n")))
       (safe-write-bytes! p bs)
       (set! buf-path p)
       (define-values (base fname dir?) (split-path p))
@@ -121,13 +129,13 @@
     ;; Copy puts the document's characters on the clipboard as plain text, never text%'s own
     ;; styled snips (#334, docs/UI-DESIGN.md §2.2.1): a note's Formatted view is only styling, so
     ;; a colleague gets readable Markdown, and pasting into another document (a code file, the
-    ;; other view) carries no heading sizes or fonts; the destination styles it. Snips (later
-    ;; checkboxes, rules) contribute their text. text%'s cut calls this copy.
+    ;; other view) carries no heading sizes or fonts; the destination styles it. Decoration
+    ;; snips (checkboxes) contribute their source (`document-text`). text%'s cut calls this copy.
     (define/override (copy [extend? #f] [time 0] [start 'start] [end 'end])
       (define s (if (symbol? start) (send this get-start-position) start))
       (define e (min (if (symbol? end) (send this get-end-position) end) (send this last-position)))
       (when (< s e)
-        (define text (send this get-text s e #t))
+        (define text (document-text s e))
         (define before (and extend? (send the-clipboard get-clipboard-string time)))
         (send the-clipboard set-clipboard-string (if before (string-append before text) text) time)))
 
@@ -151,7 +159,7 @@
       (define para (send this position-paragraph pos))
       (define pstart (send this paragraph-start-position para))
       (define pend (send this paragraph-end-position para))
-      (define text (send this get-text pstart pend))
+      (define text (document-text pstart pend #:keep-positions? #t))
       (define len (string-length text))
       (cond
         [(zero? len) (values pos pos)]

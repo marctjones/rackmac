@@ -44,7 +44,7 @@
 
 ;; Why the file failed: load-extension! logs "<file> failed: <error>", possibly over many lines.
 (define (last-activity)
-  (define text (send (messages-buffer) get-text))
+  (define text (send (messages-buffer) document-text))
   (define starts (regexp-match-positions* #rx"(?m:^[^\n]* failed: )" text))
   (string-join (string-split (if (null? starts) text (substring text (car (last starts)))) "\n")
                " | "))
@@ -70,7 +70,7 @@
   (with-handlers ([exn:fail? (lambda (e) (list "getting-started" #f (exn-message e)))])
     (run-command 'open-getting-started)
     (define b (current-buffer))
-    (define ok? (string-prefix? (send b get-text) "# Getting Started with Rackmac"))
+    (define ok? (string-prefix? (send b document-text) "# Getting Started with Rackmac"))
     (list "getting-started" ok? (format "~a" (send b get-path)))))
 
 ;; Every file named on the command line is open.

@@ -34,7 +34,7 @@
   (values (send b position-paragraph s) (send b position-paragraph e*)))
 
 (define (line-text b p)
-  (send b get-text (send b paragraph-start-position p) (send b paragraph-end-position p)))
+  (send b document-text (send b paragraph-start-position p) (send b paragraph-end-position p) #:keep-positions? #t))
 
 ;; ---- files ---------------------------------------------------------------
 
@@ -570,7 +570,7 @@ TEMPLATE
             (define lead (- (string-length txt) (string-length (string-trim txt #:right? #f))))
             (define after (+ start lead (string-length cs)))
             (define space? (and (< after (send b paragraph-end-position p))
-                                (string=? (send b get-text after (add1 after)) " ")))
+                                (string=? (send b document-text after (add1 after) #:keep-positions? #t) " ")))
             (send b delete (+ start lead) (if space? (add1 after) after))]
            [else (send b insert (string-append cs " ") (+ start indent))])))]))
 
@@ -583,7 +583,7 @@ TEMPLATE
   (define-values (p1 p2) (selected-lines b))
   (define a (send b paragraph-start-position p1))
   (define e (send b paragraph-end-position p2))
-  (define block (send b get-text a e))
+  (define block (send b document-text a e))
   (edit-group b (send b insert (string-append "\n" block) e))
   (send b set-position (+ e 1)))
 
@@ -610,11 +610,11 @@ TEMPLATE
   (define e (send b get-end-position))
   (define a (send b paragraph-start-position p1))
   (define z (send b paragraph-end-position p2))
-  (define block (send b get-text a z))
+  (define block (send b document-text a z))
   (cond
     [(and (= dir 1) (< p2 last))
      (define c (send b paragraph-end-position (add1 p2)))
-     (define next (send b get-text (add1 z) c))
+     (define next (send b document-text (add1 z) c))
      (edit-group b
        (send b delete a c)
        (send b insert (string-append next "\n" block) a))
@@ -622,7 +622,7 @@ TEMPLATE
      (send b set-position (+ s shift) (+ e shift))]
     [(and (= dir -1) (> p1 0))
      (define ps (send b paragraph-start-position (sub1 p1)))
-     (define prev (send b get-text ps (sub1 a)))
+     (define prev (send b document-text ps (sub1 a)))
      (edit-group b
        (send b delete ps z)
        (send b insert (string-append block "\n" prev) ps))
