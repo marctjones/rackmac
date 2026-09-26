@@ -10,7 +10,8 @@
          "../rackmac/command.rkt" "../rackmac/commands.rkt" "../rackmac/mode.rkt"
          "../rackmac/keymap.rkt" "../rackmac/editor.rkt" "../rackmac/picker.rkt"
          "../rackmac/ui/settings-dialog.rkt" "../rackmac/tools-menu.rkt"
-         "../rackmac/md-view-commands.rkt")
+         "../rackmac/md-view-commands.rkt"
+         "../rackmac/md-format.rkt")
 
 (define golden-names
   '(about close-tab close-other-tabs close-tabs-to-right command-palette copy copy-tab-path
@@ -31,7 +32,10 @@
 
 ;; Commands from feature modules (their own files, not commands.rkt): pinned the same way.
 (define feature-command-names
-  '(toggle-markdown-view))                                   ; #269
+  '(toggle-markdown-view                                     ; #269
+    toggle-bold toggle-italic toggle-inline-code toggle-strikethrough insert-link              ; #335
+    heading-1 heading-2 heading-3 body-text
+    toggle-bulleted-list toggle-numbered-list toggle-checklist toggle-quote mark-done))
 
 (test-case "feature command names are stable, with help and aliases"
   (for ([n feature-command-names])

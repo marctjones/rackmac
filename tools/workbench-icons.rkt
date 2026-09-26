@@ -14,11 +14,11 @@
 ;; Rackmac icon name (what #:icon says) -> Workbench icon name.
 (define mapping
   '(("activity" . "logbook-moth") ("arrow-down" . "arrow-down") ("arrow-up" . "arrow-up") ("book" . "book") ("calendar" . "calendar")
-    ("check" . "check") ("chevron-down" . "chevron-down") ("chevron-left" . "chevron-left")
+    ("check" . "check") ("checklist" . "checkbox") ("chevron-down" . "chevron-down") ("chevron-left" . "chevron-left")
     ("chevron-right" . "chevron-right") ("close" . "close") ("comment" . "chat") ("copy" . "copy") ("cut" . "cut")
     ("delete-line" . "trash") ("duplicate" . "plus") ("error" . "error") ("extensions" . "package")
     ("find" . "search") ("goto" . "flag") ("help" . "help") ("history" . "clock") ("indent" . "arrow-right")
-    ("info" . "info") ("keyboard" . "keyboard") ("language" . "code") ("maximize" . "window") ("more" . "more")
+    ("info" . "info") ("keyboard" . "keyboard") ("language" . "code") ("link" . "link") ("maximize" . "window") ("more" . "more")
     ("new" . "file-new") ("open" . "folder-open") ("outdent" . "arrow-left") ("palette" . "terminal")
     ("paste" . "paste") ("print" . "print") ("redo" . "redo") ("replace" . "sort") ("run" . "play")
     ("run-all" . "refresh") ("save" . "save") ("save-as" . "download") ("search" . "search")
