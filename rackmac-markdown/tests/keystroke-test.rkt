@@ -6,6 +6,8 @@
 ;; time (`current-process-milliseconds`, GC included) because other processes may load the
 ;; machine; the mean over a run of keystrokes is printed. The CI assertion keeps design §5's 3x
 ;; margin so a slow runner does not flake; the printed mean is the number the budget is about.
+;; Shared CI runners (CI=true) get 5x on top, as pathological-test does.
+(define keystroke-budget-ms (if (getenv "CI") 150 30))
 (require racket/list rackunit
          "../main.rkt" "notes-gen.rkt")
 
@@ -54,4 +56,4 @@
     (define ms (type-at (paragraph-position fraction)))
     (printf "keystroke at ~a% of the note: ~a ms CPU per keystroke (mean of ~a)\n" fraction
             (/ (round (* 10 ms)) 10.0) keystrokes)
-    (check-true (< ms 30) (format "~a ms per keystroke at ~a%" ms fraction))))
+    (check-true (< ms keystroke-budget-ms) (format "~a ms per keystroke at ~a%" ms fraction))))

@@ -3,7 +3,7 @@
 ;; the document's parser and restyles only what the change report names; the result always equals
 ;; a whole-document render; other styles elsewhere survive; styling is never an edit.
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
-(require rackunit racket/class racket/gui/base racket/list
+(require "timing.rkt" rackunit racket/class racket/gui/base racket/list
          "../rackmac/editor.rkt" (only-in "../rackmac/buffer.rkt" large-file-threshold) "../rackmac/hook.rkt" "../rackmac/theme.rkt" "../rackmac/md-style.rkt"
          (only-in "../rackmac-markdown/main.rkt" document-text block-at block-start block-end)
          "../rackmac-markdown/tests/notes-gen.rkt")
@@ -85,8 +85,8 @@
     (define deleting (/ (- (current-process-milliseconds) t1) keystrokes 1.0))
     (printf "keystroke at ~a% of a 5,000-line note: typing ~a ms, Backspace ~a ms CPU (mean of ~a)\n"
             fraction typing deleting keystrokes)
-    (check-true (< typing 30) (format "~a ms per typed character" typing))
-    (check-true (< deleting 30) (format "~a ms per deleted character" deleting)))
+    (check-true (< typing (budget 30)) (format "~a ms per typed character" typing))
+    (check-true (< deleting (budget 30)) (format "~a ms per deleted character" deleting)))
   (check-equal? (send big-note get-text) big))
 
 (test-case "opening a 5,000-line note renders it once, as a whole"

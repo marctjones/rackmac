@@ -5,7 +5,7 @@
 ;; default view is a setting; each note's view is remembered in recents.rktd; long notes open in
 ;; Source; a 5,000-line note switches in under a second. Driven through the real hidden window.
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
-(require rackunit racket/class racket/gui/base racket/list racket/file racket/string
+(require "timing.rkt" rackunit racket/class racket/gui/base racket/list racket/file racket/string
          "../rackmac/commands.rkt" "../rackmac/command.rkt" "../rackmac/frame.rkt"
          "../rackmac/editor.rkt" "../rackmac/buffer.rkt" "../rackmac/hook.rkt" "../rackmac/theme.rkt"
          "../rackmac/settings.rkt" "../rackmac/platform.rkt" "../rackmac/toolbar.rkt"
@@ -277,5 +277,5 @@
   (define to-formatted (timed (lambda () (run-command 'toggle-markdown-view))))
   (printf "md-view: 5,000-line note (~a KB): to Source ~a ms, to Formatted ~a ms\n"
           (quotient (string-length text) 1024) (round to-source) (round to-formatted))
-  (check-true (< to-source 1000) (format "to Source took ~a ms" to-source))
-  (check-true (< to-formatted 1000) (format "to Formatted took ~a ms" to-formatted)))
+  (check-true (< to-source (budget 1000)) (format "to Source took ~a ms" to-source))
+  (check-true (< to-formatted (budget 1000)) (format "to Formatted took ~a ms" to-formatted)))
