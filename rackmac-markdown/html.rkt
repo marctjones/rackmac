@@ -4,7 +4,9 @@
 ;; escaped as cmark's houdini_escape_href does. Leaf inline content is rendered from the
 ;; content-relative inline tree and the leaf's content string (a raw-HTML node is a slice of the
 ;; content, never of the document text, which would include container prefixes). mdlib-html
-;; (#319) completes the renderer; this is the half the spec sections of mdlib-inlines need.
+;; (#319) completes the renderer, with `#:unsafe?` defaulting to #f (design §4.2): raw HTML is
+;; dropped to a placeholder comment unless a caller opts in; the spec runner passes `#:unsafe? #t`
+;; itself, since cmark's own spec tests run `cmark --unsafe`.
 (require racket/string racket/list "ast.rkt" "entities.rkt" "inlines.rkt")
 (provide document->html escape-href)
 
@@ -149,9 +151,10 @@
 ;; Written to one output port, never by nested string-append: a 50,000-deep block quote would
 ;; otherwise copy its inner HTML once per level (quadratic; tests/pathological-test.rkt).
 
-;; `unsafe?` #f replaces raw HTML (blocks and inline) with cmark's placeholder comment.
+;; `unsafe?` (default #f, design §4.2) replaces raw HTML (blocks and inline) with cmark's
+;; placeholder comment; a caller who wants raw HTML passed through opts in with `#:unsafe? #t`.
 ;; `resolve-wiki` maps a wiki link's target and heading (or #f) to its href.
-(define (document->html doc #:unsafe? [unsafe? #t] #:resolve-wiki [resolve-wiki (current-resolve-wiki)])
+(define (document->html doc #:unsafe? [unsafe? #f] #:resolve-wiki [resolve-wiki (current-resolve-wiki)])
   (define source (document-text doc))
   (define out (open-output-string))
   (parameterize ([current-resolve-wiki resolve-wiki])

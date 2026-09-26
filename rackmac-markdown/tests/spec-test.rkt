@@ -7,7 +7,7 @@
 ;; Section thresholds: the block sections of mdlib-blocks (#317) >= 95% on the structural
 ;; comparator below, the inline sections of mdlib-inlines (#318) >= 95% exact.
 (require json racket/list racket/string racket/runtime-path rackunit
-         "../main.rkt")
+         "../main.rkt" "spec-check.rkt")
 
 (define-runtime-path spec-path "spec/spec-0.31.2.json")
 (define-runtime-path known-failures-path "known-failures.rktd")
@@ -94,13 +94,14 @@
 ;; --- CI assertions -------------------------------------------------------------------------
 
 (test-case "every example not in known-failures.rktd matches exactly"
-  (for ([r (in-list all-results)] #:unless (or (second r) (hash-ref known-failures (first r) #f)))
+  (for ([n (in-list (unlisted-failures all-results known-failures))])
+    (define r (findf (lambda (r) (= (first r) n)) all-results))
     (fail-check (format "example ~a regressed\nmarkdown: ~s\nexpected: ~s\nactual:   ~s"
                         (first r) (third r) (fourth r) (fifth r)))))
 
 (test-case "known-failures.rktd lists only examples that still fail"
-  (for ([r (in-list all-results)] #:when (and (second r) (hash-ref known-failures (first r) #f)))
-    (fail-check (format "example ~a now passes: remove it from known-failures.rktd" (first r)))))
+  (for ([n (in-list (stale-known-failures all-results known-failures))])
+    (fail-check (format "example ~a now passes: remove it from known-failures.rktd" n))))
 
 (for ([section (in-list block-structure-sections)])
   (define results (section-results section))
