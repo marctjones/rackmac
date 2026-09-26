@@ -14,10 +14,14 @@
                        (error 'crash-test "could not find the racket executable on PATH")))
 
 (define dir (make-temporary-file "rackmac-crash~a" 'directory))
+(define autosave-deadline-seconds (if (getenv "CI") 20 10))
 
 (define (with-home thunk)
   (define envs (environment-variables-copy (current-environment-variables)))
   (environment-variables-set! envs #"RACKMAC_HOME" (path->bytes dir))
+  ;; As CI runs it (.github/workflows/test.yml): with this set, rackmac/no-front.rkt once
+  ;; printed a stray "#f" ahead of "autosaved", which failed this test only on CI.
+  (environment-variables-set! envs #"RACKMAC_NO_FRONT" #"1")
   (parameterize ([current-environment-variables envs]) (thunk)))
 
 ;; Runs the worker in "edit" mode, waits for it to print "autosaved" (proof the debounced
@@ -29,8 +33,16 @@
      (define-values (sp out in err)
        (subprocess #f #f #f racket-exe worker-path "edit" path text (number->string interval)))
      (close-output-port in)
-     (define line (read-line out))
-     (check-equal? line "autosaved" "the worker's autosave timer fired before it was killed")
+     ;; Returns as soon as the line arrives, so the deadline only matters when something is
+     ;; wrong -- or on a slow CI runner, where starting Racket and racket/gui alone can take
+     ;; several seconds, hence the longer budget there (as in pathological-test.rkt). The line
+     ;; must be the FIRST one: anything else on stdout would break the worker protocol.
+     (define line (sync/timeout autosave-deadline-seconds (read-line-evt out)))
+     (unless (equal? line "autosaved") (subprocess-kill sp #t) (subprocess-wait sp))
+     (check-equal? line "autosaved"
+                   (format "the worker's autosave timer fired before it was killed (waited up to ~a s; stderr: ~a)"
+                           autosave-deadline-seconds
+                           (if (equal? line "autosaved") "" (port->string err))))
      (subprocess-kill sp #t)               ; force? = #t: SIGKILL on Unix/macOS
      (subprocess-wait sp)))
   (void))

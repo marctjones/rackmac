@@ -10,4 +10,7 @@
 (define (enable-no-front!) (register-process-global #"Racket-GUI-no-front" #"yes"))
 (define (no-front-requested?) (and (getenv "RACKMAC_NO_FRONT") #t))
 
-(when (no-front-requested?) (enable-no-front!))
+;; `void`: a module's top-level results are printed, and register-process-global returns one --
+;; a stray "#f" on stdout that broke the crash test's worker protocol on CI, which sets
+;; RACKMAC_NO_FRONT=1.
+(when (no-front-requested?) (void (enable-no-front!)))
