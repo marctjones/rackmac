@@ -415,6 +415,22 @@ its selection follows the caret's section. Backlinks come from the Library index
 with # to make one." and "Nothing links here yet. Type [[ in another note to link to this one." A **Today** entry at
 the top of the sidebar opens the generated Today document (REPLAN `today-view`).
 
+### 2.5.1 Spell check
+
+_Changed 2026-09-26 (new, #351)._ Notes are checked as you type with macOS's own spell checker (`NSSpellChecker`
+through `ffi/unsafe/objc`, standard distribution), so the language, learned words and dictionary are the same as in
+every other Mac app. Misspellings get a wavy underline in `error`, painted by the editor (never a style, never in the
+text or undo). Code spans, fenced code, URLs and link targets, `[[wiki links]]`, `#tags`, front matter and code
+Languages are skipped. Right-click a flagged word for suggestions (one undo step), Learn Spelling, Ignore Spelling;
+Edit > Spelling holds Check Spelling While Typing (a setting) and Check Document Now.
+
+_Spike findings (arm64):_ `checkSpellingOfString:startingAt:`, `guessesForWordRange:…`, `learnWord:` and per-document
+ignore with a spell-document tag all work from Racket; learned words land in the user's dictionary. NSSpellChecker
+counts UTF-16 units, so characters above U+FFFF are replaced before checking. Autocorrect-listed words (`teh`) are not
+reported. The batch `checkString:` API is avoided (spurious ranges, 10× CPU). Cost on a 283 KB note: whole note
+≈1 s wall (≈0.1 s Racket CPU; the work is in the AppleSpell service); one paragraph 0.2–1.6 ms. Keystrokes never call
+the checker: an idle timer checks marked paragraphs in ~12 ms slices. Known gaps are tracked in the follow-up issue.
+
 ### 2.6 Clipboard with Word
 
 _Changed 2026-09-25 (new; the one part of the design that could not be verified headless)._ `text%` copies plain
