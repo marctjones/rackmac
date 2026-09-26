@@ -12,7 +12,8 @@
          "ui-harness.rkt"
          "../rackmac/pdf-export.rkt" "../rackmac/command.rkt" "../rackmac/editor.rkt"
          "../rackmac/hook.rkt" "../rackmac/theme.rkt" "../rackmac/md-style.rkt"
-         "../rackmac/settings.rkt" "../rackmac/office.rkt" "../rackmac/ui/tokens.rkt")
+         "../rackmac/settings.rkt" "../rackmac/office.rkt" "../rackmac/ui/tokens.rkt"
+         "../rackmac/frame.rkt")
 
 (void (putenv "RACKMAC_HOME" (path->string (make-temporary-file "rackmac-pdf~a" 'directory))))
 (define dir (make-temporary-file "rackmac-pdf-docs~a" 'directory))
@@ -33,6 +34,10 @@
 
 (define (pdf-page-count file)
   (for/sum ([t (in-list (pdf-texts file))]) (length (regexp-match* #rx#"/Type */Page[^s]" t))))
+
+;; Content streams that show text (TJ/Tj): one per page that has anything on it.
+(define (pdf-text-streams file)
+  (for/sum ([t (in-list (cdr (pdf-texts file)))]) (if (regexp-match? #rx#"T[Jj]" t) 1 0)))
 
 (define (pdf-media-box file)
   (for/or ([t (in-list (pdf-texts file))])
@@ -69,6 +74,7 @@
   (define pages (export-pdf! (note-of 30) 'markdown-mode out #:paper 'letter))
   (check-true (> pages 5) (format "~a pages" pages))
   (check-equal? (pdf-page-count out) pages)
+  (check-true (>= (pdf-text-streams out) pages) "every page has text on it")
   ;; A4 is taller and narrower: a different count, still read back exactly
   (define a4 (build-path dir "long-a4.pdf"))
   (define a4-pages (export-pdf! (note-of 30) 'markdown-mode a4 #:paper 'a4))
@@ -99,7 +105,8 @@
          (check-equal? (color->hex (send (style-at link) get-foreground)) (token-hex 'accent))
          (check-true (> (x-of item) (x-of body)) "list items are indented")
          (check-true (> (x-of nested) (x-of item)) "nested items are indented further")
-         (check-true (<= (send b get-max-width) 468) "wrapped at the page's measure, not the window's")))
+         (check-= (send b get-max-width) 468 0.001 "wrapped at the page's measure, not the window's")
+         (check-false (send b is-modified?) "the copy is never modified, so never autosaved")))
       ;; the screen is dark again, heading styles included
       (check-equal? (current-theme-name) 'dark)
       (define h (send editor-style-list find-named-style "Heading 1"))
@@ -156,6 +163,8 @@
   (check-equal? (pdf-page-count out) pages))
 
 (test-case "Export as PDF asks where, writes the file, says so and reveals it"
+  (make-main-frame)                           ; hidden: its hooks hear the private copy too
+  (define errors '())
   (define b (new-buffer! "Exported note.md" #:mode 'markdown-mode))
   (send b insert (note-of 2))
   (set-current-buffer! b)
@@ -164,10 +173,12 @@
   (define out (build-path dir "Exported note.pdf"))
   (define revealed #f)
   (parameterize ([ask-pdf-path (lambda (suggested d) (check-equal? (path->string suggested) "Exported note.pdf") out)]
-                 [reveal-after-export (lambda (p) (set! revealed p))])
+                 [reveal-after-export (lambda (p) (set! revealed p))]
+                 [error-reporter (lambda (who e) (set! errors (cons who errors)))])
     (run-command 'export-pdf))
   (check-true (file-exists? out))
   (check-equal? revealed out)
+  (check-equal? errors '() "no hook fails on the private copy")
   (check-true (for/or ([s said]) (regexp-match? #rx"Exported to .*page" s)))
   (check-false (for/or ([x (all-buffers)]) (equal? (send x get-name) "PDF export")) "the copy is never a tab")
   ;; cancelling the dialog does nothing

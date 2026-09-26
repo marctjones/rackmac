@@ -105,6 +105,8 @@
 (define (prepare-export-buffer text mode #:width [width 468])
   (define b (new buffer% [name "PDF export"]))
   (send b insert text)
+  ;; Unmodified, so autosave (recovery.rkt, which hears every 'text-changed) never snapshots it.
+  (send b set-modified #f)
   (send b local-set! 'markdown-view 'formatted)     ; markdown-view-enable! keeps a set view
   (send b set-mode! mode)
   (when (send b large?)                             ; rehighlight! skips long documents
