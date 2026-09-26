@@ -88,7 +88,11 @@
     ;; Closing goes through the `quit` command so unsaved buffers are handled in one place.
     (define/augment (can-close?) (run-command/safe 'quit) #f)
     (define/override (on-drop-file path)
-      (set-current-buffer! (open-file! path)))))
+      (set-current-buffer! (open-file! path)))
+    ;; #254: the system appearance may have changed while we were in the background.
+    (define/override (on-activate on?)
+      (super on-activate on?)
+      (when on? (run-hook 'window-activated)))))
 
 ;; RM-056/057/058: right-click (Ctrl-click on macOS) builds a popup-menu% from the context
 ;; registry for the editor's current Language, moving the caret and selecting the word

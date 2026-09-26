@@ -5,7 +5,7 @@
 (require racket/class racket/gui/base racket/list racket/string racket/file racket/path
          "command.rkt" "keymap.rkt" "mode.rkt" "hook.rkt" "editor.rkt" "input.rkt"
          "theme.rkt" "picker.rkt" "frame.rkt" "eval.rkt" "platform.rkt" "modes.rkt" "owner.rkt" "fuzzy.rkt"
-         "fileio.rkt" "ui/palette.rkt")
+         "fileio.rkt" "ui/palette.rkt" "settings.rkt" "appearance.rkt")
 (provide save-buffer! confirm-quit? palette-items palette-matches command-description
          confirm-discard-changes confirm-save-changes
          builtin-command-names reveal-argv launch!)
@@ -781,7 +781,9 @@ TEMPLATE
   #:aliases ("dark mode" "light mode" "appearance")
   #:help "Switch between the dark and light color themes."
   #:title "Toggle Dark/Light Theme" #:menu "View" #:menu-order 21
-  (toggle-theme!) (restyle!))
+  ;; Records an explicit choice in the Editor Theme setting (#254), which restyles through
+  ;; appearance.rkt; the opposite of what is showing now, whatever the setting was.
+  (setting-set! 'editor-theme (if (eq? (current-theme-name) 'dark) 'light 'dark)))
 
 (define-command (show-activity-log)
   #:icon "activity"

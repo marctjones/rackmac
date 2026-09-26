@@ -3,17 +3,8 @@
 (require racket/class racket/gui/base
          "commands.rkt" "toolbar-defaults.rkt" "status-defaults.rkt" "context-defaults.rkt"
          "command.rkt" "editor.rkt" "frame.rkt" "eval.rkt" "theme.rkt" "hook.rkt"
-         "library/recents.rkt" "library/open-recent.rkt")
+         "library/recents.rkt" "library/open-recent.rkt" "appearance.rkt")
 (provide main)
-
-;; The system appearance is only reliable once the app is up.
-(define (refresh-system-theme!)
-  (unless (getenv "RACKMAC_THEME")
-    (define detected (detect-theme))
-    (unless (eq? detected (current-theme-name))
-      (set-theme! detected)
-      (for ([b (in-list (all-buffers))]) (send b rehighlight!))
-      (run-hook 'theme-changed))))
 
 (define (main args)
   (enable-recent-tracking!)          ; #274: recents.rktd, off until a real run asks for it
@@ -25,5 +16,5 @@
   (load-init!)
   (send f show #t)
   (focus-editor!)                    ; focus set while the window was hidden does not stick
-  (refresh-system-theme!)
+  (refresh-appearance!)              ; #254: the system appearance is only reliable once the app is up
   (yield 'wait))
