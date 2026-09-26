@@ -4,7 +4,7 @@ _Kept current by long-running sessions after every tag (docs/DEVELOPMENT.md). A 
 
 ## State (2026-09-26)
 
-- `main` = 12f30e2 + tracker hygiene; last tag `v0.2.0`. Next tag: `v0.3.0-alpha.1` on the first milestone closed.
+- Last tag `v0.3.0-alpha.1` (E1.M3 closed, #264). Next: `v0.3.0-alpha.2` on the next milestone closed.
 - Owner direction (2026-09-26): implement milestones in priority order, skipping E13; commit, test, tag
   `v0.3.0-alpha.K` per closed milestone and push; parallelize where files don't collide; interactive GUI testing allowed
   (see DEVELOPMENT.md exception). Working assumption for open decision #331: option (a), the bench sidebar, until the
@@ -53,7 +53,7 @@ Reassign if an agent's first report is weak.
 
 ## In flight
 
-- Lane P (Opus): #318 mdlib-inlines in `../rackmac-mdlib` on `mdlib`.
-- Lane R (Sonnet): #270, #271, #274, #275 in `../rackmac-app` on `app`.
-- Lead: done #284 CI (green on macOS), README third-party licenses (#316), live window check (#283 comment).
-- Next for lead after lane R returns: review and merge, then lane R's next batch (autosave E3.M1 #74–#78).
+- Lane P (Opus): #321 mdlib-parser then #322 mdlib-runs in `../rackmac-mdlib` on `mdlib`. #318 done (650/652 spec).
+- Lane R (Sonnet): #270, #271, #274, #275 in `../rackmac-app` on `app`. On merge: rename any old command IDs
+  it uses (#264 renamed close-buffer → close-tab, new-buffer → new-document, etc.).
+- After lane R: E2.M0 #254 needs the Editor theme setting (settings-core); then autosave E3.M1 #74–#78.
