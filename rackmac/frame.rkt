@@ -223,7 +223,9 @@
 (define (refresh-menu-enabled!)
   (for ([(name item) (in-hash menu-items)])
     (define c (find-command name))
-    (send item enable (and c (command-enabled? c)))))
+    (send item enable (and c (command-enabled? c)))
+    (when (and c (command-checked c) (is-a? item checkable-menu-item%))   ; #333
+      (send item check (command-checked? c)))))
 
 ;; A submenu (File > Open Recent, #275) is a menu item that opens a nested menu% instead of
 ;; running a command. `populate!` is called with that menu% right before it opens (its own
@@ -275,7 +277,9 @@
           (when (and prev (not (= group prev))) (new separator-menu-item% [parent m]))
           (cond
             [(command? r)
-             (define item (new menu-item% [label (command-menu-label (command-name r))] [parent m]
+             ;; A command with an on/off state (#:checked, #333) gets a checkable item.
+             (define item (new (if (command-checked r) checkable-menu-item% menu-item%)
+                               [label (command-menu-label (command-name r))] [parent m]
                                [callback (lambda (i e) (run-command/safe (command-name r)))]))
              (hash-set! menu-items (command-name r) item)]
             [else

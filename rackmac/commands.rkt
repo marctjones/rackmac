@@ -764,6 +764,7 @@ TEMPLATE
   #:aliases ("line wrap")
   #:help "Wrap long lines to fit the window, or let them run off the edge."
   #:title "Toggle Word Wrap" #:menu "View" #:menu-order 20 #:keys/windows ("Alt-z")
+  #:checked (lambda () (and (send (t) auto-wrap) #t))
   (define b (t))
   (send b auto-wrap (not (send b auto-wrap))))
 
@@ -772,6 +773,7 @@ TEMPLATE
   #:help "Show or hide the row of buttons above the tabs."
   #:icon "more"
   #:title "Show Toolbar" #:menu "View" #:menu-order 23
+  #:checked toolbar-shown?
   (set-toolbar-shown! (not (toolbar-shown?))))
 
 (define-command (toggle-full-screen)

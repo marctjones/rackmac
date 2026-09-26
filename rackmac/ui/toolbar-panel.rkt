@@ -26,20 +26,30 @@
     (define/public (button-for name)
       (for/first ([(b n) (in-hash buttons)] #:when (eq? n name)) b))
 
-    (define (icon-for c)
+    (define (icon-for c [name (command-icon c)])
       (define scale (or (get-display-backing-scale) 1.0))
       (define color (get-label-foreground-color))
-      (if (and (command-icon c) (icon-name? (command-icon c)))
-          (icon-bitmap (command-icon c) #:scale scale #:color color)
+      (if (and name (icon-name? name))
+          (icon-bitmap name #:scale scale #:color color)
           (letter-tile-bitmap (substring (command-title c) 0 1) #:scale scale #:color color)))
+
+    ;; #333: while a command's #:checked state is on, its button shows #:checked-title and
+    ;; #:checked-icon instead (button% has no pressed state; a swapped label is the native way).
+    (define shown-checked (make-hasheq))     ; button% -> the checked state its label shows
+    (define (icon-name-for c on?) (or (and on? (command-checked-icon c)) (command-icon c)))
+    (define (title-for c on?) (or (and on? (command-checked-title c)) (command-title c)))
+    (define (label-for c end? on?)
+      (define icon (icon-for c (icon-name-for c on?)))
+      (if end? (list icon (string-trim (title-for c on?) "…") 'left) icon))
 
     (define (make-button name end?)
       (define c (find-command name))
       (and c
-           (let ([b (new button% [parent row]
-                         [label (if end? (list (icon-for c) (string-trim (command-title c) "…") 'left) (icon-for c))]
-                         [callback (lambda (btn e) (run-command/safe name) (run-hook 'focus-editor))])])
+           (let* ([on? (command-checked? c)]
+                  [b (new button% [parent row] [label (label-for c end? on?)]
+                          [callback (lambda (btn e) (run-command/safe name) (run-hook 'focus-editor))])])
              (hash-set! buttons b name)
+             (hash-set! shown-checked b (cons on? end?))
              b)))
 
     ;; Rebuild the buttons for `mode` (Language items appear and disappear with it).
@@ -61,10 +71,23 @@
     (define/public (ensure-mode! mode) (unless (eq? mode shown-mode) (rebuild! mode)))
 
     (define/public (refresh-enabled!)
+      (define stale? #f)
       (for ([(b name) (in-hash buttons)])
         (define c (find-command name))
         (define on? (and c (command-enabled? c)))
-        (unless (eq? on? (send b is-enabled?)) (send b enable on?))))
+        (unless (eq? on? (send b is-enabled?)) (send b enable on?))
+        (when (and c (command-checked c)
+                   (not (eq? (command-checked? c) (car (hash-ref shown-checked b (cons #f #f))))))
+          (set! stale? #t)))
+      ;; A checked state flipped: rebuild the row rather than relabel in place, because
+      ;; set-label can't take the icon-and-title form that titled buttons use. rebuild!
+      ;; records the new states, so this settles in one pass.
+      (when stale? (rebuild! shown-mode)))
+
+    ;; For tests: the label state a command's button shows (#t checked, #f not, or no button).
+    (define/public (button-shows-checked? name)
+      (define b (button-for name))
+      (and b (car (hash-ref shown-checked b (cons #f #f)))))
 
     ;; Hover hint: the command and its shortcut in the status bar (there is no tooltip API).
     (define/override (on-subwindow-event receiver e)

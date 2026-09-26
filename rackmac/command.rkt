@@ -7,14 +7,18 @@
 (provide (struct-out command) define-command register-command!
          find-command all-commands run-command run-command/safe
          default-title command-shortcut extending-selection?
-         command-enabled? command-search-text command-search-fields command-category-label recent-commands
+         command-enabled? command-checked? command-search-text command-search-fields command-category-label recent-commands
          default-key-strings command-menu-label)
 
 ;; title is the name users see; name is the stable symbol used by keymaps and scripts.
 ;; aliases are extra search terms (plain words people might type); help is one plain sentence;
 ;; icon names a toolbar/menu icon; when is a thunk saying whether the command applies now.
 ;; menu is a string ("File") or #f; menu-order groups items (a new tens digit adds a separator).
-(struct command (name title doc category menu menu-order proc aliases help icon when))
+;; checked: #f or a thunk saying whether the command's state is on (a checkable menu item,
+;; #333); checked-title / checked-icon: what a toolbar button shows instead while it is on
+;; (button% has no pressed state, so a swapped label is the native way to show a toggle).
+(struct command (name title doc category menu menu-order proc aliases help icon when
+                 checked checked-title checked-icon))
 
 (define registry (make-hasheq))
 ;; name -> (list keys keys/mac keys/windows), as declared, so the defaults for EITHER
@@ -42,7 +46,10 @@
                            #:aliases [aliases '()]
                            #:help [help ""]
                            #:icon [icon #f]
-                           #:when [when-thunk #f])
+                           #:when [when-thunk #f]
+                           #:checked [checked #f]
+                           #:checked-title [checked-title #f]
+                           #:checked-icon [checked-icon #f])
   (unless (hash-has-key? definition-order name)
     (set! counter (add1 counter))
     (hash-set! definition-order name counter))
@@ -50,7 +57,7 @@
   (hash-set! registry name
              (command name title doc category menu
                       (or menu-order (* 1000 (hash-ref definition-order name)))
-                      proc aliases help icon when-thunk))
+                      proc aliases help icon when-thunk checked checked-title checked-icon))
   (register-undo! 'command
                   (lambda ()
                     (if old (hash-set! registry name old) (hash-remove! registry name))
@@ -86,7 +93,10 @@
              (~optional (~seq #:aliases aliases:expr))
              (~optional (~seq #:help help:expr))
              (~optional (~seq #:icon icon:expr))
-             (~optional (~seq #:when when:expr)))
+             (~optional (~seq #:when when:expr))
+             (~optional (~seq #:checked checked:expr))
+             (~optional (~seq #:checked-title checked-title:expr))
+             (~optional (~seq #:checked-icon checked-icon:expr)))
         ...
         body:expr ...+)
      #:do [(check-key-strings! (attribute keys))
@@ -106,7 +116,10 @@
                             #:aliases (~? 'aliases '())
                             #:help (~? help "")
                             #:icon (~? icon #f)
-                            #:when (~? when #f)))]))
+                            #:when (~? when #f)
+                            #:checked (~? checked #f)
+                            #:checked-title (~? checked-title #f)
+                            #:checked-icon (~? checked-icon #f)))]))
 
 (define (find-command name) (hash-ref registry name #f))
 
@@ -135,6 +148,13 @@
   (or (not w)
       (with-handlers ([exn:fail? (lambda (e) (report-error! (command-name c) e) #t)])
         (and (w) #t))))
+
+;; #333: #f for a command with no on/off state, otherwise whether it is on now. A failing
+;; thunk is reported and reads as off.
+(define (command-checked? c)
+  (define k (command-checked c))
+  (and k (with-handlers ([exn:fail? (lambda (e) (report-error! (command-name c) e) #f)])
+           (and (k) #t))))
 
 ;; Extra fields the palette matches besides the title: the internal name and the aliases.
 (define (command-search-fields c) (cons (symbol->string (command-name c)) (command-aliases c)))
