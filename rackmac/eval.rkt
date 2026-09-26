@@ -7,20 +7,79 @@
 ;; is loaded as its own "extension" so everything it registers can be unloaded again, and a
 ;; reload replaces rather than duplicates. While an extension loads, `require` is restricted
 ;; to the public API (rackmac/api and rackmac/lang/*): private core modules are refused.
-(require racket/class racket/port racket/list racket/string racket/path
+(require racket/class racket/port racket/list racket/string racket/path racket/runtime-path
          "editor.rkt" "platform.rkt" "owner.rkt")
 (provide eval-string load-init! load-extension! unload-all-extensions!
          loaded-extensions eval-namespace)
 
 (define-namespace-anchor anchor)
 
+;; This file's directory on disk, or #f when there is none: inside Rackmac.app (#286, `raco
+;; exe`) the modules are embedded, their names are not files, and no sources ship.
 (define here
-  (let-values ([(base name dir?)
-                (split-path (resolved-module-path-name
-                             (variable-reference->resolved-module-path (#%variable-reference))))])
-    base))
+  (let ([name (resolved-module-path-name
+               (variable-reference->resolved-module-path (#%variable-reference)))])
+    (and (path? name)
+         (let-values ([(base n dir?) (split-path name)])
+           (and (path? base) (directory-exists? base) base)))))
 
-(define api-module `(file ,(path->string (build-path here "api.rkt"))))
+;; rackmac/api as this module's own sibling, however the app was started (checkout, installed
+;; package, or the app bundle, where a built file path would name nothing). Not 'rackmac/api
+;; by collection: a checkout run must never pick up an installed copy (two registries).
+(define-runtime-module-path-index api-mpi "api.rkt")
+(define api-module
+  (let ([n (resolved-module-path-name (module-path-index-resolve api-mpi))])
+    (if (path? n) n (list 'quote n))))        ; a file, or an embedded module's symbol name
+
+;; ---- the app bundle's embedded libraries ----------------------------------------------------
+;; In Rackmac.app every library (racket/base, rackmac/api, rackmac/lang/reader, ...) is embedded
+;; in the executable, and raco exe's module name resolver knows them only in the app's own
+;; module registry. Extensions load in a fresh registry (so a reload re-runs them), where that
+;; resolver finds nothing and there are no collection directories to fall back on. This
+;; resolver wrapper answers a library path (or a lookup made by an embedded module) from the
+;; app's registry and attaches the app's own instance, so `#lang rackmac` and
+;; `(require rackmac/api)` reach the running editor exactly as in a checkout. Installed only
+;; when the modules are embedded; outside the bundle nothing changes.
+(define embedded? (not (path? (resolved-module-path-name
+                               (variable-reference->resolved-module-path (#%variable-reference))))))
+
+(define app-namespace (namespace-anchor->empty-namespace anchor))   ; shares the app's registry
+
+(define (library-path? mp)
+  (or (symbol? mp)
+      (and (pair? mp) (eq? (car mp) 'lib))
+      (and (pair? mp) (eq? (car mp) 'submod) (pair? (cdr mp)) (library-path? (cadr mp)))))
+
+(define (embedded-name? r)
+  (and (resolved-module-path? r)
+       (let ([n (resolved-module-path-name r)]) (symbol? (if (pair? n) (car n) n)))))
+
+(define (share-embedded-libraries orig)
+  (case-lambda
+    [(r ns) (orig r ns)]
+    [(mp rel stx load?)
+     (define app-registry (namespace-module-registry app-namespace))
+     (define from-app
+       (and (not (eq? (namespace-module-registry (current-namespace)) app-registry))
+            (or (library-path? mp) (embedded-name? rel))
+            (with-handlers ([exn:fail? (lambda (e) #f)])
+              (define r (parameterize ([current-namespace app-namespace]) (orig mp rel stx #f)))
+              (and (embedded-name? r) r))))
+     (cond
+       [from-app
+        ;; A submodule the app lacks (the `reader` probe `#lang` makes) is left undeclared.
+        (when (and load?
+                   (parameterize ([current-namespace app-namespace]) (module-declared? from-app #f))
+                   (not (module-declared? from-app #f)))
+          ;; Attaching needs an instance; instantiate it in the app first (as a shared
+          ;; registry would), so its dependencies, rackmac/api above all, stay the app's own.
+          (parameterize ([current-namespace app-namespace]) (dynamic-require from-app #f))
+          (namespace-attach-module app-namespace from-app (current-namespace)))
+        from-app]
+       [else (orig mp rel stx load?)])]))
+
+(when embedded?
+  (current-module-name-resolver (share-embedded-libraries (current-module-name-resolver))))
 
 (define (make-editor-namespace)
   (define src (namespace-anchor->empty-namespace anchor))
@@ -81,14 +140,23 @@
 ;; Files are compared by identity (device + inode), not by path text, so a different
 ;; spelling, letter case or symlink of the same file is still recognised.
 
+;;
+;; In the app bundle (`here` is #f) no core files exist on disk to compare against, and an
+;; extension can only reach the modules raco exe embedded, so the lists below are empty and
+;; the check passes everything through.
+
 (define (core-files)
-  (for/list ([p (in-directory here)] #:when (regexp-match? #rx"[.]rkt$" (path->string p))) p))
+  (if here
+      (for/list ([p (in-directory here)] #:when (regexp-match? #rx"[.]rkt$" (path->string p))) p)
+      '()))
 
 (define (identity p) (with-handlers ([exn:fail? (lambda (e) #f)]) (file-or-directory-identity p)))
 
 (define-values (core-ids public-ids)
-  (let ([public (list* (build-path here "api.rkt")
-                       (for/list ([p (in-directory (build-path here "lang"))]) p))])
+  (let ([public (if here
+                    (list* (build-path here "api.rkt")
+                           (for/list ([p (in-directory (build-path here "lang"))]) p))
+                    '())])
     (values (for/hash ([p (core-files)]) (values (identity p) #t))
             (for/hash ([p public]) (values (identity p) #t)))))
 

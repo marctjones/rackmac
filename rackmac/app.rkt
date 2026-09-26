@@ -25,6 +25,7 @@
          "md-format.rkt"
          "md-lists.rkt"
          "md-toolbar.rkt"
+         "smoke.rkt"                     ; #286: RACKMAC_SMOKE=1 checks startup and exits, window unshown
          )
 (provide main)
 
@@ -41,6 +42,7 @@
   (recover-on-launch!)               ; #77: offer back anything a previous crash left behind
   (maybe-skip-start-screen!)         ; #277: honors "skip the start screen" if nothing opened above
   (load-init!)
+  (when (smoke-requested?) (exit (if (run-smoke! f args) 0 1)))
   (send f show #t)
   (focus-editor!)                    ; focus set while the window was hidden does not stick
   (refresh-appearance!)              ; #254: the system appearance is only reliable once the app is up
