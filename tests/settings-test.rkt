@@ -3,8 +3,13 @@
 ;; instead of raised, per-Language overrides, and extension unload. Persistence to
 ;; settings.rktd (#271) is tested at the bottom: restart survival and a corrupt file.
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
-(require rackunit racket/file
-         "../rackmac/settings.rkt" "../rackmac/owner.rkt" "../rackmac/hook.rkt" "../rackmac/platform.rkt")
+(require rackunit racket/file racket/runtime-path
+         "../rackmac/settings.rkt" "../rackmac/owner.rkt" "../rackmac/hook.rkt" "../rackmac/platform.rkt"
+         "../rackmac/eval.rkt")
+
+;; So `#lang rackmac` resolves as a collection, the way init-test.rkt sets it up.
+(define-runtime-path root "..")
+(current-library-collection-paths (cons root (current-library-collection-paths)))
 
 (define dir (make-temporary-file "rackmac-settings~a" 'directory))
 (void (putenv "RACKMAC_HOME" (path->string dir)))
@@ -108,3 +113,15 @@
   (check-true (ormap (lambda (p) (regexp-match? #rx"settings[.]rktd[.]corrupt-" (path->string p)))
                      (directory-list dir*))
              "the corrupt file was renamed aside"))
+
+;; ---- usable from #lang rackmac (carried over from #90) ---------------------------------
+
+(test-case "define-setting/setting-ref/setting-set! work from a real #lang rackmac init file"
+  (display-to-file (string-append "#lang rackmac\n"
+                                  "(define-setting st-lang #:contract string? #:default \"abc\" #:doc \"d\")\n")
+                   (build-path dir "init.rkt") #:exists 'truncate)
+  (load-init!)
+  (check-equal? (setting-ref 'st-lang) "abc")
+  (setting-set! 'st-lang "xyz")
+  (load-init!)                        ; Reload Extensions: re-registers st-lang from scratch
+  (check-equal? (setting-ref 'st-lang) "xyz" "the persisted value survives the reload"))

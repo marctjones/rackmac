@@ -43,6 +43,14 @@
   (record-recent-close! (fake 99) 3)
   (check-equal? (recent-entries) '()))
 
+(test-case "reopening a file keeps the cursor a previous close recorded"
+  (clear-recent-files!)
+  (record-recent-open! (fake 1) 0)
+  (record-recent-close! (fake 1) 42)
+  (record-recent-open! (fake 1))                 ; no cursor given: opening must not reset it
+  (check-equal? (recent-entry-cursor (find-recent (fake 1))) 42)
+  (check-equal? (map recent-entry-path (recent-entries)) (list (fake 1)) "still just the one entry"))
+
 (test-case "the view field defaults to #f and is remembered separately from the cursor"
   (clear-recent-files!)
   (record-recent-open! (fake 1) 0)
@@ -71,6 +79,20 @@
   (clear-recent-files!)
   (check-equal? (recent-entries) '()))
 
+;; ---- persistence: a real disk round trip (#271's put-preferences/get-preference pattern) ---
+
+(test-case "recents survive a simulated restart: written to recents.rktd and read back"
+  (clear-recent-files!)
+  (record-recent-open! (fake 1) 3)
+  (record-recent-open! (fake 2) 7)
+  (set-recent-view! (fake 2) 'source)
+  (check-true (file-exists? (recents-file-path)))
+  (reload-recents!)                              ; drop the in-memory cache: force a real read
+  (check-equal? (map recent-entry-path (recent-entries)) (list (fake 2) (fake 1))
+                "order survived the round trip through write and read")
+  (check-equal? (recent-entry-cursor (find-recent (fake 1))) 3)
+  (check-eq? (recent-entry-view (find-recent (fake 2))) 'source))
+
 ;; ---- end-to-end: the real hooks (enable-recent-tracking!) -----------------------------
 
 (enable-recent-tracking!)
@@ -90,3 +112,23 @@
   (kill-buffer! b)
   (check-equal? (recent-entry-cursor (find-recent (normalized p))) 7)
   (check-equal? (map recent-entry-path (recent-entries)) (list (normalized p)) "still just the one entry"))
+
+(test-case "reopening through the real editor after closing keeps the recorded cursor"
+  (clear-recent-files!)
+  (define p (build-path dir "e2e-reopen.md"))
+  (display-to-file "hello world" p #:exists 'truncate)
+  (define b1 (open-file! p))
+  (set-current-buffer! b1)
+  (send b1 set-position 5)
+  (kill-buffer! b1)
+  (check-equal? (recent-entry-cursor (find-recent (normalized p))) 5)
+  (define b2 (open-file! p))                     ; a fresh buffer% (the old one is gone); its
+  (set-current-buffer! b2)                        ; own caret starts at 0, but the store must not
+  (check-equal? (recent-entry-cursor (find-recent (normalized p))) 5 "not reset to 0 on reopen"))
+
+(test-case "opening a path that is not on disk yet is not recorded"
+  (clear-recent-files!)
+  (define missing (build-path dir "does-not-exist-yet.md"))
+  (define b (open-file! missing))
+  (set-current-buffer! b)
+  (check-false (find-recent (path->string missing))))
