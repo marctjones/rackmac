@@ -255,6 +255,19 @@ _Changed 2026-09-25 (new)._
 - **Keyboard:** Tab into the filter, Tab again to the tree; arrows move, Right/Left expand/collapse, Enter opens,
   Space previews nothing (no preview pane in this iteration).
 
+_As built (#273, 2026-09-26, working assumption #331 (a)):_ `rackmac/library/sidebar.rkt` (data, commands,
+refresh) and `rackmac/ui/sidebar.rkt` (painted widgets). Recent and Folders are both `hierarchical-list%` on the
+bench (Folders filled lazily as folders open); the filter row, section headers and the right-edge rule are small
+`canvas%`es, since panels cannot be colored and any gap would show the OS background. Limits of hierlist, for the
+owner: the selected-row fill is the OS highlight color (fixed inside `mrlib/hierlist`), so a focused selection
+is filled in it, with its text in whichever of `bench-heading`/`bench` reads better; unfocused it is a 1 px outline;
+the 2 px `accent` marker is a snip at the start of the row, not at the sidebar's edge; the disclosure triangles are
+hierlist's own bitmaps. The empty state's **Add Folder…** is a row, not a native button (a button would sit on an
+OS-colored strip). Keyboard: showing the Library (⌥⌘S) puts focus on the filter row; Tab: filter → Recent →
+Folders → document; Escape returns to the document; Return opens (a folder opens or closes); ⌘ shortcuts work
+from inside it. A click opens a file; the selection follows the current document. The width is a setting
+(`library-width`), not yet draggable (pane splitters are E9). Windows has no Show Library shortcut yet.
+
 ### 2.2 The document area for notes (Markdown, WYSIWYM)
 
 _Changed 2026-09-25 (new)._

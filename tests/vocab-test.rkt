@@ -11,7 +11,12 @@
          "../rackmac/keymap.rkt" "../rackmac/editor.rkt" "../rackmac/picker.rkt"
          "../rackmac/ui/settings-dialog.rkt" "../rackmac/tools-menu.rkt"
          "../rackmac/md-view-commands.rkt" "../rackmac/pdf-export.rkt" "../rackmac/spell.rkt"
-         "../rackmac/md-format.rkt" "../rackmac/md-lists.rkt" "../rackmac/md-toolbar.rkt")
+         "../rackmac/md-format.rkt" "../rackmac/md-lists.rkt" "../rackmac/md-toolbar.rkt"
+         racket/runtime-path)
+;; Loaded only once the tests run (below): requiring rackmac/library/*.rkt statically changes the
+;; order modules are instantiated in, so commands.rkt's `builtin-command-names` snapshot would
+;; take in the feature commands too.
+(define-runtime-path library-sidebar "../rackmac/library/sidebar.rkt")
 
 (define golden-names
   '(about close-tab close-other-tabs close-tabs-to-right command-palette copy copy-tab-path
@@ -39,9 +44,12 @@
     heading-1 heading-2 heading-3 body-text
     toggle-bulleted-list toggle-numbered-list toggle-checklist toggle-quote mark-done
     markdown-enter markdown-indent markdown-outdent                                             ; #337
-    heading-menu))                                                                              ; #336
+    heading-menu                                                                                ; #336
+    toggle-library new-note-here new-library-folder rename-library-item                ; #273
+    trash-library-item reveal-library-item copy-library-path))
 
 (test-case "feature command names are stable, with help and aliases"
+  (dynamic-require library-sidebar #f)
   (for ([n feature-command-names])
     (define c (find-command n))
     (check-not-false c (format "~a still resolves" n))

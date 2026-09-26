@@ -8,7 +8,7 @@
 ;; `with-pref-params`, which turns off `print-struct`, and a `path?` (like a struct) prints
 ;; unreadable that way (rackmac/library/recents.rkt hit the same thing first).
 ;;
-;; Pure data plus the Add/Remove Folder commands; no sidebar here (that is #273, later).
+;; Pure data plus the Add/Remove Folder commands; the sidebar is rackmac/library/sidebar.rkt (#273).
 ;; Requires rackmac/commands.rkt (for quick-open-fallback!, below) rather than the reverse --
 ;; commands.rkt's `builtin-command-names` is a snapshot taken when IT finishes loading, and
 ;; must only ever see the commands commands.rkt itself defines (docs/DEVELOPMENT.md's collision
@@ -18,7 +18,8 @@
          "../settings.rkt" "../command.rkt" "../frame.rkt" "../editor.rkt" "../picker.rkt" "../fuzzy.rkt"
          "../commands.rkt")
 (provide library-folder-paths add-library-folder-path! remove-library-folder-path!
-         selected-library-folder candidate-library-folders
+         selected-library-folder library-target-folder candidate-library-folders
+         skip-library-dirs
          library-folder-status library-folder-hint
          pick-folder-directory pick-folder-to-remove
          library-files library-file-title rank-library-files)
@@ -43,12 +44,13 @@
   (define n (normalize-dir p))
   (set-library-folder-paths! (remove n (library-folder-paths))))
 
-;; The folder New Note (and Quick Open) use when nothing more specific has been chosen --
-;; there is no sidebar selection yet (#273), so this is simply the first one, existing or not
+;; The folder New Note (and Quick Open) use: the sidebar's New Note Here (#273) names one by
+;; parameterizing `library-target-folder`; otherwise the first Library folder, existing or not
 ;; (a missing first folder is still reported, never silently skipped).
+(define library-target-folder (make-parameter #f))
 (define (selected-library-folder)
   (define fs (library-folder-paths))
-  (and (pair? fs) (car fs)))
+  (or (library-target-folder) (and (pair? fs) (car fs))))
 
 ;; ---- Add Folder… suggestions ------------------------------------------------------------
 ;; `home` is a parameter so a test can point this at a fake tree instead of the real

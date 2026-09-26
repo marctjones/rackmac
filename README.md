@@ -170,7 +170,6 @@ everything, including commands without a shortcut.
 | File | Close Tab | ⌘W | Ctrl+W, Ctrl+F4 |
 | File | Reopen Closed Tab | ⇧⌘T | Ctrl+Shift+T |
 | File | Print… | ⌘P | Ctrl+P |
-| File | Save All | ⌥⌘S | — |
 | File | Next Tab | ⌃⇥, ⌥⌘→, ⇧⌘] | Ctrl+Tab, Ctrl+PgDn |
 | File | Previous Tab | ⌃⇧⇥, ⌥⌘←, ⇧⌘[ | Ctrl+Shift+Tab, Ctrl+PgUp |
 | File | Settings… | ⌘, | Ctrl+, |
@@ -213,6 +212,7 @@ everything, including commands without a shortcut.
 | View | Actual Size | ⌘0 | Ctrl+0 |
 | View | Toggle Word Wrap | — | Alt+Z |
 | View | Toggle Full Screen | ⌃⌘F | F11 |
+| View | Show Library | ⌥⌘S | — |
 | View | Show Markdown Source | ⌥⌘U | — |
 | View | Command Palette… | ⇧⌘P | Ctrl+Shift+P, Alt+Q |
 | Tools | Run Selection | ⌘↩ | Ctrl+Enter |

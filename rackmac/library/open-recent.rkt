@@ -4,6 +4,7 @@
 ;; rather than a fixed command like the rest of the File menu), plus Clear Recent Files.
 (require racket/class racket/gui/base racket/list racket/path
          "recents.rkt" "../frame.rkt" "../editor.rkt")
+(provide entry-label)   ; the sidebar's Recent section labels its rows the same way (#273)
 
 ;; The sidebar's own Recent list shows the last 10 (docs/UI-DESIGN.md); Open Recent matches it.
 ;; The store itself keeps up to 50 for that list, the start screen and search to draw on.
