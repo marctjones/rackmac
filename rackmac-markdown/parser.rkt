@@ -55,10 +55,11 @@
                 [refdefs #:mutable]        ; sorted (label dest title) list of that parse
                 [generation #:mutable]     ; its refmap fingerprint
                 [memo #:mutable]           ; (kind . content) -> content-relative inline list
-                [memo-stamp #:mutable]))   ; (cons generation extensions) the memo was built for
+                [memo-stamp #:mutable]     ; (cons generation extensions) the memo was built for
+                [memo-limit #:mutable]))   ; size past which the memo is checked for rebuilding
 
 (define (make-parser #:extensions [extensions no-extensions])
-  (parser extensions #f #f 0 (make-hash) #f))
+  (parser extensions #f #f 0 (make-hash) #f 64))
 
 (define (parser-parse! p text)
   (define-values (doc report) (run-parse! p text #f))
@@ -116,8 +117,10 @@
                      (hash-set! reuse (inline-cell-content (leaf-cell (cdr m))) (force rel)))))
                report)
              (full-report doc))))
-  (when (> (hash-count table) (+ 64 (* 2 (length (leaf-blocks doc)))))
-    (set! table (rebuild-table doc)))
+  (when (> (hash-count table) (parser-memo-limit p))
+    (define limit (+ 64 (* 2 (length (leaf-blocks doc)))))
+    (when (> (hash-count table) limit) (set! table (rebuild-table doc)))
+    (set-parser-memo-limit! p (max limit (+ 64 (hash-count table)))))
   (set-parser-document! p doc)
   (set-parser-refdefs! p refdefs)
   (set-parser-generation! p generation)
@@ -207,6 +210,11 @@
                        (= (segment-content-length x) (segment-content-length y))
                        (= (+ (segment-source-start x) d) (segment-source-start y))
                        (= (segment-source-length x) (segment-source-length y))
+                       ;; the source text behind the segment lies outside the edit, so it
+                       ;; is the same text (see cells-eq?)
+                       (or (= 0 (segment-source-length x))
+                           (eqv? d (range-shift (segment-source-start x)
+                                                (+ (segment-source-start x) (segment-source-length x)))))
                        (segments-eq? (cdr xs) (cdr ys) d)))]))
   (define (lines-eq? xs ys d) ; code and HTML block lines: (start end virtual-indent)
     (cond [(null? xs) (null? ys)]
@@ -214,7 +222,11 @@
           [else (let ([x (car xs)] [y (car ys)])
                   (and (= (+ (car x) d) (car y)) (= (+ (cadr x) d) (cadr y)) (= (caddr x) (caddr y))
                        (lines-eq? (cdr xs) (cdr ys) d)))]))
-  (define (cells-eq? a b) (string=? (inline-cell-content a) (inline-cell-content b)))
+;; A leaf's content is its segments' source text (virtual spaces for zero-length ones) joined
+  ;; by newlines, so segments equal under the shift, over source text the edit did not touch,
+  ;; mean equal content: comparing the strings too would cost half the diff.
+  (define (cells-eq? a b)
+    (= (string-length (inline-cell-content a)) (string-length (inline-cell-content b))))
   ;; Records a pair of leaves of the same kind with equal content: whatever else the comparison
   ;; finds, their content-relative inline trees are the same (design §3.1).
   (define (match! o n) (set! matched (cons (cons o n) matched)) #t)

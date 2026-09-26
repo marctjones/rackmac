@@ -19,15 +19,23 @@
 (struct mblk (kind [start #:mutable] [end #:mutable] [children #:mutable] [open? #:mutable]
               [data #:mutable]))
 
-;; A hash, not a growing alist: process-line! sets 'trailing-blank? on every open list item on
-;; every line, which made deeply nested lists quadratic in lines x depth x alist length.
-(define (mdata-ref b key [default #f]) (hash-ref (mblk-data b) key default))
-(define (mdata-set! b key val) (hash-set! (mblk-data b) key val))
+;; A small mutable association list updated in place: a growing alist (a fresh pair per set)
+;; made deeply nested lists quadratic in lines x depth x alist length, and a hash table per block
+;; cost more to allocate than the whole block. A block has at most a handful of keys.
+(define (mdata-ref b key [default #f])
+  (let loop ([ps (mblk-data b)])
+    (cond [(null? ps) default]
+          [(eq? (mcar (mcar ps)) key) (mcdr (mcar ps))]
+          [else (loop (mcdr ps))])))
+(define (mdata-set! b key val)
+  (let loop ([ps (mblk-data b)])
+    (cond [(null? ps) (set-mblk-data! b (mcons (mcons key val) (mblk-data b)))]
+          [(eq? (mcar (mcar ps)) key) (set-mcdr! (mcar ps) val)]
+          [else (loop (mcdr ps))])))
 
 (define (make-mblk kind start data)
-  (define h (make-hasheq))
-  (for ([p (in-list (reverse data))]) (hash-set! h (car p) (cdr p)))
-  (mblk kind start start '() #t h))
+  (mblk kind start start '() #t
+        (for/fold ([acc '()]) ([p (in-list (reverse data))]) (mcons (mcons (car p) (cdr p)) acc))))
 
 ;; Appends `child` to `parent`, closing parent's current last (open) child first, unless that
 ;; child *is* the one being reused for list continuation (callers handle that by not going

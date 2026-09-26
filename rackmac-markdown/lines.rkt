@@ -69,10 +69,13 @@
       [else
        (define content-end
          (let scan ([j i])
-           (cond [(>= j len) j]
-                 [(eqv? (string-ref source j) #\newline) j]
-                 [(eqv? (string-ref source j) #\return) j]
-                 [else (scan (add1 j))])))
+           (if (>= j len)
+               j
+               (let ([c (string-ref source j)])
+                 ;; one comparison for most characters: both terminators sort below #\u000E
+                 (if (and (char<? c #\u000E) (or (eqv? c #\newline) (eqv? c #\return)))
+                     j
+                     (scan (add1 j)))))))
        (define end
          (cond
            [(>= content-end len) content-end]
