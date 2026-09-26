@@ -52,6 +52,18 @@ Rules for anyone (person or agent) changing this repository.
   else the installed collection. Nothing needs installing to work from the checkout: `racket
   main.rkt` puts the checkout on the collection path itself. CI tests the uninstalled checkout,
   then installs both packages and checks `racket -l rackmac/api`.
+- The Mac app (#286): `racket tools/build-mac-app.rkt --smoke` builds `dist/Rackmac.app` (not
+  committed) from package copies in a private `PLTADDONDIR` (`dist/build/addon`): `raco exe
+  --gui` on a generated launcher that requires `(submod rackmac/app main)` (giving app.rkt
+  itself by path clashes with `++lib rackmac/api`), then `raco distribute`, `iconutil` and
+  `plutil`. Inside the bundle modules are embedded, not files: never build a path to a sibling
+  module at runtime (use `define-runtime-path` / `define-runtime-module-path-index`, which raco
+  distribute follows), and a library an extension may require must be embedded (`++lib` in the
+  build tool; eval.rkt shares the app's embedded libraries with the extension namespace).
+  `RACKMAC_SMOKE=1` (rackmac/smoke.rkt) starts the app, runs the startup checks, prints one line
+  each and exits without showing the window; CI runs it on the bundle with Racket moved away.
+  The icon is drawn by tools/app-icon.rkt; `racket tools/app-icon.rkt assets` rewrites the
+  committed SVG masters and preview in assets/icon/ (a drift test compares them).
 - Every change adds or updates tests. Prefer behavior tests through the real registry and the real (hidden)
   window (`tests/window-test.rkt`, `tests/toolbar-test.rkt` show how: `make-main-frame` without `show`,
   drive controls with `command`, synthetic `key-event%`/`mouse-event%`, assert through hooks and state).

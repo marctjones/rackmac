@@ -37,3 +37,28 @@ jobs:
           racket -e '(require rackmac-markdown)'
           racket -l rackmac/api
           racket -e "(unless (module-declared? '(submod rackmac/app main) #t) (exit 1))"
+      # #286: the double-clickable app. Built from copies of both packages in a private add-on
+      # directory (dist/build), then started headless (RACKMAC_SMOKE=1: loads a `#lang rackmac`
+      # init file, finds pandoc by absolute path, the Markdown library and the Getting Started
+      # note, quits without showing the window) with nothing but /usr/bin:/bin on PATH.
+      - name: Build Rackmac.app and smoke-test it
+        run: racket tools/build-mac-app.rkt --smoke
+      # The same check with the Racket installation moved out of the way, so a fallback to it
+      # could not go unnoticed: the app must run on a Mac without Racket.
+      - name: Rackmac.app runs without Racket installed
+        run: |
+          RKT=$(racket -e "(require setup/dirs) (display (simplify-path (build-path (find-collects-dir) 'up)))")
+          case "$RKT" in *[Rr]acket*) ;; *) echo "unexpected Racket location: $RKT"; exit 1 ;; esac
+          H=$(mktemp -d)
+          printf '#lang rackmac\n(require racket/date)\n(define-command (ci-smoke) (insert-text (date->string (current-date))))\n' > "$H/init.rkt"
+          printf '# CI\n' > "$H/CI.md"
+          sudo mv "$RKT" "$RKT.away"
+          set +e
+          env -i HOME="$HOME" PATH=/usr/bin:/bin RACKMAC_HOME="$H" RACKMAC_SMOKE=1 RACKMAC_NO_FRONT=1 \
+            dist/Rackmac.app/Contents/MacOS/Rackmac "$H/CI.md" > "$H/out.txt" 2>&1
+          status=$?
+          sudo mv "$RKT.away" "$RKT"
+          cat "$H/out.txt"
+          test "$status" = 0 && grep -qx ok "$H/out.txt"
+      - name: Bundle size
+        run: du -sh dist/Rackmac.app
