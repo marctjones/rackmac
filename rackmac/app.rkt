@@ -3,7 +3,7 @@
 (require racket/class racket/gui/base
          "commands.rkt" "toolbar-defaults.rkt" "status-defaults.rkt" "context-defaults.rkt"
          "command.rkt" "editor.rkt" "frame.rkt" "eval.rkt" "theme.rkt" "hook.rkt"
-         "library/recents.rkt" "library/open-recent.rkt")
+         "library/recents.rkt" "library/open-recent.rkt" "recovery.rkt")
 (provide main)
 
 ;; The system appearance is only reliable once the app is up.
@@ -17,6 +17,7 @@
 
 (define (main args)
   (enable-recent-tracking!)          ; #274: recents.rktd, off until a real run asks for it
+  (enable-autosave-recovery!)        ; #75: the autosave timer, off until a real run asks for it
   ;; Cmd+Q on macOS and Finder "Open With" arrive through these handlers.
   (application-quit-handler (lambda () (run-command/safe 'quit)))
   (application-file-handler (lambda (p) (set-current-buffer! (open-file! p))))

@@ -5,10 +5,20 @@
 ;; iCloud/Dropbox never picks it up (docs/REPLAN.md S3, "the recovery store lives in the
 ;; config dir"). Written atomically (temp file, then rename, via fileio.rkt's
 ;; safe-write-bytes!, the same mechanism a real Save uses).
-(require racket/class racket/file
-         "hook.rkt" "platform.rkt" "fileio.rkt" "editor.rkt")
+;;
+;; An autosave timer (#75) debounces per document: each edit restarts a one-shot timer at the
+;; `autosave-interval` setting (off when #f), matching buffer.rkt's own highlight-timer
+;; pattern; when it fires, a still-modified document's snapshot is (re)written.
+(require racket/class racket/gui/base racket/file
+         "hook.rkt" "settings.rkt" "platform.rkt" "fileio.rkt" "editor.rkt")
 (provide (struct-out snapshot) recovery-dir list-snapshots delete-snapshot!
-         snapshot-buffer! forget-buffer-snapshot! buffer-recovery-id)
+         enable-autosave-recovery! snapshot-buffer! forget-buffer-snapshot! buffer-recovery-id)
+
+(define-setting autosave-interval
+  #:contract (lambda (v) (or (not v) (and (real? v) (positive? v))))
+  #:default 30
+  #:doc "How often Rackmac saves an automatic backup of a document's unsaved changes, in seconds. Off (#f) turns autosave off."
+  #:category "Files")
 
 ;; ---- the store on disk -----------------------------------------------------------------
 
@@ -77,3 +87,24 @@
 (define (forget-buffer-snapshot! b)
   (define id (buffer-recovery-id b))
   (when id (delete-snapshot! id)))
+
+;; ---- autosave timer (#75): debounced, only while modified ---------------------------------
+
+(define timers (make-weak-hasheq))  ; document -> timer%, mirrors buffer.rkt's highlight-timer
+
+(define (do-autosave! b)
+  (when (and (setting-ref 'autosave-interval) (send b is-modified?)) (snapshot-buffer! b)))
+
+;; Restarted on every edit (racket/gui's timer% start replaces a pending one-shot), so a burst
+;; of keystrokes writes one snapshot after things go quiet, not one per keystroke.
+(define (schedule-autosave! b)
+  (define secs (setting-ref 'autosave-interval))
+  (when secs
+    (define t (or (hash-ref timers b #f)
+                  (let ([t (new timer% [notify-callback (lambda () (do-autosave! b))])])
+                    (hash-set! timers b t) t)))
+    (send t start (inexact->exact (round (* secs 1000))) #t)))
+
+(define (on-text-changed b) (schedule-autosave! b))
+
+(define (enable-autosave-recovery!) (add-hook! 'text-changed on-text-changed))

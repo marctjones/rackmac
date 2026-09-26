@@ -1,11 +1,11 @@
 #lang racket/base
-;; Recovery store (#74): every check here does a real disk round trip through
-;; rackmac/recovery.rkt -- list-snapshots always re-reads recovery/*.rktd from disk, never a
-;; cache, so a struct-serialization bug cannot hide behind an in-memory assertion.
+;; Recovery store and autosave timer (#74, #75): every check here does a real disk round trip
+;; through rackmac/recovery.rkt -- list-snapshots always re-reads recovery/*.rktd from disk,
+;; never a cache, so a struct-serialization bug cannot hide behind an in-memory assertion.
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
-(require rackunit racket/file racket/class racket/path racket/list
+(require rackunit racket/file racket/class racket/path racket/list racket/gui/base
          "../rackmac/recovery.rkt" "../rackmac/editor.rkt" "../rackmac/hook.rkt"
-         "../rackmac/platform.rkt")
+         "../rackmac/settings.rkt" "../rackmac/platform.rkt")
 
 (define dir (make-temporary-file "rackmac-recovery~a" 'directory))
 (void (putenv "RACKMAC_HOME" (path->string dir)))
@@ -94,3 +94,46 @@
   (check-false (file-exists? bad) "the corrupt file was moved aside")
   (check-true (ormap (lambda (p) (regexp-match? #rx"garbage[.]rktd[.]corrupt-" (path->string p)))
                      (directory-list (recovery-dir)))))
+
+;; ---- #75: autosave timer --------------------------------------------------------------------
+
+(enable-autosave-recovery!)
+
+(test-case "autosave writes a snapshot only while the document is modified, after the interval"
+  (setting-set! 'autosave-interval 0.2)
+  (define b (new-buffer! "untitled"))
+  (check-false (buffer-recovery-id b) "nothing snapshotted yet")
+  (send b insert "autosave me")
+  (sleep/yield 0.4)
+  (define id (buffer-recovery-id b))
+  (check-not-false id "the debounce timer fired and wrote a snapshot")
+  (check-equal? (snapshot-text (snapshot-for id)) "autosave me"))
+
+(test-case "an unmodified document is never autosaved"
+  (setting-set! 'autosave-interval 0.15)
+  (define p (doc-path 2))
+  (display-to-file "saved already" p #:exists 'truncate)
+  (define b (open-file! p))              ; load-path! leaves it unmodified
+  (sleep/yield 0.35)
+  (check-false (buffer-recovery-id b) "no snapshot: is-modified? was #f the whole time"))
+
+(test-case "autosave is off when the interval setting is #f"
+  (setting-set! 'autosave-interval #f)
+  (define b (new-buffer! "untitled"))
+  (send b insert "should not be saved")
+  (sleep/yield 0.3)
+  (check-false (buffer-recovery-id b)))
+
+(test-case "the autosave timer is debounced: a fresh edit restarts the wait instead of firing on schedule"
+  (setting-set! 'autosave-interval 0.6)
+  (define b (new-buffer! "untitled"))
+  (send b insert "a")                     ; t=0: would fire at t=0.6 if NOT debounced
+  (sleep/yield 0.3)
+  (send b insert "b")                     ; t=0.3: restarts the timer to fire at t=0.9
+  (sleep/yield 0.45)                      ; now at t=0.75: past the un-debounced deadline (0.6),
+  (check-false (buffer-recovery-id b)     ; still before the debounced one (0.9)
+              "no snapshot yet: the second edit reset the debounce window")
+  (sleep/yield 0.35)                            ; now at t=1.10: past the debounced deadline
+  (define id (buffer-recovery-id b))
+  (check-not-false id)
+  (check-equal? (snapshot-text (snapshot-for id)) "ab" "one write, with the final text"))
