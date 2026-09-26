@@ -459,7 +459,8 @@
 ;; ============================================================================================
 
 (define (process-line! doc source lr)
-  (process-line-inner! doc source lr)
+  (define prefix-end (box (line-record-start lr)))
+  (process-line-inner! doc source lr prefix-end)
   ;; Catch-all: whatever got opened, continued, or closed above, every block on the freshly
   ;; recomputed open path (down to the new tip -- which reflects any newly opened containers or
   ;; leaf) legitimately spans through this line's content-end. Individual branches above also
@@ -469,11 +470,18 @@
   ;; Looseness bookkeeping (see append-child!): every list-item still reachable records whether
   ;; *this* line was blank, so the next thing attached to it (a sibling item, or a second child
   ;; of the same item) can tell whether a blank line came immediately before it.
-  (define line-blank? (blank-from? source (line-record-start lr) (line-record-content-end lr)))
-  (for ([b (in-list fresh-path)] #:when (eq? (mblk-kind b) 'list-item))
-    (mdata-set! b 'trailing-blank? line-blank?)))
+  ;; A line is blank for the items below the deepest block quote it continues when nothing
+  ;; follows that quote's `>` (so `> - a` / `>` / `> - b` is a loose list), and for no item
+  ;; above that quote (spec example 320: `* a` / `  > b` / `  >` / `* c` stays tight), as cmark
+  ;; sets last_line_blank on the innermost container only.
+  (define line-blank? (blank-from? source (unbox prefix-end) (line-record-content-end lr)))
+  (define deepest-quote (for/last ([b (in-list fresh-path)] #:when (eq? (mblk-kind b) 'block-quote)) b))
+  (for/fold ([below-quotes? (not deepest-quote)]) ([b (in-list fresh-path)])
+    (when (eq? (mblk-kind b) 'list-item) (mdata-set! b 'trailing-blank? (and below-quotes? line-blank?)))
+    (or below-quotes? (eq? b deepest-quote)))
+  (void))
 
-(define (process-line-inner! doc source lr)
+(define (process-line-inner! doc source lr prefix-end)
   (define line-start (line-record-start lr))
   (define content-end (line-record-content-end lr))
   (define full-path (open-path-of doc))
@@ -484,6 +492,7 @@
     (if tip-is-leaf? (take (cdr full-path) (- n 2)) (cdr full-path)))
   (define-values (k end-offset end-column blank-stop?)
     (match-containers containers source line-start content-end))
+  (set-box! prefix-end end-offset)
   (define fully-matched? (= k (length containers)))
   (cond
     [fully-matched?
