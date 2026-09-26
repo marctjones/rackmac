@@ -1,9 +1,9 @@
 #lang racket/base
 ;; The data model (design §1.2): immutable, transparent nodes with spans and tokens on every
 ;; node, plus the token-role vocabulary and the extension-set used to switch extensions on/off.
-;; Inline node structs are declared here (main.rkt's public API re-exports the whole tree), but
-;; mdlib-blocks does not yet populate them: every leaf block's `inlines` is '() until mdlib-inlines
-;; lands; the HTML renderer emits escaped segment text instead (design §2.1, §6.3 mdlib-blocks row).
+;; Inline nodes (mdlib-inlines, inlines.rkt) hang off paragraphs and headings through an
+;; inline-cell (below); `block-inlines` in main.rkt is the accessor consumers use.
+(require racket/promise)
 (provide (all-defined-out))
 
 ;; --- Tokens -----------------------------------------------------------------------------------
@@ -50,7 +50,10 @@
 (struct front-matter block (fields) #:transparent)
 
 ;; --- Inlines ------------------------------------------------------------------------------------
-;; Declared for API stability; unused until mdlib-inlines.
+;; Spans and tokens as in design §1.2. link/image `kind`: 'inline 'full 'collapsed 'shortcut
+;; 'autolink; `label` is the reference label as written (full/collapsed/shortcut) or #f; `dest`
+;; and `title` are decoded (escapes, entities; `title` #f when absent), percent-encoding is left
+;; to the renderer. wiki-link, tag, date-ref, state-keyword and strike are mdlib-ext's.
 
 (struct inline (start end tokens) #:transparent)
 (struct text inline (value) #:transparent)
@@ -67,6 +70,22 @@
 (struct tag inline (name) #:transparent)
 (struct date-ref inline (date keyword) #:transparent)
 (struct state-keyword inline (keyword) #:transparent)
+
+;; --- The `inlines` slot of a leaf block (design §1.3, §3.1) --------------------------------------
+;; A paragraph's or heading's `inlines` field holds an inline-cell, not a list: `content` is the
+;; leaf's content string (segments joined by "\n"), `relative` a promise of the inline tree with
+;; content-relative offsets (what the HTML renderer reads, and what mdlib-parser's memo will
+;; cache), `absolute` a promise of the same tree relocated through `segments` to document
+;; offsets (what `block-inlines` returns). Promises keep the inline phase lazy (Source view can
+;; skip it, design §3.2); equality forces and compares the content and the absolute tree, so
+;; `equal?` on documents stays structural (the incremental test of design §5 relies on it).
+(struct inline-cell (content segments relative absolute)
+  #:property prop:equal+hash
+  (list (lambda (a b recur)
+          (and (recur (inline-cell-content a) (inline-cell-content b))
+               (recur (force (inline-cell-absolute a)) (force (inline-cell-absolute b)))))
+        (lambda (a recur) (recur (force (inline-cell-absolute a))))
+        (lambda (a recur) (recur (inline-cell-content a)))))
 
 ;; --- Segments -------------------------------------------------------------------------------
 
