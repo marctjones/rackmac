@@ -263,9 +263,12 @@
     ;; procedures in the locals `restyle-edit` (document start old-end new-length) and
     ;; `restyle-flush` (document, when an edit sequence ends); others recolor the whole document
     ;; shortly after typing stops.
+    ;; Then 'text-edited tells position-keeping listeners (spell checking, #351) what changed,
+    ;; after the restyle so a Markdown note's parser already has the new text.
     (define (note-edit! s old-end new-len)
       (define f (local-ref 'restyle-edit #f))
-      (if f (f this s old-end new-len) (schedule-highlight!)))
+      (if f (f this s old-end new-len) (schedule-highlight!))
+      (run-hook 'text-edited this s old-end new-len))
     (define/augment (after-insert s l)
       (note-edit! s s l) (run-hook 'text-changed this) (inner (void) after-insert s l))
     (define/augment (after-delete s l)
@@ -289,6 +292,13 @@
         (define cur (send this get-max-width))
         (when (and w (real? cur) (> cur w)) (send this set-max-width w)))
       (inner (void) on-display-size))
+
+    ;; Decorations drawn over the text (spelling underlines, #351): 'paint-document listeners
+    ;; draw after the text, in editor coordinates offset by dx/dy. Painting changes no style,
+    ;; no text and no undo.
+    (define/override (on-paint before? dc left top right bottom dx dy draw-caret)
+      (super on-paint before? dc left top right bottom dx dy draw-caret)
+      (unless before? (run-hook 'paint-document this dc left top right bottom dx dy)))
 
     (define/augment (after-set-position)
       (run-hook 'status-changed) (inner (void) after-set-position))
