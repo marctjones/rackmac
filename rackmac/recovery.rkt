@@ -21,7 +21,7 @@
          "hook.rkt" "settings.rkt" "platform.rkt" "fileio.rkt" "editor.rkt" "mode.rkt")
 (provide (struct-out snapshot) recovery-dir list-snapshots delete-snapshot!
          recovery-decide! recover-on-launch! enable-autosave-recovery!
-         snapshot-buffer! forget-buffer-snapshot! buffer-recovery-id)
+         snapshot-buffer! autosave-buffer! forget-buffer-snapshot! buffer-recovery-id)
 
 (define-setting autosave-interval
   #:contract (lambda (v) (or (not v) (and (real? v) (positive? v))))
@@ -48,14 +48,25 @@
 ;; A document keeps the same recovery id for its whole life (a weak table: a closed document's
 ;; id does not keep it alive), so repeated autosaves overwrite one file instead of piling up.
 (define ids (make-weak-hasheq))
+;; A document has an id only once a snapshot of it has actually been written, so the id is
+;; also the proof that a backup exists on disk (recovery-worker.rkt waits on it).
 (define (buffer-recovery-id b) (hash-ref ids b #f))
-(define (ensure-recovery-id! b) (or (hash-ref ids b #f) (let ([id (fresh-id!)]) (hash-set! ids b id) id)))
+
+;; Snapshots hold whatever the user typed, so the store is private to them: the folder is 0700
+;; and each file 0600, whatever the umask. A folder that already exists only ever loses
+;; group/other bits here, never gains any.
+(define (ensure-recovery-dir!)
+  (define d (recovery-dir))
+  (unless (directory-exists? d) (make-directory* d))
+  (define bits (file-or-directory-permissions d 'bits))
+  (unless (zero? (bitwise-and bits #o077))
+    (file-or-directory-permissions d (bitwise-and bits #o700))))
 
 (define (write-snapshot! s)
-  (make-directory* (recovery-dir))
+  (ensure-recovery-dir!)
   (define out (open-output-bytes))
   (write s out)
-  (safe-write-bytes! (snapshot-file-path (snapshot-id s)) (get-output-bytes out)))
+  (safe-write-bytes! (snapshot-file-path (snapshot-id s)) (get-output-bytes out) #:permissions #o600))
 
 (define (delete-snapshot! id)
   (define p (snapshot-file-path id))
@@ -75,9 +86,21 @@
                                       (path->string p) (path->string aside)))
      #f]))
 
+;; Quarantined files are kept for a while in case someone wants to dig text out of them by
+;; hand, then removed, so the private store does not grow forever. The age comes from the
+;; seconds in the name (when it was moved aside), not the file's own time.
+(define corrupt-keep-seconds (* 30 24 60 60))
+(define (prune-corrupt-files!)
+  (define cutoff (- (current-seconds) corrupt-keep-seconds))
+  (for ([p (in-list (directory-list (recovery-dir) #:build? #t))])
+    (define m (regexp-match #rx"[.]corrupt-([0-9]+)$" (path->string p)))
+    (when (and m (< (string->number (cadr m)) cutoff))
+      (with-handlers ([exn:fail? (lambda (e) (report-error! 'recovery e))]) (delete-file p)))))
+
 (define (list-snapshots)
   (cond
     [(directory-exists? (recovery-dir))
+     (prune-corrupt-files!)
      (filter values
              (for/list ([p (in-list (directory-list (recovery-dir) #:build? #t))]
                         #:when (regexp-match? #rx"[.]rktd$" (path->string p)))
@@ -86,12 +109,16 @@
 
 ;; ---- writing snapshots for live documents -----------------------------------------------
 
+;; Raises if the write fails, leaving the document without an id (or with its old one, whose
+;; file still holds the previous snapshot).
 (define (snapshot-buffer! b)
+  (define id (or (buffer-recovery-id b) (fresh-id!)))
   (write-snapshot!
-   (snapshot (ensure-recovery-id! b)
+   (snapshot id
              (and (send b get-path) (path->string (send b get-path)))
              (send b get-name) (send b get-mode)
-             (send b get-start-position) (current-seconds) (send b get-text))))
+             (send b get-start-position) (current-seconds) (send b get-text)))
+  (hash-set! ids b id))
 
 (define (forget-buffer-snapshot! b)
   (define id (buffer-recovery-id b))
@@ -101,8 +128,20 @@
 
 (define timers (make-weak-hasheq))  ; document -> timer%, mirrors buffer.rkt's highlight-timer
 
-(define (do-autosave! b)
-  (when (and (setting-ref 'autosave-interval) (send b is-modified?)) (snapshot-buffer! b)))
+;; A failed autosave (full disk, unwritable folder) goes to the Activity log once, not every
+;; tick; after a write succeeds again, the next failure is reported afresh.
+(define failure-reported? #f)
+(define (autosave-buffer! b)
+  (when (and (setting-ref 'autosave-interval) (send b is-modified?))
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (unless failure-reported?
+                         (set! failure-reported? #t)
+                         (report-error! 'autosave
+                                        (format "Could not save an automatic backup of ~a: ~a"
+                                                (send b get-name) (exn-message e)))))])
+      (snapshot-buffer! b)
+      (set! failure-reported? #f))))
 
 ;; Restarted on every edit (racket/gui's timer% start replaces a pending one-shot), so a burst
 ;; of keystrokes writes one snapshot after things go quiet, not one per keystroke.
@@ -110,7 +149,7 @@
   (define secs (setting-ref 'autosave-interval))
   (when secs
     (define t (or (hash-ref timers b #f)
-                  (let ([t (new timer% [notify-callback (lambda () (do-autosave! b))])])
+                  (let ([t (new timer% [notify-callback (lambda () (autosave-buffer! b))])])
                     (hash-set! timers b t) t)))
     (send t start (inexact->exact (round (* secs 1000))) #t)))
 

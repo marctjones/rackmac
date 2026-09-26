@@ -285,3 +285,65 @@
   (parameterize ([recovery-decide! (lambda (snaps) (set! called? #t) '())])
     (recover-on-launch!))
   (check-false called? "recovery-decide! is never asked when there are no snapshots"))
+
+;; ---- adversarial review fixes (E3.M1) ------------------------------------------------------
+
+(define (activity-since before)
+  (define now (send (messages-buffer) get-text))
+  (substring now (min (string-length before) (string-length now))))
+
+(test-case "a failed autosave is reported once in the Activity log and never claims a backup exists"
+  (setting-set! 'autosave-interval 30)
+  (define b (new-buffer! "untitled"))
+  (send b insert "text with nowhere to go")
+  (make-directory* (recovery-dir))
+  (define before (send (messages-buffer) get-text))
+  (dynamic-wind
+   (lambda () (file-or-directory-permissions (recovery-dir) #o500))   ; unwritable
+   (lambda ()
+     (autosave-buffer! b)
+     (autosave-buffer! b)
+     (autosave-buffer! b))
+   (lambda () (file-or-directory-permissions (recovery-dir) #o700)))
+  (define log (activity-since before))
+  (check-equal? (length (regexp-match* #rx"Could not save an automatic backup" log)) 1
+                "reported once, not once per tick")
+  (check-false (buffer-recovery-id b) "no id: nothing was written")
+  (autosave-buffer! b)                          ; the folder is writable again
+  (define id (buffer-recovery-id b))
+  (check-not-false id)
+  (check-equal? (snapshot-text (snapshot-for id)) "text with nowhere to go")
+  ;; A new failure after a success is reported again.
+  (define before2 (send (messages-buffer) get-text))
+  (dynamic-wind
+   (lambda () (file-or-directory-permissions (recovery-dir) #o500))
+   (lambda () (autosave-buffer! b))
+   (lambda () (file-or-directory-permissions (recovery-dir) #o700)))
+  (check-regexp-match #rx"Could not save an automatic backup" (activity-since before2)))
+
+(test-case "the recovery folder is private (0700) and every snapshot file is 0600"
+  (clear-recovery!)
+  (delete-directory/files (recovery-dir))
+  (define b (new-buffer! "untitled"))
+  (send b insert "private notes")
+  (snapshot-buffer! b)
+  (check-equal? (file-or-directory-permissions (recovery-dir) 'bits) #o700)
+  (define f (build-path (recovery-dir) (format "~a.rktd" (buffer-recovery-id b))))
+  (check-equal? (file-or-directory-permissions f 'bits) #o600)
+  ;; A snapshot and folder left world-readable by an older version are tightened on rewrite.
+  (file-or-directory-permissions f #o644)
+  (file-or-directory-permissions (recovery-dir) #o755)
+  (send b insert "!")
+  (snapshot-buffer! b)
+  (check-equal? (file-or-directory-permissions (recovery-dir) 'bits) #o700)
+  (check-equal? (file-or-directory-permissions f 'bits) #o600))
+
+(test-case "quarantined snapshots older than 30 days are pruned; newer ones are kept"
+  (make-directory* (recovery-dir))
+  (define old (build-path (recovery-dir) (format "x.rktd.corrupt-~a" (- (current-seconds) (* 31 24 60 60)))))
+  (define recent (build-path (recovery-dir) (format "y.rktd.corrupt-~a" (- (current-seconds) (* 2 24 60 60)))))
+  (for ([p (list old recent)]) (display-to-file "junk" p #:exists 'truncate))
+  (list-snapshots)
+  (check-false (file-exists? old))
+  (check-true (file-exists? recent))
+  (delete-file recent))

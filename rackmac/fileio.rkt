@@ -108,13 +108,17 @@
 
 ;; ---- safe write ------------------------------------------------------------
 
-(define (safe-write-bytes! path bs)
+;; #:permissions, when given, is set on the new file instead of copying the old one's (the
+;; recovery store uses it to keep snapshots private, #74).
+(define (safe-write-bytes! path bs #:permissions [perms #f])
   ;; Write through a symlink to its target, so the link itself survives.
   (define target (if (link-exists? path) (normalize-path path) path))
   (define-values (dir name _d) (split-path (path->complete-path target)))
   (define tmp (make-temporary-file (string-append "." (path->string name) ".~a.tmp") #f dir))
   (with-handlers ([(lambda (e) #t) (lambda (e) (when (file-exists? tmp) (delete-file tmp)) (raise e))])
+    (when perms (file-or-directory-permissions tmp perms))   ; before any text is written
     (call-with-output-file tmp #:exists 'truncate (lambda (o) (write-bytes bs o)))
-    (when (file-exists? target)
-      (file-or-directory-permissions tmp (file-or-directory-permissions target 'bits)))
+    (cond [perms (void)]
+          [(file-exists? target)
+           (file-or-directory-permissions tmp (file-or-directory-permissions target 'bits))])
     (rename-file-or-directory tmp target #t)))
