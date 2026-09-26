@@ -63,9 +63,9 @@
 (define (add-token! b role start end)
   (when (< start end) (mdata-set! b 'tokens (cons (token role start end) (mdata-ref b 'tokens '())))))
 
-;; A block's tokens in position order.
-(define (block-tokens-of b)
-  (sort (mdata-ref b 'tokens '()) < #:key token-start))
+;; A block's tokens in position order: each is recorded after the ones before it on its line
+;; and lines come in order, so reversing the recorded list suffices.
+(define (block-tokens-of b) (reverse (mdata-ref b 'tokens '())))
 
 ;; Sets `end` on every block in `path` (a list root..tip) to `end`.
 (define (touch-path! path end)

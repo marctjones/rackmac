@@ -1,7 +1,8 @@
 #lang racket/base
 ;; The keystroke budget (design §3.1, mdlib-parser #321): one keystroke in a 300 KB, 5,500-line
-;; note -- `parser-reparse!`, its change report, and the inline parse and relocation of the
-;; leaves the report names (what `md-restyle-region` forces next) -- under 10 ms. Measured in CPU
+;; note -- `parser-reparse!`, its change report, the inline parse and relocation of the leaves
+;; the report names, and `style-runs` over the report's ranges (what `md-restyle-region` asks
+;; for next) -- under 10 ms. Measured in CPU
 ;; time (`current-process-milliseconds`, GC included) because other processes may load the
 ;; machine; the mean over a run of keystrokes is printed. The CI assertion keeps design §5's 3x
 ;; margin so a slow runner does not flake; the printed mean is the number the budget is about.
@@ -27,6 +28,7 @@
       (define t0 (current-process-milliseconds))
       (define-values (doc rep) (parser-reparse! p new (edit at at "x")))
       (for ([b (in-list (change-report-inline-changed rep))]) (block-inlines b))
+      (for ([r (in-list (change-report-ranges rep))]) (style-runs doc #:start (car r) #:end (cdr r)))
       (values new (+ total (- (current-process-milliseconds) t0)))))
   (/ total keystrokes 1.0))
 

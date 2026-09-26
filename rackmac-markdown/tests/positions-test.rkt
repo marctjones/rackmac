@@ -114,6 +114,9 @@
 
 (define (check-block-tokens! doc source)
   (define nodes (all-non-document-nodes doc))
+  (for ([b (in-list nodes)])
+    (check-equal? (block-tokens b) (sort (block-tokens b) < #:key token-start)
+                  (format "~s: block tokens out of order" source)))
   (for* ([b (in-list nodes)] [t (in-list (block-tokens b))])
     (check-true (<= (block-start b) (token-start t) (token-end t) (block-end b))
                 (format "~s: block token ~a outside its block [~a,~a)" source t (block-start b) (block-end b)))
