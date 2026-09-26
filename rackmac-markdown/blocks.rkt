@@ -2,9 +2,10 @@
 ;; Phase 1 (design §2.1): the CommonMark block algorithm, following the spec's appendix
 ;; ("A parsing strategy") as cmark implements it. Produces the immutable tree of ast.rkt
 ;; structs, with segments (§1.3), a line index, and the reference-definition map (§1.4).
-;; Inline content is left unparsed (`inlines` is always '(); mdlib-inlines fills it in later).
+;; Paragraphs and headings get a lazy inline-cell (ast.rkt): their inline content is parsed
+;; (inlines.rkt) only once the block phase, and so the refmap, is complete (design §1.4).
 (require racket/string racket/list racket/match
-         "chars.rkt" "ast.rkt" "lines.rkt" "refs.rkt")
+         "chars.rkt" "ast.rkt" "lines.rkt" "refs.rkt" "inlines.rkt")
 (provide parse-blocks)
 
 ;; ============================================================================================
@@ -695,7 +696,17 @@
 ;; Finalization: mutable tree -> immutable ast.rkt structs, refmap extraction, tight/loose.
 ;; ============================================================================================
 
-(define (parse-blocks source #:extensions [extensions no-extensions])
+;; The inline parser a leaf's cell will call: (kind content refmap) -> content-relative inline
+;; list, kind being 'paragraph or 'heading. mdlib-parser passes one that consults its memo.
+(define (default-inline-parser kind content refmap) (parse-inlines content refmap))
+(define current-inline-parser (make-parameter default-inline-parser))
+
+(define (leaf-cell kind segs content refmap)
+  (define ip (current-inline-parser)) ; captured now: the cell is forced after parse-blocks returns
+  (make-inline-cell content segs (lambda () (ip kind content refmap))))
+
+(define (parse-blocks source #:extensions [extensions no-extensions]
+                      #:inline-parser [inline-parser default-inline-parser])
   (define lines (source-lines source))
   (define line-idx (build-line-index source))
   (define doc (make-mblk 'document 0 '()))
@@ -703,7 +714,9 @@
   (close-all! doc)
   (touch-path! (list doc) (string-length source))
   (define refmap (make-hash))
-  (define children (finalize-children source (reverse (mblk-children doc)) refmap))
+  (define children
+    (parameterize ([current-inline-parser inline-parser])
+      (finalize-children source (reverse (mblk-children doc)) refmap)))
   (document 0 (string-length source) '() source children refmap line-idx extensions))
 
 (define (close-all! b)
@@ -743,14 +756,16 @@
      (list (html-block (mblk-start b) (mblk-end b) '() (mdata-ref b 'kind) out-lines))]
     [(heading)
      (define-values (segs content) (build-segments+content source (leaf-lines b)))
-     (list (heading (mblk-start b) (mblk-end b) '() (mdata-ref b 'level) #f #f segs '()))]
+     (list (heading (mblk-start b) (mblk-end b) '() (mdata-ref b 'level) #f #f segs
+                    (leaf-cell 'heading segs content refmap)))]
     [(paragraph)
      (cond
        [(mdata-ref b 'setext-level)
         => (lambda (level)
              (define-values (segs content)
                (build-segments+content source (trim-trailing-line-ws source (leaf-lines b))))
-             (list (heading (mblk-start b) (mblk-end b) '() level #t #f segs '())))]
+             (list (heading (mblk-start b) (mblk-end b) '() level #t #f segs
+                            (leaf-cell 'heading segs content refmap))))]
        [else
         (define-values (remaining refdefs) (strip-link-ref-defs source (leaf-lines b) refmap))
         (define para
@@ -759,7 +774,8 @@
                  (and (> (string-length (string-trim content)) 0)
                       ;; Start after any stripped leading ref-defs, not at b's original start,
                       ;; so this span doesn't overlap the ref-def nodes' own spans.
-                      (paragraph (first (car remaining)) (mblk-end b) '() segs '())))))
+                      (paragraph (first (car remaining)) (mblk-end b) '() segs
+                                 (leaf-cell 'paragraph segs content refmap))))))
         (append refdefs (if para (list para) '()))])]
     [else '()]))
 
@@ -802,12 +818,13 @@
           (define norm (normalize-label label))
           (cond
             [(non-empty-normalized? norm)
-             (when (not (hash-has-key? refmap norm))
-               (hash-set! refmap norm (cons dest title)))
              (define used (take lines consumed-lines))
              (define def-start (first (car used)))
              (define def-end (let ([l (last used)]) (+ (first l) (second l))))
              (define node (link-ref-def def-start def-end '() label dest title))
+             ;; Design §1.4: normalized label -> (dest title node); the first definition wins.
+             (unless (hash-has-key? refmap norm)
+               (hash-set! refmap norm (list dest title node)))
              (loop (list-tail lines consumed-lines) (cons node defs))]
             [else (values lines (reverse defs))])] ; invalid (empty) label: keep as paragraph text
          [#f (values lines (reverse defs))])])))
@@ -817,33 +834,32 @@
 (define (line-join source lines)
   (string-join (for/list ([l (in-list lines)]) (substring source (first l) (+ (first l) (second l)))) "\n"))
 
-;; A tiny reader for "[label]: dest \"title\"" possibly spanning several of `lines`. Returns
-;; (list label dest title lines-consumed) or #f if the first line isn't a ref-def start at all.
+;; A reader for "[label]: dest \"title\"" possibly spanning several of `lines`, following
+;; commonmark.js's parseReference with the scanners shared with the inline phase (refs.rkt).
+;; Returns (list label dest title lines-consumed) or #f if `joined` does not start with one.
 (define (parse-one-ref-def joined)
   (define len (string-length joined))
   (let/ec return
     (define (fail) (return #f))
     (unless (and (> len 0) (eqv? (string-ref joined 0) #\[)) (fail))
-    (define label-end (find-label-end joined 1))
+    (define label-end (scan-link-label joined 0 len)) ; just after `]`
     (unless label-end (fail))
-    (unless (and (< (add1 label-end) len) (eqv? (string-ref joined (add1 label-end)) #\:)) (fail))
-    (define label (substring joined 1 label-end))
-    (define after (skip-ws joined (+ label-end 2)))
-    (unless (< after len) (fail))
-    (define-values (dest after2) (read-dest joined after))
+    (unless (and (< label-end len) (eqv? (string-ref joined label-end) #\:)) (fail))
+    (define label (substring joined 1 (sub1 label-end)))
+    (define dest-start (skip-spnl joined (add1 label-end) len))
+    (define-values (dest after-dest) (scan-link-destination joined dest-start len #:allow-empty? #f))
     (unless dest (fail))
-    (define after3 (skip-ws joined after2))
+    (define title-start (skip-spnl joined after-dest len))
+    (define-values (title after-title)
+      (if (> title-start after-dest)
+          (scan-link-title joined title-start len)
+          (values #f after-dest)))
     (cond
-      [(and (< after3 len) (memv (string-ref joined after3) '(#\" #\' #\()))
-       (define-values (title after4) (read-title joined after3))
-       (if (and title (rest-of-line-blank? joined after4))
-           (list label dest title (add1 (count-newlines joined 0 after4)))
-           (finish-without-title joined label dest after2))]
-      [else (finish-without-title joined label dest after2)])))
-
-(define (finish-without-title joined label dest after2)
-  (and (rest-of-line-blank? joined after2)
-       (list label dest #f (add1 (count-newlines joined 0 after2)))))
+      [(and title (rest-of-line-blank? joined after-title))
+       (list label dest title (add1 (count-newlines joined 0 after-title)))]
+      [(rest-of-line-blank? joined after-dest)
+       (list label dest #f (add1 (count-newlines joined 0 after-dest)))]
+      [else (fail)])))
 
 (define (rest-of-line-blank? s pos)
   (define nl (or (for/first ([i (in-range pos (string-length s))] #:when (eqv? (string-ref s i) #\newline)) i)
@@ -852,60 +868,3 @@
 
 (define (count-newlines s from to)
   (for/sum ([i (in-range from (min to (string-length s)))] #:when (eqv? (string-ref s i) #\newline)) 1))
-
-(define (find-label-end s start)
-  (let loop ([i start] [depth 0])
-    (cond
-      [(>= i (string-length s)) #f]
-      [(eqv? (string-ref s i) #\\) (loop (+ i 2) depth)]
-      [(eqv? (string-ref s i) #\[) #f] ; unescaped '[' inside a label is not allowed
-      [(eqv? (string-ref s i) #\]) (if (> i start) i #f)]
-      [else (loop (add1 i) depth)])))
-
-(define (skip-ws s i)
-  (let loop ([i i]) (if (and (< i (string-length s)) (unicode-whitespace? (string-ref s i))) (loop (add1 i)) i)))
-
-;; Like skip-ws, but a destination and its title may be separated by at most one line ending.
-(define (skip-ws-including-one-newline s i) (skip-ws s i))
-
-(define (read-dest s i)
-  (define len (string-length s))
-  (cond
-    [(>= i len) (values #f i)]
-    [(eqv? (string-ref s i) #\<)
-     (let loop ([j (add1 i)])
-       (cond
-         [(>= j len) (values #f i)]
-         [(eqv? (string-ref s j) #\>) (values (unescape (substring s (add1 i) j)) (add1 j))]
-         [(eqv? (string-ref s j) #\\) (loop (+ j 2))]
-         [(memv (string-ref s j) '(#\newline #\<)) (values #f i)]
-         [else (loop (add1 j))]))]
-    [else
-     (let loop ([j i] [depth 0])
-       (cond
-         [(>= j len) (if (> j i) (values (unescape (substring s i j)) j) (values #f i))]
-         [(eqv? (string-ref s j) #\\) (loop (+ j 2) depth)]
-         [(eqv? (string-ref s j) #\() (loop (add1 j) (add1 depth))]
-         [(eqv? (string-ref s j) #\))
-          (if (= depth 0) (values (and (> j i) (unescape (substring s i j))) j) (loop (add1 j) (sub1 depth)))]
-         [(unicode-whitespace? (string-ref s j)) (values (and (> j i) (unescape (substring s i j))) j)]
-         [(char-iso-control? (string-ref s j)) (values #f i)]
-         [else (loop (add1 j) depth)]))]))
-
-(define (char-iso-control? ch) (< (char->integer ch) 32))
-
-(define (read-title s i)
-  (define len (string-length s))
-  (define close (case (string-ref s i) [(#\") #\"] [(#\') #\'] [(#\() #\)]))
-  (let loop ([j (add1 i)])
-    (cond
-      [(>= j len) (values #f i)]
-      [(eqv? (string-ref s j) #\\) (loop (+ j 2))]
-      [(eqv? (string-ref s j) close) (values (unescape (substring s (add1 i) j)) (add1 j))]
-      [(and (eqv? close #\)) (eqv? (string-ref s j) #\()) (values #f i)]
-      [else (loop (add1 j))])))
-
-(define (unescape s)
-  ;; Backslash-escapes for ASCII punctuation, undone for stored dest/title values (mdlib-inlines
-  ;; will apply full entity decoding later; this covers what the block phase itself needs).
-  (regexp-replace* #px"\\\\([!-/:-@\\[-`{-~])" s "\\1"))
