@@ -79,6 +79,40 @@
   (check-equal? (text b) "[]()x")
   (check-equal? (sel b) '(3 . 3)))
 
+(test-case "Insert Link on an existing link selects its URL instead of wrapping again (#335)"
+  (define b (note "see [the docs](https://example.com/a) now"))
+  (sel! b 7 7)                    ; caret in "the docs"
+  (run-command 'insert-link)
+  (check-equal? (text b) "see [the docs](https://example.com/a) now" "no new brackets")
+  (check-equal? (sel b) '(15 . 36) "the URL is selected")
+  (run-command 'insert-link)      ; again, with the URL selected: still that link
+  (check-equal? (sel b) '(15 . 36))
+  (sel! b 5 13)                   ; the link text selected
+  (run-command 'insert-link)
+  (check-equal? (sel b) '(15 . 36)))
+
+(test-case "Insert Link on a link with an empty URL puts the cursor in it"
+  (define b (note "a [x]() b"))
+  (sel! b 3 3)
+  (run-command 'insert-link)
+  (check-equal? (text b) "a [x]() b")
+  (check-equal? (sel b) '(6 . 6)))
+
+(test-case "Insert Link on an autolink or a reference link selects the URL or the label"
+  (define b (note "go <https://x.org> or [site][ref]\n\n[ref]: https://y.org"))
+  (sel! b 6 6)
+  (run-command 'insert-link)
+  (check-equal? (sel b) '(4 . 17))
+  (sel! b 24 24)
+  (run-command 'insert-link)
+  (check-equal? (sel b) '(29 . 32)))
+
+(test-case "Insert Link just outside a link still makes a new one"
+  (define b (note "[a](/u) b"))
+  (sel! b 8 9)
+  (run-command 'insert-link)
+  (check-equal? (text b) "[a](/u) [b]()"))
+
 ;; ---- headings and body text -----------------------------------------------------------------
 
 (test-case "Heading 1/2/3 and Body Text"

@@ -51,20 +51,53 @@
 ;; ---- link ---------------------------------------------------------------------------------
 ;; The library has no wrap-link operation (it needs no parse-tree awareness): the selection (or
 ;; nothing, at a bare caret) becomes `[text](|)`, the cursor left inside the empty URL, as Word's
-;; Insert Hyperlink does when nothing is selected. Editing an existing link's URL in place is not
-;; implemented (a gap for a later issue).
+;; Insert Hyperlink does when nothing is selected. On an existing link (the caret inside it, or
+;; a selection within it) it edits that link instead, as Word's ⌘K on a hyperlink does: its URL
+;; is selected for typing over (the cursor goes inside an empty one); an autolink `<url>` has its
+;; URL selected, a reference link `[text][label]` its label.
+
+;; The innermost link containing [s, e) (a caret strictly inside, or a selection within it).
+(define (link-around doc s e)
+  (define leaf (block-at doc s))
+  (define (kids x)
+    (cond [(emph? x) (emph-children x)] [(strong? x) (strong-children x)] [(strike? x) (strike-children x)]
+          [(link? x) (link-children x)] [(image? x) (image-children x)] [else '()]))
+  (and leaf (leaf-block? leaf)
+       (let loop ([xs (block-inlines leaf)] [found #f])
+         (for/fold ([found found]) ([x (in-list xs)])
+           (define hit? (and (link? x) (<= (inline-start x) s) (<= e (inline-end x))
+                             (if (= s e) (< (inline-start x) s (inline-end x)) #t)))
+           (loop (kids x) (if hit? x found))))))
+
+;; The range to select in link `l` for editing it.
+(define (link-edit-range l)
+  (define (tok role) (for/first ([t (in-list (inline-tokens l))] #:when (eq? (token-role t) role)) t))
+  (cond
+    [(tok 'link-dest) => (lambda (t) (cons (token-start t) (token-end t)))]
+    [(tok 'link-dest-open) => (lambda (t) (cons (token-end t) (token-end t)))]
+    [(eq? (link-kind l) 'autolink)
+     (define ts (filter (lambda (t) (eq? (token-role t) 'autolink-bracket)) (inline-tokens l)))
+     (if (= (length ts) 2) (cons (token-end (car ts)) (token-start (cadr ts))) (cons (inline-start l) (inline-end l)))]
+    [(tok 'link-label) => (lambda (t) (cons (add1 (token-start t)) (sub1 (token-end t))))]
+    [else (cons (inline-start l) (inline-end l))]))
+
 (define-command (insert-link)
   #:title "Insert Link…" #:menu "Format" #:menu-order 20 #:icon "link" #:keys ("Mod-k")
-  #:aliases ("insert link" "hyperlink" "link")
-  #:help "Wrap the selection as a Markdown link, with the cursor in the URL."
+  #:aliases ("insert link" "hyperlink" "link" "edit link")
+  #:help "Wrap the selection as a Markdown link, with the cursor in the URL; on a link, select its URL."
   #:when markdown-document?
   (define b (current-buffer))
   (when (markdown-document? b)
     (define-values (s e) (selection-range b))
-    (define label (send b get-text s e))
-    (apply-md-edits! b (list (edit s e (string-append "[" label "](" ")"))))
-    (define caret (+ s (string-length label) 3))     ; after "[label](" -- inside the empty URL
-    (send b set-position caret caret)))
+    (define l (link-around (current-md-document b) s e))
+    (cond
+      [l (define r (link-edit-range l))
+         (send b set-position (car r) (cdr r))]
+      [else
+       (define label (send b get-text s e))
+       (apply-md-edits! b (list (edit s e (string-append "[" label "](" ")"))))
+       (define caret (+ s (string-length label) 3))     ; after "[label](" -- inside the empty URL
+       (send b set-position caret caret)])))
 
 ;; ---- headings and body text -----------------------------------------------------------------
 
