@@ -99,6 +99,27 @@
   (check-toggle "x [a b](/u)" "x [a" 'emph "*x [a b](/u)*")
   (check-toggle "**a b**" "b" 'emph "**a *b***")
   (check-toggle "*a b*" "a b" 'strong "***a b***")
+  ;; emphasis and strong together (#323, #335): `***x***` is emphasis around strong, and the
+  ;; kind goes around other emphasis it covers whole; toggling back is the identity
+  (check-toggle "**two**" "two" 'emph "***two***")
+  (check-toggle "***two***" "two" 'emph "**two**")
+  (check-toggle "***two***" "two" 'strong "*two*")
+  (check-toggle "__two__" "two" 'emph "*__two__*")
+  (check-toggle "_two_" "two" 'strong "**_two_**")
+  (check-toggle "x**ab**y" "ab" 'emph "x***ab***y")
+  (check-toggle "**a b**" "a" 'emph "***a* b**")
+  ;; removing from inside: pieces on either side, placed within the nesting, never across it
+  (check-toggle "*a **b** c*" "b" 'emph "*a* **b** *c*")
+  (check-toggle "*a **b c** d*" "c" 'emph "*a* ***b* c** *d*")
+  (check-toggle "**abc**" "b" 'emph "**a*b*c**")
+  ;; a neighbor written with `_` merges as `_`, so it comes back
+  (check-toggle "_a_ b" "b" 'emph "_a b_")
+  ;; where `*` would run into a neighboring `*`, a pair is written with `_`
+  (check-toggle "**x*x file*** memo" "file" 'strong "__x__***x** file* memo" #:twice? #f)
+  ;; a selection partly of the kind gets it throughout (as in word processors), so toggling
+  ;; back removes it from all of it
+  (check-toggle "*a **b** c*" "a **b** c" 'strong "***a b c***" #:twice? #f)
+  (check-toggle "**ab** *cd*" "ab** *cd" 'emph "***ab** cd*" #:twice? #f)
   (check-toggle "a `code` b" "de` b" 'strong "a **`code` b**")
   (check-toggle "a &amp; b" "mp; b" 'strong "a **&amp; b**")
   (check-toggle "a \\* b" "* b" 'strong "a **\\* b**")
@@ -357,3 +378,161 @@
                 (unless (eq? kind 'code) (check-equal? (plain-text d1) (plain-text doc)))
                 (define-values (t2 s2 e2) (toggle t1 s1 e1 kind))
                 (check-equal? t2 text "twice is the identity")))))))))
+
+;; --- property: generated nested inline markup (#323, #335) ---
+;; Paragraphs of words nested in strong, emphasis, strikethrough, code spans and links, with `*`
+;; and `_` delimiters and emphasis glued inside words; a selection of whole words (a code span
+;; or a link counts as one); each kind toggled on it. Afterwards, per content character of the
+;; paragraph (in order; the plain text is unchanged): the selected characters have gained the
+;; kind (or, when all had it, lost it) and every other character keeps exactly the formatting
+;; it had, in every kind. When the selection was all of the kind or none of it, toggling again
+;; at the returned selection gives back the text. Inputs are in normal form: no kind nested in
+;; itself; two nodes of one kind always have a plain word between them (a toggle merges nodes
+;; that only blanks separate, which toggling back cannot tell apart); and the toggled kind over
+;; all of another node's content is written outside it (`**_x_**`, not `_**x**_`: toggling
+;; strong off either gives `_x_`, and toggling it on again gives the first).
+(define (content-kinds text doc)
+  ;; (char . kinds) for each content character of the first paragraph, in order
+  (define para (car (document-children doc)))
+  (define out '())
+  (define (add! p kinds)
+    (unless (char-whitespace? (string-ref text p))
+      (set! out (cons (cons (string-ref text p) (sort kinds symbol<?)) out))))
+  (let walk ([xs (block-inlines para)] [kinds '()])
+    (for ([x (in-list xs)])
+      (cond
+        [(text? x) (for ([p (in-range (inline-start x) (inline-end x))]) (add! p kinds))]
+        [(code-span? x)
+         (define ts (inline-tokens x))
+         (for ([p (in-range (token-end (first ts)) (token-start (last ts)))]) (add! p (cons 'code kinds)))]
+        [(emph? x) (walk (emph-children x) (cons 'emph kinds))]
+        [(strong? x) (walk (strong-children x) (cons 'strong kinds))]
+        [(strike? x) (walk (strike-children x) (cons 'strike kinds))]
+        [(link? x) (walk (link-children x) kinds)])))
+  (reverse out))
+
+;; A random paragraph for toggling `kind`: its text, its intended (char . kinds) list and its
+;; units (start end) in order: words, code spans and links.
+(define (gen-nested rng kind strike?)
+  (define (rnd n) (random n rng))
+  (define (word) (list-ref '("ab" "cd" "note" "file" "x" "memo" "due" "brief") (rnd 8)))
+  (define out (open-output-string))
+  (define seq '()) (define units '())
+  (define (emit-word! w kinds)
+    (define s (file-position out))
+    (write-string w out)
+    (set! units (cons (list s (file-position out)) units))
+    (for ([c (in-string w)]) (set! seq (cons (cons c (sort kinds symbol<?)) seq))))
+  (define (delim k)
+    (case k
+      [(emph) (if (or (eq? kind 'emph) (zero? (rnd 2))) "*" "_")]
+      [(strong) (if (or (eq? kind 'strong) (zero? (rnd 2))) "**" "__")]
+      [(strike) "~~"]))
+  ;; items: 'word, 'code, 'link or (k items); siblings of a node never nest its kind
+  (define (gen-items depth used)
+    (define n (add1 (rnd 3)))
+    (define kinds (filter (lambda (k) (and (not (memq k used)) (or strike? (not (eq? k 'strike)))))
+                          '(emph strong strike)))
+    (define raw
+      (for/list ([i (in-range n)])
+        (case (if (or (>= depth 3) (null? kinds)) (rnd 3) (rnd 6))
+          [(0) 'word] [(1) (if (zero? (rnd 3)) 'code 'word)] [(2) (if (zero? (rnd 3)) 'link 'word)]
+          [else
+           (define k (list-ref kinds (rnd (length kinds))))
+           (define kids (gen-items (add1 depth) (cons k used)))
+           ;; the toggled kind over all of another node's content is written outside it
+           (cons k (if (and (not (eq? k kind)) (= (length kids) 1) (pair? (car kids)) (eq? (caar kids) kind))
+                       (append kids '(word))
+                       kids))])))
+    ;; a plain word between two nodes
+    (let loop ([xs raw] [acc '()])
+      (cond [(null? xs) (reverse acc)]
+            [(and (pair? (car xs)) (pair? acc) (pair? (car acc))) (loop xs (cons 'word acc))]
+            [else (loop (cdr xs) (cons (car xs) acc))])))
+  (define (render items kinds)
+    (for ([x (in-list items)] [i (in-naturals)])
+      (define prev (and (> i 0) (list-ref items (sub1 i))))
+      ;; emphasis written with `*` whose content is words may be glued to a word before it
+      (define d (and (pair? x) (delim (car x))))
+      (define glue? (and prev (eq? prev 'word) d (not (regexp-match? #rx"_" d))
+                         (eq? (cadr x) 'word) (eq? (last x) 'word) (zero? (rnd 4))))
+      (when (and (> i 0) (not glue?)) (write-string " " out))
+      (cond
+        [(eq? x 'word) (emit-word! (word) kinds)]
+        [(eq? x 'code)
+         (define s (file-position out))
+         (write-string "`" out) (define w (word))
+         (for ([c (in-string w)]) (set! seq (cons (cons c (sort (cons 'code kinds) symbol<?)) seq)))
+         (write-string w out) (write-string "`" out)
+         (set! units (cons (list s (file-position out)) units))]
+        [(eq? x 'link)
+         (define s (file-position out))
+         (write-string "[" out) (define w (word))
+         (for ([c (in-string w)]) (set! seq (cons (cons c (sort kinds symbol<?)) seq)))
+         (write-string w out) (write-string "](/u)" out)
+         (set! units (cons (list s (file-position out)) units))]
+        [else
+         (write-string d out)
+         (render (cdr x) (cons (car x) kinds))
+         (write-string d out)])))
+  (render (gen-items 0 '()) '())
+  (values (get-output-string out) (reverse seq) (reverse units)))
+
+(test-case "toggle-emphasis-edits: generated nested markup, exact formatting, twice is the identity"
+  (define rng (make-pseudo-random-generator))
+  (parameterize ([current-pseudo-random-generator rng]) (random-seed 335))
+  (define tried 0) (define well-formed 0) (define identities 0) (define refused 0)
+  (for* ([exts (in-list (list no-extensions all-extensions))] [n (in-range 1500)])
+    (parameterize ([current-exts exts])
+      (define strike? (extension-set-strike exts))
+      (define kind (list-ref (if strike? '(strong emph strike code) '(strong emph code)) (random (if strike? 4 3) rng)))
+      (define-values (text seq units) (gen-nested rng kind strike?))
+      (define doc (parse text))
+      (set! tried (add1 tried))
+      ;; skip the rare generated text that does not parse as written
+      (when (equal? (content-kinds text doc) seq)
+        (set! well-formed (add1 well-formed))
+        (define i (random (length units) rng))
+        ;; code only on one plain word: code makes markup inside it literal
+        (define j (if (eq? kind 'code) i (+ i (random (min 4 (- (length units) i)) rng))))
+        (define s (car (list-ref units i))) (define e (cadr (list-ref units j)))
+        ;; (and not inside emphasis glued to a word: `x**`y`**` cannot be strong in CommonMark)
+        (define lone-word? (and (regexp-match? #px"^[a-z]+$" (substring text s e))
+                                (not (regexp-match? #px"[a-z][*~]+$" (substring text 0 s)))
+                                (not (regexp-match? #px"^[*~]+[a-z]" (substring text e)))))
+        (unless (and (eq? kind 'code) (not lone-word?))
+          ;; the content characters selected, by index
+          (define idx (for/list ([u (in-list units)] [c (in-naturals)] #:when (<= s (car u) (cadr u) e)) u))
+          (define sel-idx
+            (let loop ([us units] [k 0] [acc '()])
+              (cond [(null? us) (reverse acc)]
+                    [else
+                     (define u (car us))
+                     (define len (let ([w (substring text (car u) (cadr u))])
+                                   (string-length (regexp-replace* #px"[`\\[\\]]|\\(/u\\)" w ""))))
+                     (loop (cdr us) (+ k len)
+                           (if (member u idx) (append (reverse (range k (+ k len))) acc) acc))])))
+          (define had (for/list ([k (in-list sel-idx)]) (and (memq kind (cdr (list-ref seq k))) #t)))
+          (define removing? (andmap values had))
+          (define expected
+            (for/list ([c (in-list seq)] [k (in-naturals)])
+              (if (memv k sel-idx)
+                  (cons (car c) (sort (if removing? (remq kind (cdr c)) (remove-duplicates (cons kind (cdr c)))) symbol<?))
+                  c)))
+          (define-values (t1 s1 e1) (toggle text s e kind))
+          (with-check-info (['text text] ['selection (substring text s e)] ['kind kind] ['result t1])
+            ;; (a toggle the markup cannot express, emphasis glued inside a word cut where it is
+            ;; glued, leaves the text alone; rare)
+            (if (and (equal? t1 text) (not (eq? kind 'code)))
+                (set! refused (add1 refused))
+                (check-equal? (content-kinds t1 (parse t1)) expected "exactly the selection changes"))
+            ;; (where `*` would have joined a neighboring `*` run, a pair is written with `_`,
+            ;; which toggling back keeps)
+            (define (count-_ s) (length (regexp-match* #rx"_" s)))
+            (when (and (or removing? (not (ormap values had))) (= (count-_ t1) (count-_ text)) (not (equal? t1 text)))
+              (set! identities (add1 identities))
+              (define-values (t2 s2 e2) (toggle t1 s1 e1 kind))
+              (check-equal? t2 text "twice is the identity")))))))
+  (check-true (> well-formed (* 0.9 tried)) (format "~a of ~a generated texts parse as written" well-formed tried))
+  (check-true (> identities 1500) (format "~a identities checked" identities))
+  (check-true (< (* 50 refused) well-formed) (format "~a of ~a toggles left alone" refused well-formed)))
