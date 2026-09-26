@@ -49,9 +49,23 @@
       (if end? (list icon (string-trim (title-for c on?) "…") 'left) icon))
 
     ;; A toolbar item can name several other commands instead of running one itself (#336's
-    ;; Heading button: Heading 1-3, Body Text): its click opens a popup-menu% below the button
-    ;; (ui/context-menu.rkt, the same one the editor's right-click menu uses) rather than
-    ;; running `name`, which then serves only as the button's title, hover hint and #:when.
+    ;; Heading button: Heading 1-3, Body Text; Export: Word, PDF): its click opens a popup-menu%
+    ;; below the button (ui/context-menu.rkt, the same one the editor's right-click menu uses)
+    ;; rather than running `name`, which then serves only as the button's title, hover hint and
+    ;; #:when. Picking an item runs its command through run-command/safe, as a plain button
+    ;; does, and hands the keyboard back to the document. The menu pops up on the window, below
+    ;; the button, as the tab strip's menu does (frame.rkt), once the click has been handled,
+    ;; and stays referenced here: `popup-menu` may return while the menu is still up.
+    (define popups (make-hasheq))            ; command name -> its popup's command names
+    (define shown-popup #f)
+    (define/public (popup-for name)          ; a fresh popup-menu% for the button, or #f
+      (define entries (hash-ref popups name #f))
+      (and entries
+           (build-popup-menu
+            (list (for/list ([n (in-list entries)] #:when (find-command n))
+                    (cons (command-menu-label n)
+                          (and (command-enabled? (find-command n))
+                               (lambda () (run-command/safe n) (run-hook 'focus-editor)))))))))
     (define (make-button it end?)
       (define name (toolbar-item-command it))
       (define c (find-command name))
@@ -62,8 +76,15 @@
                           [callback (lambda (btn e)
                                       (cond
                                         [popup
-                                         (popup-menu-at! btn (build-popup-menu (list popup)) 0 (send btn get-height))]
+                                         (queue-callback
+                                          (lambda ()
+                                            (define top (send btn get-top-level-window))
+                                            (define-values (sx sy) (send btn client->screen 0 (send btn get-height)))
+                                            (define-values (x y) (send top screen->client sx sy))
+                                            (set! shown-popup (popup-for name))
+                                            (popup-menu-at! top shown-popup x y)))]
                                         [else (run-command/safe name) (run-hook 'focus-editor)]))])])
+             (when popup (hash-set! popups name popup))
              (hash-set! buttons b name)
              (hash-set! shown-checked b (cons on? end?))
              b)))
@@ -72,6 +93,7 @@
     (define/public (rebuild! [mode (mode-getter)])
       (set! shown-mode mode)
       (hash-clear! buttons)
+      (hash-clear! popups)
       (define new-row (new horizontal-panel% [parent this] [style '(deleted)] [spacing toolbar-spacing]
                            [alignment '(left center)] [stretchable-height #f]))
       (set! row new-row)

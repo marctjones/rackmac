@@ -249,8 +249,11 @@
                        [e1 (before-close (trim-backward text ranges e0 s1))]
                        [s2 (trim-forward text ranges s1 e1)]
                        [e2 (trim-backward text ranges e1 s2)])
+                  ;; code is literal, so it never cuts through other markup; the other kinds are
+                  ;; placed well-nested around emphasis they cut through (split-edits)
+                  (define keep (if (eq? kind 'code) pred (lambda (x) (or (emph? x) (strong? x) (strike? x)))))
                   (and (< s2 e2)
-                       (let-values ([(s3 e3) (snap-selection s2 e2 nodes pred)])
+                       (let-values ([(s3 e3) (snap-selection s2 e2 nodes keep)])
                          (list leaf ranges s3 e3 knodes)))))))))
 
 (define (covered? text ranges s e knodes)
@@ -340,12 +343,13 @@
           (list (edit (token-start close) (token-end close) "")))))))
 
 ;; Toggles `kind` ('strong 'emph 'strike 'code) on [start, end), or on the word at the caret
-;; when start = end. If every non-blank character selected is already of that kind the kind is
+;; when start = end. If every content character selected is already of that kind the kind is
 ;; removed from the selection (a node reaching beyond it is split around it), otherwise the
-;; selection gets it, merged with same-kind nodes it overlaps or touches. A caret outside any
-;; word inserts an empty pair, and toggling again at its middle removes it. Returns the edits
-;; and the selection in the new text (the same characters, now or no longer formatted), so
-;; toggling twice with the returned selection gives back the original text.
+;; selection gets it, merged with same-kind nodes it overlaps or touches; other emphasis and
+;; links it cuts through stay whole (see split-edits). A caret outside any word inserts an
+;; empty pair, and toggling again at its middle removes it. Returns the edits and the
+;; selection in the new text (the same characters, now or no longer formatted), so toggling
+;; twice with the returned selection gives back the original text (split-edits says when).
 (define (toggle-emphasis-edits doc start0 end0 kind)
   (define text (document-text doc))
   (define start (min start0 (string-length text)))
@@ -376,25 +380,288 @@
         (cond
           [(= ws we) (values (list (edit c c (string-append d d))) (+ c dl) (+ c dl))]
           [else
-           (define edits (toggle-range text leaves ws we kind))
+           (define edits (toggle-range doc text leaves ws we kind))
            (define nc (map-position edits c (if (= c we) 'before 'after)))
            (values edits nc nc)])])]
     [else
-     (define edits (toggle-range text leaves start end kind))
+     (define edits (toggle-range doc text leaves start end kind))
      (define ns (map-position edits start 'after))
      (define ne (map-position edits end 'before))
      (values edits (min ns ne) (max ns ne))]))
 
-(define (toggle-range text leaves start end kind)
+(define (toggle-range doc text leaves start end kind)
   (define sels
     (filter values (for/list ([b (in-list leaves)] #:when (and (< (block-start b) end) (> (block-end b) start)))
                      (leaf-selection text b start end kind))))
-  (define unwrap?
-    (and (pair? sels)
-         (for/and ([sel (in-list sels)])
-           (define-values (leaf ranges s e knodes) (apply values sel))
-           (covered? text ranges s e knodes))))
-  (normalize-edits text (append-map (lambda (sel) ((if unwrap? unwrap-edits wrap-edits) text kind sel)) sels)))
+  (cond
+    [(eq? kind 'code)
+     (define unwrap?
+       (and (pair? sels)
+            (for/and ([sel (in-list sels)])
+              (define-values (leaf ranges s e knodes) (apply values sel))
+              (covered? text ranges s e knodes))))
+     (normalize-edits text (append-map (lambda (sel) ((if unwrap? unwrap-edits wrap-edits) text kind sel)) sels))]
+    [else
+     (define infos (filter (lambda (i) (pair? (linfo-sel-cps i))) (for/list ([sel (in-list sels)]) (leaf-content text sel))))
+     (define unwrap? (and (pair? infos) (for/and ([i (in-list infos)]) (content-covered? i))))
+     (normalize-edits text (append-map (lambda (i) (split-edits text doc kind i unwrap?)) infos))]))
+
+;; --- strong, emph, strike: formatting as a set of content characters ---
+;;
+;; The leaf's content characters are those that are neither blank nor inside a markup token
+;; (delimiters, link syntax, code backticks); escapes and entities are content. Toggling
+;; changes which content characters carry the kind: the nodes of the kind the selection
+;; overlaps (and, when adding, canonical ones next to that with only blanks and markup between)
+;; are taken apart, and the characters that should carry the kind get new delimiters, placed
+;; well-nested in the remaining tree: a run of them that ends inside other emphasis, or a
+;; link's text, is closed before it and continued inside it, never across it. A new delimiter
+;; landing where a removed one was keeps that one (rewritten to the canonical delimiter), so a
+;; diff touches only the delimiters it must. Toggling twice is the identity on documents
+;; without redundant markup (the kind nested in itself, or two nodes of the kind separated by
+;; blanks only, which a toggle merges).
+(struct linfo (leaf lo content sel-cps s e knodes nodes) #:transparent)
+
+(define (leaf-content text sel)
+  (define-values (leaf ranges s e knodes) (apply values sel))
+  (define lo (car (first ranges))) (define hi (cdr (last ranges)))
+  (define nodes (flatten-inlines (leaf-inlines leaf)))
+  (define v (make-vector (- hi lo) #f))
+  (for ([p (in-range lo hi)])
+    (vector-set! v (- p lo) (and (in-ranges? ranges p) (not (char-whitespace? (string-ref text p))))))
+  (for* ([x (in-list nodes)] [t (in-list (inline-tokens x))] #:unless (memq (token-role t) '(escape entity)))
+    (for ([p (in-range (max lo (token-start t)) (min hi (token-end t)))]) (vector-set! v (- p lo) #f)))
+  (define sel-cps (for/list ([p (in-range (max s lo) (min e hi))] #:when (vector-ref v (- p lo))) p))
+  (linfo leaf lo v sel-cps s e knodes nodes))
+
+(define (content? i p)
+  (define k (- p (linfo-lo i)))
+  (and (<= 0 k) (< k (vector-length (linfo-content i))) (vector-ref (linfo-content i) k)))
+(define (node-cps i x) (for/list ([p (in-range (inline-start x) (inline-end x))] #:when (content? i p)) p))
+(define (in-node? x p) (and (<= (inline-start x) p) (< p (inline-end x))))
+
+(define (content-covered? i)
+  (and (pair? (linfo-sel-cps i))
+       (for/and ([p (in-list (linfo-sel-cps i))]) (for/or ([k (in-list (linfo-knodes i))]) (in-node? k p)))))
+
+(define (split-edits text doc kind i unwrap?)
+  (define d (kind-delim kind))
+  (define sel (linfo-sel-cps i))
+  (define knodes (linfo-knodes i))
+  (define all-cps (for/list ([p (in-range (linfo-lo i) (+ (linfo-lo i) (vector-length (linfo-content i))))]
+                             #:when (content? i p))
+                    p))
+  (define (canonical? k) (for/and ([t (in-list (inline-tokens k))]) (equal? (token-text text t) d)))
+  (define alt (case kind [(emph) "_"] [(strong) "__"] [else #f]))
+  (define (dchar k) (string-ref text (token-start (first (inline-tokens k)))))
+  ;; a node is written in the current form: `*`/`**` or `_`/`__` (strikethrough: `~~` only)
+  (define current-form (make-parameter #\*))
+  (define (form? k)
+    (define want (if (and alt (eqv? (current-form) #\_)) alt d))
+    (for/and ([t (in-list (inline-tokens k))]) (equal? (token-text text t) want)))
+  (define overlapping (filter (lambda (k) (for/or ([p (in-list sel)]) (in-node? k p))) knodes))
+  ;; the affected nodes, and the content characters that carry the kind afterwards among theirs
+  (define-values (affected target)
+    (cond
+      [(null? sel) (values '() '())]
+      [unwrap?
+       (define aff overlapping)
+       (values aff (filter (lambda (p) (and (not (memv p sel)) (for/or ([k (in-list aff)]) (in-node? k p)))) all-cps))]
+      [else
+       ;; the inline parent of each node, to tell pieces of one split run from siblings
+       (define parents (make-hasheq))
+       (let walk ([xs (leaf-inlines (linfo-leaf i))] [p #f])
+         (for ([x (in-list xs)]) (hash-set! parents x p) (walk (inline-kids x) x)))
+       ;; a neighbor merges only from a container around the selection or one the selection
+       ;; enters: merging one inside a container the selection is outside of would move the
+       ;; neighbor's delimiters out of it
+       (define sel-container
+         (for/fold ([best #f]) ([x (in-list (linfo-nodes i))]
+                                #:when (and (inner-range x) (in-node? x (first sel)) (in-node? x (last sel))))
+           (if (or (not best) (< (- (inline-end x) (inline-start x)) (- (inline-end best) (inline-start best)))) x best)))
+       (define outer (let loop ([x sel-container]) (if x (cons x (loop (hash-ref parents x #f))) '(#f))))
+       ;; a node's parent, passing a parent with the same content written with the same
+       ;; character (`***x***` parses as emphasis around strong, however it was meant)
+       (define (eff-parent k)
+         (define ks (node-cps i k))
+         (define (ch x) (let ([t (first (inline-tokens x))]) (string-ref text (token-start t))))
+         (let loop ([p (hash-ref parents k #f)])
+           (if (and p (or (emph? p) (strong? p) (strike? p)) (equal? (node-cps i p) ks) (eqv? (ch p) (ch k)))
+               (loop (hash-ref parents p #f))
+               p)))
+       (define (between a b) (for/or ([p (in-list all-cps)]) (and (< a p) (< p b))))
+       (define (cluster-of aff) (sort (remove-duplicates (append sel (append-map (lambda (k) (node-cps i k)) aff))) <))
+       ;; canonical nodes of the kind outside [c-lo, c-hi] with only blanks and markup between
+       (define (neighbors aff c-lo c-hi ok?)
+         (filter (lambda (k)
+                   (define ps (node-cps i k))
+                   (and (not (memq k aff)) (form? k) (pair? ps) (ok? k)
+                        (let ([pk (eff-parent k)])
+                          (or (memq pk outer) (for/or ([p (in-list sel)]) (in-node? pk p))))
+                        (or (and (< (last ps) c-lo) (not (between (last ps) c-lo)))
+                            (and (> (first ps) c-hi) (not (between c-hi (first ps)))))))
+                 knodes))
+       ;; neighbors merge when written like the nodes the selection overlaps (or, without any,
+       ;; like each other, `*` first): rewriting `_x_` to `*x*` could not be undone
+       (define run-char
+         (cond [(pair? overlapping) (dchar (first overlapping))]
+               [else (define c (cluster-of '()))
+                     (define (any-of ch) (parameterize ([current-form ch]) (pair? (neighbors '() (first c) (last c) (lambda (k) #t)))))
+                     (if (or (any-of #\*) (not (any-of #\_))) #\* #\_)]))
+       (current-form run-char)
+       ;; the neighbors of the selection merge; beyond them, only a neighbor in another container
+       ;; (a piece of one run that a container boundary split, as unwrapping leaves them)
+       (define aff
+         (let loop ([aff (let ([c (cluster-of overlapping)])
+                           (append overlapping (neighbors overlapping (first c) (last c) (lambda (k) #t))))]
+                    [fresh #f])
+           (define new (if fresh fresh (filter (lambda (k) (not (memq k overlapping))) aff)))
+           (define c (cluster-of aff))
+           (define more
+             (remove-duplicates
+              (append-map (lambda (n)
+                            (define ps (node-cps i n))
+                            (neighbors aff (first c) (last c)
+                                       (lambda (k) (and (not (eq? (eff-parent k) (eff-parent n)))
+                                                        (let ([ks (node-cps i k)])
+                                                          (or (and (< (last ks) (first ps)) (not (between (last ks) (first ps))))
+                                                              (and (> (first ks) (last ps)) (not (between (last ps) (first ks))))))))))
+                          new)
+              eq?))
+           (if (null? more) aff (loop (append aff more) more))))
+       (values aff (cluster-of aff))]))
+  ;; runs of target characters with no other content character between them
+  (define runs
+    (let loop ([ps all-cps] [cur '()] [acc '()])
+      (define (flush) (if (null? cur) acc (cons (reverse cur) acc)))
+      (cond [(null? ps) (reverse (flush))]
+            [(memv (car ps) target) (loop (cdr ps) (cons (car ps) cur) acc)]
+            [else (loop (cdr ps) '() (flush))])))
+  ;; the tree without the affected nodes
+  (define (kids-of xs) (append-map (lambda (x) (if (memq x affected) (kids-of (inline-kids x)) (list x))) xs))
+  (define (container? x) (and (not (memq x affected)) (inner-range x) (not (null? (inline-kids x)))))
+  (define (first-content x) (for/first ([p (in-range (inline-start x) (inline-end x))] #:when (content? i p)) p))
+  (define (last-content x) (for/last ([p (in-range (inline-start x) (inline-end x))] #:when (content? i p)) p))
+  (define (start-pos x) (if (text? x) (first-content x) (inline-start x)))
+  (define (end-pos x) (if (text? x) (add1 (last-content x)) (inline-end x)))
+  ;; pairs (open . close) wrapping the content [a, b) among `kids`: a container whose content
+  ;; the run covers is wrapped whole (the kind goes outside other emphasis and links: `**_x_**`,
+  ;; not `_**x**_`), one it covers part of is closed before and continued inside. With
+  ;; `inside?`, containers at the run's ends are entered even when covered (`x~~**y**~~` where
+  ;; `x**~~y~~**` could not open).
+  (define (place kids a b inside?)
+    (define (kid-at p) (for/first ([x (in-list kids)] #:when (in-node? x p)) x))
+    (define ka (kid-at a)) (define kb (kid-at (sub1 b)))
+    (define (whole-from? x) (and (not inside?) (= a (first-content x))))
+    (define (whole-to? x) (and (not inside?) (= b (add1 (last-content x)))))
+    (cond
+      [(and (eq? ka kb) (container? ka) (not (and (whole-from? ka) (whole-to? ka))))
+       (place (kids-of (inline-kids ka)) a b inside?)]
+      [else
+       (define with-content (filter first-content kids))
+       (define-values (lo left)
+         (cond [(text? ka) (values a '())]
+               [(or (not (container? ka)) (whole-from? ka)) (values (inline-start ka) '())]
+               [else (values (start-pos (cadr (memq ka with-content)))
+                             (place (kids-of (inline-kids ka)) a (add1 (last-content ka)) inside?))]))
+       (define-values (hi right)
+         (cond [(text? kb) (values b '())]
+               [(or (not (container? kb)) (whole-to? kb)) (values (inline-end kb) '())]
+               [else (values (end-pos (cadr (memq kb (reverse with-content))))
+                             (place (kids-of (inline-kids kb)) (first-content kb) b inside?))]))
+       (append left right (if (< lo hi) (list (cons lo hi)) '()))]))
+  (define (pairs-for inside?)
+    (append* (for/list ([r (in-list runs)])
+               (place (kids-of (leaf-inlines (linfo-leaf i))) (first r) (add1 (last r)) inside?))))
+  ;; edits for `pairs` with delimiters `ds` (one per pair): a removed delimiter where a new one
+  ;; goes is kept (rewritten if it differs), the others deleted
+  (define opens (map (lambda (k) (first (inline-tokens k))) affected))
+  (define closes (map (lambda (k) (last (inline-tokens k))) affected))
+  (define (emit pairs ds)
+    (define kept (make-hasheq))
+    (define (reuse toks pos at)
+      (for/first ([t (in-list toks)] #:when (and (not (hash-ref kept t #f)) (= (at t) pos)))
+        (hash-set! kept t #t)
+        t))
+    (define inserts
+      (append*
+       (for/list ([pr (in-list pairs)] [d (in-list ds)])
+         (define o (reuse opens (car pr) token-end))
+         (define c (reuse closes (cdr pr) token-start))
+         (append (if o (canonical-token text o d) (list (edit (car pr) (car pr) d)))
+                 (if c (canonical-token text c d) (list (edit (cdr pr) (cdr pr) d)))))))
+    (normalize-edits text (append inserts
+                                  (for/list ([t (in-list (append opens closes))] #:unless (hash-ref kept t #f))
+                                    (edit (token-start t) (token-end t) "")))))
+  ;; The candidates, in order: each pair written like a delimiter it keeps, then all with `*`,
+  ;; then some with `_` (where `*` would join a neighboring `*` run: `**x**` closed right
+  ;; before a `*x*` opener), then the same entering containers at the run's ends. The first
+  ;; that parses as intended wins (flanking rules and the rule of 3 decide, not guesses).
+  (define (candidates pairs)
+    (define n (length pairs))
+    (define preferred
+      (for/list ([pr (in-list pairs)])
+        (define t (or (for/first ([t (in-list opens)] #:when (= (token-end t) (car pr))) t)
+                      (for/first ([t (in-list closes)] #:when (= (token-start t) (cdr pr))) t)))
+        (if (and t alt (eqv? (string-ref text (token-start t)) #\_)) alt d)))
+    (for/list ([ds (in-list (list* preferred (make-list n d)
+                                   (if alt
+                                       (for/list ([m (in-range 1 (expt 2 (min n 4)))])
+                                         (for/list ([k (in-range n)]) (if (bitwise-bit-set? m k) alt d)))
+                                       '())))])
+      (lambda () (emit pairs ds))))
+  (define outside (pairs-for #f))
+  (define all (append (candidates outside) (candidates (pairs-for #t))))
+  ;; none: the markup cannot say it without touching the text (emphasis glued inside a word,
+  ;; `note~~due~~` cut at the `~~`), so this leaf is left alone rather than broken
+  (or (for/or ([c (in-list all)]) (let ([es (c)]) (and (parses-as-intended? text doc i kind unwrap? es) es)))
+      '()))
+
+;; Whether the leaf, once `edits` are applied, has each content character formatted as before,
+;; the selected ones with `kind` added (or removed, `unwrap?`), and no delimiter left over as text: its new content is
+;; parsed again (design §4.4: the edits are checked, not trusted).
+(define (parses-as-intended? text doc i kind unwrap? edits)
+  (define leaf (linfo-leaf i))
+  (define cell (cond [(paragraph? leaf) (paragraph-inlines leaf)] [(heading? leaf) (heading-inlines leaf)]
+                     [else (table-cell-inlines leaf)]))
+  (define segs (inline-cell-segments cell))
+  (define (src->off p)
+    (or (for/first ([g (in-list segs)]
+                    #:when (<= (segment-source-start g) p (+ (segment-source-start g) (segment-source-length g))))
+          (+ (segment-content-start g) (min (segment-content-length g) (- p (segment-source-start g)))))
+        0))
+  (define content-edits (for/list ([e (in-list edits)]) (edit (src->off (edit-start e)) (src->off (edit-end e)) (edit-text e))))
+  (define new-content (apply-edits (inline-cell-content cell) content-edits))
+  (define opts (inline-options (document-extensions doc)
+                               (cond [(paragraph? leaf) 'paragraph] [(heading? leaf) 'heading] [else 'table-cell])
+                               '() '()))
+  (define (table s inlines)
+    (define h (make-hasheqv))
+    (let walk ([xs inlines] [ks '()])
+      (for ([x (in-list xs)])
+        (define (mark! a b ks)
+          (for ([o (in-range a b)] #:unless (char-whitespace? (string-ref s o)))
+            (hash-set! h o (cons (string-ref s o) (sort ks symbol<?)))))
+        (cond
+          [(text? x) (mark! (inline-start x) (inline-end x) ks)]
+          [(code-span? x) (let ([ts (inline-tokens x)]) (mark! (token-end (first ts)) (token-start (last ts)) (cons 'code ks)))]
+          [(emph? x) (walk (emph-children x) (cons 'emph ks))]
+          [(strong? x) (walk (strong-children x) (cons 'strong ks))]
+          [(strike? x) (walk (strike-children x) (cons 'strike ks))]
+          [else (walk (inline-kids x) ks)])))
+    h)
+  (define old (table (inline-cell-content cell) (cell-relative-inlines cell)))
+  (define new (table new-content (parse-inlines new-content (document-refmap doc) opts)))
+  (define selected (for/hasheqv ([p (in-list (linfo-sel-cps i))]) (values (src->off p) #t)))
+  (define (delims h) (for/sum ([v (in-hash-values h)]) (if (memv (car v) '(#\* #\_ #\~)) 1 0)))
+  (and (= (delims old) (delims new))
+       (for/and ([(o v) (in-hash old)])
+         (define ks (cdr v))
+         (define want (if (hash-ref selected o #f)
+                          (cond [unwrap? (remq kind ks)]
+                                [(memq kind ks) ks]
+                                [else (sort (cons kind ks) symbol<?)])
+                          ks))
+         (equal? (hash-ref new (map-position content-edits o 'after) #f) (cons (car v) want)))))
 
 ;; ============================================================================================
 ;; Headings: set-heading-level-edits

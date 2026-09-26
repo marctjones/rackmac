@@ -1,10 +1,11 @@
 #lang racket/base
 ;; The Format toolbar group for notes (#336, docs/UI-DESIGN.md §2.3): Bold, Italic, Link, a
-;; Heading popup (Heading 1-3, Body Text), Bulleted, Numbered, Checklist, and the
+;; Heading popup (Heading 1-3, Body Text), Bulleted, Numbered, Checklist, an
+;; Export popup (Export to Word…, Export as PDF…; UI-DESIGN §2.4's toolbar row) and the
 ;; Formatted/Markdown Source toggle at the end. Shown only for Markdown documents, the same
-;; #:mode scoping the toolbar already uses to show Run only for Racket (toolbar.rkt). Export▾
-;; (the REPLAN row's last item) is left out: nothing to export to yet (E18.M1 PDF export, #279,
-;; is unbuilt; Export to Word, #278, has no toolbar slot of its own in the design).
+;; #:mode scoping the toolbar already uses to show Run only for Racket (toolbar.rkt). The export
+;; commands live in office.rkt and pdf-export.rkt; a popup item whose command is not loaded is
+;; left out, and Export to Word dims without pandoc (its #:when).
 (require "editor.rkt" "command.rkt" "toolbar.rkt" "md-view-commands.rkt" "md-format.rkt")
 
 ;; The Heading button's backing command (toolbar.rkt's `#:items`): never on a key or in the
@@ -25,4 +26,14 @@
 (add-toolbar-item! 'toggle-bulleted-list #:group 'format #:mode 'markdown-mode #:label "•")
 (add-toolbar-item! 'toggle-numbered-list #:group 'format #:mode 'markdown-mode #:label "1.")
 (add-toolbar-item! 'toggle-checklist #:group 'format #:mode 'markdown-mode)
+;; The Export button's backing command, as heading-menu is for the Heading button: the
+;; commands it groups are in the File menu already.
+(define-command (export-menu)
+  #:title "Export" #:aliases ("export menu" "export options" "export note")
+  #:help "Choose a format to export this note to: Word or PDF."
+  #:when markdown-document?
+  (message "File > Export to Word… or Export as PDF…; or the toolbar's Export button."))
+
+(add-toolbar-item! 'export-menu #:group 'format #:mode 'markdown-mode
+                    #:items '(export-word export-pdf) #:label "⇪▾")
 (add-toolbar-item! 'toggle-markdown-view #:group 'format #:mode 'markdown-mode)
