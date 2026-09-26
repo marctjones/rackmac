@@ -27,5 +27,13 @@ jobs:
         run: raco test tests
       - name: Markdown library tests
         run: raco test rackmac-markdown
-      - name: Markdown library installs as its own package
-        run: raco pkg install --auto --copy --batch ./rackmac-markdown && racket -e '(require rackmac-markdown)'
+      # After the checkout tests, which run uninstalled. The checkout root is not a package (#285):
+      # rackmac/ (the app) and rackmac-markdown/ (the library) are, installed side by side.
+      - name: App and Markdown library install as packages
+        env:
+          RACKMAC_NO_FRONT: '1'
+        run: |
+          raco pkg install --scope user --auto --copy --batch ./rackmac-markdown ./rackmac
+          racket -e '(require rackmac-markdown)'
+          racket -l rackmac/api
+          racket -e "(unless (module-declared? '(submod rackmac/app main) #t) (exit 1))"

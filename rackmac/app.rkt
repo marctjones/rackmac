@@ -1,6 +1,7 @@
 #lang racket/base
 ;; Application startup.
-(require racket/class racket/gui/base
+(require "no-front.rkt"                  ; first: RACKMAC_NO_FRONT must act before racket/gui loads
+         racket/class racket/gui/base
          "commands.rkt" "toolbar-defaults.rkt" "status-defaults.rkt" "context-defaults.rkt"
          "command.rkt" "editor.rkt" "frame.rkt" "eval.rkt" "theme.rkt" "hook.rkt"
          "library/recents.rkt"
@@ -40,3 +41,7 @@
   (focus-editor!)                    ; focus set while the window was hidden does not stick
   (refresh-appearance!)              ; #254: the system appearance is only reliable once the app is up
   (yield 'wait))
+
+;; Installed launch (#285): `racket -l- rackmac/app [file ...]`. From a checkout, `racket main.rkt`.
+(module+ main
+  (main (vector->list (current-command-line-arguments))))

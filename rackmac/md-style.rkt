@@ -17,7 +17,7 @@
 ;; join update (racket/snip/private/style.rkt, s-update) stores the transparent-text flag on the
 ;; shift style instead of the join, so every joined style painted a white text background.
 (require racket/class racket/gui/base racket/list
-         "../rackmac-markdown/main.rkt" "theme.rkt" "hook.rkt" (rename-in "ui/tokens.rkt" [token color-token]))
+         "markdown-lib.rkt" "theme.rkt" "hook.rkt" (rename-in "ui/tokens.rkt" [token color-token]))
 (provide render-markdown! markdown-edit! markdown-flush!
          markdown-parser-document markdown-style-for reset-paragraph-margins!
          note-style-names indent-step hang-indent)
