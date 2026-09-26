@@ -155,3 +155,9 @@
   (run-command 'new-note)
   (check-false (start-screen-shown?))
   (run-hook 'focus-editor))
+
+;; ---- copy ----------------------------------------------------------------------------------
+
+(test-case "the subtitle is plain, README-like copy with no exclamation marks"
+  (check-equal? start-screen-subtitle "Notes in plain Markdown files, in folders you choose.")
+  (check-false (regexp-match? #rx"!" start-screen-subtitle)))

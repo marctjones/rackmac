@@ -8,7 +8,10 @@
          "folders.rkt" "recents.rkt" "../command.rkt" "../editor.rkt" "../frame.rkt"
          "../hook.rkt" "../settings.rkt" "../platform.rkt" "../input.rkt")
 
-(provide maybe-skip-start-screen!)
+(provide maybe-skip-start-screen! start-screen-subtitle)
+
+;; README-like, not a landing page (the brand): what it is, in plain words, no exclamation.
+(define start-screen-subtitle "Notes in plain Markdown files, in folders you choose.")
 
 (define-setting skip-start-screen
   #:contract boolean? #:default #f
@@ -83,7 +86,7 @@ TEXT
     (super-new [alignment '(center top)])
     (define title-font (make-font #:size 22 #:weight 'bold))
     (new message% [parent this] [label "Rackmac"] [font title-font])
-    (new message% [parent this] [label "Notes and documents you can trust to plain files"])
+    (new message% [parent this] [label start-screen-subtitle])
     (new pane% [parent this] [min-height 16] [stretchable-height #f])   ; breathing room
     (define buttons (new horizontal-panel% [parent this] [alignment '(center center)] [stretchable-height #f]))
     (define new-note-button

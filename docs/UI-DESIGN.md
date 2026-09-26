@@ -489,7 +489,7 @@ _Changed 2026-09-25 (revised from "editor" and "gutter")._ A document whose Lang
 ### 2.8 Start screen
 
 _Changed 2026-09-25 (revised)._ A `vertical-panel%` in the editor slot when nothing is open (and reopenable from
-Help): title "Rackmac", subtitle "Notes and documents you can trust to plain files", three large `button%`s **New
+Help): title "Rackmac", subtitle "Notes in plain Markdown files, in folders you choose.", three large `button%`s **New
 Note**, **Add Folder…**, **Open…**, a `list-box%` **Recent** (double-click opens), and a text button **Get Started**
 that opens the bundled `Getting started.md` (a real note with checkboxes: "Make this line bold", "Add a folder",
 "Export this note to Word"). No Scratch Pad on the start screen; Tools > Scratch Pad exists for Racket users. A
@@ -770,7 +770,7 @@ _Changed 2026-09-25._
 ├──────────────────────┬─────────────────────────────────────────────────────────────────────────┤
 │ [ filter…          ] │                                                                         │
 │ RECENT               │                         Rackmac                                         │  title 22 bold
-│  Weekly notes        │          Notes and documents you can trust to plain files              │  subtitle 15
+│  Weekly notes        │          Notes in plain Markdown files, in folders you choose.         │  subtitle 15
 │  Acme SPA — turn 4   │                                                                         │
 │ FOLDERS              │        [   New Note   ]   [  Add Folder…  ]   [    Open…    ]           │  three button%s
 │  ▾ Notes             │                                                                         │
