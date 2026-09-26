@@ -58,7 +58,11 @@
   (p "Issues are tracked on GitHub: <https://github.com/marctjones/rackmac/issues>. Issue N there is roadmap item RM-N, GitHub")
   (p "milestones are the milestones below, and each epic has a tracking issue. **This file is the initial plan**, kept as an")
   (p "overview; from the first filing onward, GitHub is the source of truth for status. Issues added after the first")
-  (p "filing (#240 onward: review findings, UI foundation) exist only on GitHub.")
+  (p "filing (#240 onward: review findings, UI foundation; #265 onward: the 2026-09-25 re-plan's new work) exist only on GitHub.")
+  (p)
+  (p "**Re-plan (2026-09-25):** the Releases table below assigns one release per epic; `docs/REPLAN.md` section 7 moves some")
+  (p "individual issues to a different release than their epic's row shows here. GitHub's per-issue `release:vX.Y` labels are")
+  (p "the source of truth for an issue's release, not this table.")
   (p)
   (define active (filter (lambda (i) (not (eq? (iss-status i) 'icebox))) is))
   (p (format "**Progress:** ~a of ~a active issues done (~a in the icebox)."

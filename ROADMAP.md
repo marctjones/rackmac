@@ -6,7 +6,11 @@ Hierarchy: **epic > milestone > sub-milestone > issue**. Sizes: `S` under half a
 Issues are tracked on GitHub: <https://github.com/marctjones/rackmac/issues>. Issue N there is roadmap item RM-N, GitHub
 milestones are the milestones below, and each epic has a tracking issue. **This file is the initial plan**, kept as an
 overview; from the first filing onward, GitHub is the source of truth for status. Issues added after the first
-filing (#240 onward: review findings, UI foundation) exist only on GitHub.
+filing (#240 onward: review findings, UI foundation; #265 onward: the 2026-09-25 re-plan's new work) exist only on GitHub.
+
+**Re-plan (2026-09-25):** the Releases table below assigns one release per epic; `docs/REPLAN.md` section 7 moves some
+individual issues to a different release than their epic's row shows here. GitHub's per-issue `release:vX.Y` labels are
+the source of truth for an issue's release, not this table.
 
 **Progress:** 27 of 217 active issues done (8 in the icebox).
 
@@ -14,12 +18,13 @@ filing (#240 onward: review findings, UI foundation) exist only on GitHub.
 
 | Release | Theme | Epics | Done |
 |---|---|---|---|
-| v0.2 Friendly | Office vocabulary, toolbar, context menu, clickable status bar. | E0, E1, E2 | 27/72 |
-| v0.3 Safe | Never lose work; settings you can click; calm errors. | E3, E4, E8 | 0/31 |
-| v0.4 Welcome | Start screen, tutorial, better find, clipboard history, macros. | E5, E6, E7 | 0/31 |
-| v0.5 Workspace | Split panes and sidebar. | E9 | 0/8 |
-| v0.6 Open | Accessibility, extension platform and docs, Windows parity. | E10, E11 | 0/16 |
-| v0.7 Backwards Compat | Optional Emacs preset: Emacs labels and shortcuts as surface preferences only. | E13 | 0/59 |
+| v0.2 (tagged v0.2.0) | Editor chrome checkpoint, already tagged: office vocabulary, toolbar, tabs, status bar, context menus, palette, find row. | E1 | 16/22 |
+| v0.3 First notes | Write Markdown notes in a Library on macOS; they read like a document, not code; send them to Word or PDF. | E0, E4, E5, E14, E15, E18 | 11/36 |
+| v0.4 Tasks and links | Checkboxes, states, tags and dates on notes; wiki links and backlinks; Library search; never lose a note; paste from Word. | E3, E16, E17 | 0/16 |
+| v0.5 Code review | Read and review Python and Racket scripts: coloring, gutter, read-only review, compare; calm errors and a real Settings dialog. | E6, E8, E19 | 0/17 |
+| v0.6 Workspace | Split panes, session restore, record actions, clipboard history, toolbar customization, a notes tutorial. | E2, E7, E9 | 0/51 |
+| v0.7 Open | Accessibility and the extension platform: API 2, packaging, enable/disable, docs. | E10, E11, E20 | 0/16 |
+| v0.8 Emacs preset | Opt-in Emacs names, keys and layout as a preset built only on the public API. | E13 | 0/59 |
 
 ## Epics
 
@@ -38,6 +43,13 @@ filing (#240 onward: review findings, UI foundation) exist only on GitHub.
 | E10 | Accessibility and internationalization | 0/8 |
 | E11 | Extension platform | 0/8 |
 | E13 | Emacs compatibility mode | 0/59 |
+| E14 | Writing | 0/0 |
+| E15 | Library & search | 0/0 |
+| E16 | Linking & backlinks | 0/0 |
+| E17 | Outline & tasks | 0/0 |
+| E18 | Working with Office | 0/0 |
+| E19 | Code review | 0/0 |
+| E20 | Racket-native internals | 0/0 |
 | E12 | Icebox: Rackorg and the legal workspace | 0/0 |
 
 ## E0: Foundation and verification
@@ -595,6 +607,41 @@ filing (#240 onward: review findings, UI foundation) exist only on GitHub.
 - [ ] **RM-217** Emacs-key variant of the Get Started tutorial `L` _Depends on: RM-102, RM-103._
 - [ ] **RM-218** Emacs to Rackmac mapping table for experienced users `S`
 - [ ] **RM-219** which-key popup for the C-x and C-c prefixes in Emacs style `S` _Depends on: RM-040._
+
+## E14: Writing
+
+**Goal.** Markdown notes that read like a document while you write them, with Formatted and Markdown Source views, not like code.  
+**Design.** REPLAN.md section 2, E14.M1 Markdown that reads like a document
+
+## E15: Library & search
+
+**Goal.** A Library of folders (including OneDrive- and SharePoint-synced ones) with a sidebar, recents, and full-text and metadata search across every note.  
+**Design.** REPLAN.md section 2, E15.M1 Library (folders, recent, new note); section 3, E16.M1 (lib-index)
+
+## E16: Linking & backlinks
+
+**Goal.** Wiki-style [[links]] between notes with completion, plus a backlinks panel showing what links here.  
+**Design.** REPLAN.md section 3, E16.M1 Linking and backlinks
+
+## E17: Outline & tasks
+
+**Goal.** Checkboxes, task states, tags and dates on notes, an outline of headings, and a Today view -- Org ideas carried onto Markdown.  
+**Design.** REPLAN.md section 3, E17.M1 Tasks, states, dates, tags; E17.M2 Outline
+
+## E18: Working with Office
+
+**Goal.** Move between Rackmac and Word: export and import to .docx and PDF, and a clipboard that speaks Word's rich text.  
+**Design.** REPLAN.md section 2, E18.M1 To and from Word and PDF; section 3, E18.M2 Clipboard with Word
+
+## E19: Code review
+
+**Goal.** Open and read someone else's Python or Racket script comfortably: syntax coloring, a gutter, a read-only review mode, and compare.  
+**Design.** REPLAN.md section 4, v0.5 Code review
+
+## E20: Racket-native internals
+
+**Goal.** Where to adopt Racket-native building blocks -- hooks, loggers, settings, current-document, custodians, filesystem-change-evt -- instead of bespoke machinery, and when.  
+**Design.** REPLAN.md section 6, Racket-native internals: what to adopt and when
 
 ## E12: Icebox: Rackorg and the legal workspace
 

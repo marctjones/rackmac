@@ -2,14 +2,29 @@
 ;; Hierarchy: epic > milestone > sub-milestone > issue.
 ;; (issue KEY "Title" SIZE STATUS "acceptance criteria | separated by bars" (DEPENDENCY-KEYS))
 ;; SIZE: S (under half a day), M (1-2 days), L (3-5 days).   STATUS: todo, doing, done, icebox.
+;;
+;; RE-PLAN (2026-09-25, docs/REPLAN.md): the release table below was re-cut from the office/notes
+;; direction. This model assigns a release to a whole EPIC, but the re-plan moves individual
+;; ISSUES between releases (docs/REPLAN.md section 7 has the per-issue mapping); where an epic's
+;; work now spans several releases, each epic below is placed at the release where the bulk of
+;; its *remaining* work lands per section 7, not necessarily its earliest mention in section 1
+;; (E1 is the exception: it stays on the v0.2 checkpoint row because section 1 lists it there as
+;; landed; its remaining items carry `release:v0.5` on GitHub per section 7).
+;; GitHub's per-issue `release:vX.Y` labels are the actual source of truth for an issue's release;
+;; this table, and the Releases section of ROADMAP.md, are an approximate overview, not authoritative.
+;; E14-E20 are new epics from the re-plan; their release-table entries below have no milestones or
+;; issues yet (the re-plan's new work items are already filed on GitHub as #265-#329, and adding
+;; them here as `issue` entries would shift every RM-N number after them, since flatten-issues numbers
+;; issues sequentially and GitHub issue #N == RM-N for the original range -- see tools/github-sync.rkt).
 (roadmap
  (releases
-  ("v0.2 Friendly"  "Office vocabulary, toolbar, context menu, clickable status bar." (E0 E1 E2))
-  ("v0.3 Safe"      "Never lose work; settings you can click; calm errors."          (E3 E4 E8))
-  ("v0.4 Welcome"   "Start screen, tutorial, better find, clipboard history, macros." (E5 E6 E7))
-  ("v0.5 Workspace" "Split panes and sidebar."                                       (E9))
-  ("v0.6 Open"      "Accessibility, extension platform and docs, Windows parity."    (E10 E11))
-  ("v0.7 Backwards Compat" "Optional Emacs preset: Emacs labels and shortcuts as surface preferences only." (E13)))
+  ("v0.2 (tagged v0.2.0)" "Editor chrome checkpoint, already tagged: office vocabulary, toolbar, tabs, status bar, context menus, palette, find row." (E1))
+  ("v0.3 First notes"     "Write Markdown notes in a Library on macOS; they read like a document, not code; send them to Word or PDF." (E0 E4 E5 E14 E15 E18))
+  ("v0.4 Tasks and links" "Checkboxes, states, tags and dates on notes; wiki links and backlinks; Library search; never lose a note; paste from Word." (E3 E16 E17))
+  ("v0.5 Code review"     "Read and review Python and Racket scripts: coloring, gutter, read-only review, compare; calm errors and a real Settings dialog." (E6 E8 E19))
+  ("v0.6 Workspace"       "Split panes, session restore, record actions, clipboard history, toolbar customization, a notes tutorial." (E2 E7 E9))
+  ("v0.7 Open"            "Accessibility and the extension platform: API 2, packaging, enable/disable, docs." (E10 E11 E20))
+  ("v0.8 Emacs preset"    "Opt-in Emacs names, keys and layout as a preset built only on the public API." (E13)))
 
  (epic E0 "Foundation and verification"
   "Delivered core, plus the open verification work that has been floating: real keys in the live window, Windows, CI."
@@ -388,6 +403,36 @@
     (issue eg-tutorial "Emacs-key variant of the Get Started tutorial" L todo "" (tut-format tut-content))
     (issue eg-mapping "Emacs to Rackmac mapping table for experienced users" S todo "" ())
     (issue eg-whichkey "which-key popup for the C-x and C-c prefixes in Emacs style" S todo "" (chord-popup)))))
+
+ ;; E14-E20: new epics from docs/REPLAN.md (2026-09-25). No milestones/issues yet -- see the
+ ;; RE-PLAN note at the top of this file for why (already filed on GitHub as #265-#329).
+ (epic E14 "Writing"
+  "Markdown notes that read like a document while you write them, with Formatted and Markdown Source views, not like code."
+  "REPLAN.md section 2, E14.M1 Markdown that reads like a document")
+
+ (epic E15 "Library & search"
+  "A Library of folders (including OneDrive- and SharePoint-synced ones) with a sidebar, recents, and full-text and metadata search across every note."
+  "REPLAN.md section 2, E15.M1 Library (folders, recent, new note); section 3, E16.M1 (lib-index)")
+
+ (epic E16 "Linking & backlinks"
+  "Wiki-style [[links]] between notes with completion, plus a backlinks panel showing what links here."
+  "REPLAN.md section 3, E16.M1 Linking and backlinks")
+
+ (epic E17 "Outline & tasks"
+  "Checkboxes, task states, tags and dates on notes, an outline of headings, and a Today view -- Org ideas carried onto Markdown."
+  "REPLAN.md section 3, E17.M1 Tasks, states, dates, tags; E17.M2 Outline")
+
+ (epic E18 "Working with Office"
+  "Move between Rackmac and Word: export and import to .docx and PDF, and a clipboard that speaks Word's rich text."
+  "REPLAN.md section 2, E18.M1 To and from Word and PDF; section 3, E18.M2 Clipboard with Word")
+
+ (epic E19 "Code review"
+  "Open and read someone else's Python or Racket script comfortably: syntax coloring, a gutter, a read-only review mode, and compare."
+  "REPLAN.md section 4, v0.5 Code review")
+
+ (epic E20 "Racket-native internals"
+  "Where to adopt Racket-native building blocks -- hooks, loggers, settings, current-document, custodians, filesystem-change-evt -- instead of bespoke machinery, and when."
+  "REPLAN.md section 6, Racket-native internals: what to adopt and when")
 
  (epic E12 "Icebox: Rackorg and the legal workspace"
   "Parked by request. See DESIGN sections 9 and 10."
