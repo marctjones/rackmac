@@ -16,6 +16,7 @@
          "md-links-open.rkt"
          ;; feature modules: one per line, so parallel work doesn't collide here
          "md-format.rkt"
+         "md-lists.rkt"
          )
 (provide main)
 
