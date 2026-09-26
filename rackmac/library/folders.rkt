@@ -9,13 +9,19 @@
 ;; unreadable that way (rackmac/library/recents.rkt hit the same thing first).
 ;;
 ;; Pure data plus the Add/Remove Folder commands; no sidebar here (that is #273, later).
+;; Requires rackmac/commands.rkt (for quick-open-fallback!, below) rather than the reverse --
+;; commands.rkt's `builtin-command-names` is a snapshot taken when IT finishes loading, and
+;; must only ever see the commands commands.rkt itself defines (docs/DEVELOPMENT.md's collision
+;; rule: new features' commands live in their own module).
 (require racket/list racket/string racket/path racket/file
          racket/class racket/gui/base
-         "../settings.rkt" "../command.rkt" "../frame.rkt" "../editor.rkt" "../picker.rkt")
+         "../settings.rkt" "../command.rkt" "../frame.rkt" "../editor.rkt" "../picker.rkt" "../fuzzy.rkt"
+         "../commands.rkt")
 (provide library-folder-paths add-library-folder-path! remove-library-folder-path!
          selected-library-folder candidate-library-folders
          library-folder-status library-folder-hint
-         pick-folder-directory pick-folder-to-remove)
+         pick-folder-directory pick-folder-to-remove
+         library-files library-file-title rank-library-files)
 
 (define-setting library-folders
   #:contract (lambda (v) (and (list? v) (andmap string? v)))
@@ -112,3 +118,65 @@
   (when choice
     (remove-library-folder-path! choice)
     (message "Removed ~a from your Library." choice)))
+
+;; ---- lib-quick-open (#290): every note the Library holds, and its title -------------------
+;; The same file kinds the Folders tree will show (docs/UI-DESIGN.md S2.1); the same directory
+;; skip-list rackmac/commands.rkt's project-root Quick Open already uses.
+(define library-file-extensions '(#".md" #".markdown" #".txt" #".rkt" #".py"))
+(define skip-library-dirs '(".git" "node_modules" "compiled" ".svn" ".hg" "__pycache__"))
+
+(define (library-files)
+  (append*
+   (for/list ([f (in-list (library-folder-paths))] #:when (directory-exists? f))
+     (for/list ([p (in-directory f (lambda (d) (not (member (path->string (file-name-from-path d)) skip-library-dirs))))]
+                #:when (and (file-exists? p) (member (path-get-extension p) library-file-extensions)))
+       p))))
+
+;; A note's title is its first heading -- among the first 40 lines, so a blank line or a bit
+;; of YAML front matter before it does not defeat the search -- else its bare file name; the
+;; same convention New Note's rename-on-first-save uses (rackmac/library/new-note.rkt's
+;; first-heading-title, which works on a buffer rather than a file on disk).
+(define (library-file-title p)
+  (define name (path->string (file-name-from-path p)))
+  (define (first-heading)
+    (for/or ([line (in-list (with-handlers ([exn:fail? (lambda (e) '())])
+                              (call-with-input-file p (lambda (in) (for/list ([l (in-lines in)] [_ (in-range 40)]) l)))))])
+      (define m (regexp-match #px"^#{1,6}[ \t]+(.+?)[ \t]*$" line))
+      (and m (let ([t (string-trim (cadr m))]) (and (not (string=? t "")) t)))))
+  (cond
+    [(member (path-get-extension p) '(#".md" #".markdown"))
+     (or (first-heading) name)]
+    [else name]))
+
+;; A title match always ranks above a path-only match -- no single per-field fuzzy score can
+;; express that (fuzzy.rkt's field-score picks whichever field scores best, title or path), so
+;; this filters in two passes instead: everything whose *title* matches, best first, then
+;; everything else whose *path* matches, best first, with no repeats between the two.
+(define (rank-library-files query files)
+  (define titled (for/list ([p (in-list files)]) (cons (library-file-title p) p)))
+  (define title-hits (fuzzy-filter* query titled (lambda (tp) (list (car tp)))))
+  (define hit-paths (map cdr title-hits))
+  (define rest (filter (lambda (tp) (not (member (cdr tp) hit-paths))) titled))
+  (define path-hits (fuzzy-filter* query rest (lambda (tp) (list (path->string (cdr tp))))))
+  (map cdr (append title-hits path-hits)))
+
+;; Redefines `quick-open` (still the same command symbol and shortcut; docs/DEVELOPMENT.md:
+;; never rename a command's symbol) to search the Library when it has folders, falling back to
+;; commands.rkt's own project-root search otherwise.
+(define-command (quick-open)
+  #:icon "search"
+  #:aliases ("find file in project" "fuzzy open" "go to file" "find note" "open note")
+  #:help "Type part of a title or file name to open it."
+  #:title "Quick Open…" #:menu "File" #:menu-order 12 #:keys ("Mod-Shift-o")
+  #:doc "Searches your Library by title, then by path; without a Library, falls back to fuzzy-finding a file under the project root."
+  (if (pair? (library-folder-paths)) (quick-open-in-library!) (quick-open-fallback!)))
+
+(define (quick-open-in-library!)
+  (define files (library-files))
+  (define items (for/list ([p (in-list files)]) (list (library-file-title p) (path->string p) (path->string p))))
+  (define (rank q its)
+    (define ranked (rank-library-files q files))
+    (filter values (for/list ([p (in-list ranked)])
+                     (findf (lambda (it) (equal? (caddr it) (path->string p))) its))))
+  (define choice (pick "Quick Open" items #:detail-heading "Path" #:rank rank))
+  (when choice (set-current-buffer! (open-file! choice))))

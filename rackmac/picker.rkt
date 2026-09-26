@@ -24,7 +24,11 @@
               #:style [extra-style '()]
               #:footer [footer #f]                ; (item-or-#f query) -> string, shown under the list
               #:no-match [no-match #f]             ; query -> string, the empty-state row's label
-              #:placement [placement #f])          ; (dialog-w dialog-h) -> (cons x y), or #f to center
+              #:placement [placement #f]           ; (dialog-w dialog-h) -> (cons x y), or #f to center
+              ;; query items -> items, best first: the default is plain best-field fuzzy
+              ;; matching; lib-quick-open (#290) supplies one that ranks a title match over a
+              ;; path-only match, which no single per-field score can express.
+              #:rank [rank (lambda (q its) (fuzzy-filter* q its pick-item-fields))])
   (define result #f)
   (define shown '())
   (define ncols (length columns))
@@ -44,7 +48,7 @@
     (set! shown
           (if (string=? q "")
               (if (> (length items) 200) (take items 200) items)
-              (fuzzy-filter* q items pick-item-fields)))
+              (rank q items)))
     (cond
       [(and (null? shown) no-match)
        (define blanks (cons (list (no-match q)) (build-list (sub1 ncols) (lambda (_) (list "")))))

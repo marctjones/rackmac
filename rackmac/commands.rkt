@@ -8,7 +8,7 @@
          "fileio.rkt" "ui/palette.rkt" "settings.rkt" "appearance.rkt")
 (provide save-buffer! confirm-quit? palette-items palette-matches command-description
          confirm-discard-changes confirm-save-changes
-         builtin-command-names reveal-argv launch!)
+         builtin-command-names reveal-argv launch! quick-open-fallback!)
 
 (define (t) (current-buffer))
 (define (ext?) (extending-selection?))
@@ -129,12 +129,12 @@
 
 (define skipped-dirs '(".git" "node_modules" "compiled" ".svn" ".hg" "__pycache__"))
 
-(define-command (quick-open)
-  #:icon "search"
-  #:aliases ("find file in project" "fuzzy open" "go to file")
-  #:help "Type part of a file name to open it from the current project."
-  #:title "Quick Open…" #:menu "File" #:menu-order 12 #:keys ("Mod-Shift-o")
-  #:doc "Fuzzy-find a file under the project root (the enclosing git repo, or the file's folder)."
+;; The project-root search: the default when there is no Library, and the fallback
+;; rackmac/library/folders.rkt uses (its own `quick-open` redefinition, #290 lib-quick-open)
+;; before any Library folder has been added. Exported so that module can reuse it instead of
+;; requiring commands.rkt to know about the Library -- see the collision rule in
+;; docs/DEVELOPMENT.md ("new features put their commands in their own module").
+(define (quick-open-fallback!)
   (define root (project-root))
   (cond
     [(member (path->string (simplify-path root)) (list "/" (path->string (find-system-path 'home-dir))))
@@ -149,6 +149,14 @@
          (path->string (find-relative-path root p))))
      (define choice (pick (format "Quick Open — ~a" root) (for/list ([f files]) (list f "" f))))
      (when choice (set-current-buffer! (open-file! (build-path root choice))))]))
+
+(define-command (quick-open)
+  #:icon "search"
+  #:aliases ("find file in project" "fuzzy open" "go to file")
+  #:help "Type part of a file name to open it from the current project."
+  #:title "Quick Open…" #:menu "File" #:menu-order 12 #:keys ("Mod-Shift-o")
+  #:doc "Fuzzy-find a file under the project root (the enclosing git repo, or the file's folder)."
+  (quick-open-fallback!))
 
 (define-command (save)
   #:when (lambda () (or (send (t) is-modified?) (not (send (t) get-path))))
