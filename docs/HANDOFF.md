@@ -53,10 +53,12 @@ Reassign if an agent's first report is weak.
 
 ## In flight
 
-- `../rackmac-app` / `app` (Opus): fixing Fable's E3.M1 data-safety review (3 must-fix: Don't Save then Cancel on quit,
-  encoding/EOL on restore, stale-file overwrite; 5 should-fix; crash-test CI flake). Main's CI is red on that flake until it lands.
-- `../rackmac-app2` / `app2` (Opus): #266 md-restyle-region, #268 md-render (E14.M1).
+- `../rackmac-app` / `app` (Sonnet): E15.M1 Library basics #272, #276, #277, #288, #290.
+- `../rackmac-app2` / `app2` (Opus): E14.M1 #269 view toggle, #338 links, #334 copy source.
 - `../rackmac-mdlib` / `mdlib` (Opus): #323 mdlib-edits, #320 mdlib-ext.
-- Done and merged since alpha.2: #278, #280, #281 (E18.M1 left: #279 PDF after md-render, #282 clipboard spike);
-  #291, #289 (E4.M1 complete); #321, #322; E3.M1 #74–#78 (tag after fixes).
-- app.rkt requires: one feature module per line to avoid merge conflicts.
+- Merged, waiting on green CI to tag `v0.3.0-alpha.3`: E3.M1 autosave (#74–#78 + Fable's 9 fixes) and E4.M1
+  (Settings dialog #291, Tools menu #289). Also merged: #266/#268 formatted view, #333 checked commands, #339, #352.
+- E21 Assistant (LLM support) designed by Fable: docs/ASSISTANT-DESIGN.md; filed as epic #395, milestones
+  E21.M1–M5, issues #355–#394 with `model:` labels; owner decisions in #396 (release placement pending — filed
+  under release:v0.6 alongside Workspace, not shifted).
+- CI timing: tests that wait on timers scale by 5x when CI=true (recovery-test, pathological-test).
