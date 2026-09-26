@@ -11,16 +11,16 @@
          "../rackmac/keymap.rkt" "../rackmac/editor.rkt" "../rackmac/picker.rkt")
 
 (define golden-names
-  '(about close-buffer close-other-tabs close-tabs-to-right command-palette copy copy-tab-path
+  '(about close-tab close-other-tabs close-tabs-to-right command-palette copy copy-tab-path
     cut delete-line delete-to-line-start delete-word-back
-    delete-word-forward describe-command describe-key doc-end doc-start duplicate-line eval-buffer
+    delete-word-forward describe-command describe-key doc-end doc-start duplicate-line run-document
     go-to-tab-1 go-to-tab-2 go-to-tab-3 go-to-tab-4 go-to-tab-5 go-to-tab-6 go-to-tab-7 go-to-tab-8 go-to-tab-9
     print-document reopen-closed-tab reveal-in-file-manager toggle-full-screen reload-from-disk save-all toggle-toolbar
-    eval-selection find find-next find-previous goto-line indent-lines indent-or-insert line-end
-    line-start list-extensions list-keybindings move-line-down move-line-up new-buffer
-    newline-and-indent next-buffer open-file open-init-file outdent-lines page-down page-up paste
-    previous-buffer quick-open quit redo reload-init replace save save-as select-all select-line
-    set-line-endings set-major-mode show-cheat-sheet show-encoding show-messages
+    run-selection find find-next find-previous goto-line indent-lines indent-or-insert line-end
+    line-start list-extensions list-keybindings move-line-down move-line-up new-document
+    newline-and-indent next-tab open-file customize-with-code outdent-lines page-down page-up paste
+    previous-tab quick-open quit redo reload-init replace save save-as select-all select-line
+    set-line-endings set-language show-cheat-sheet show-encoding show-activity-log
     toggle-comment toggle-theme toggle-word-wrap undo word-left word-right zoom-in zoom-out zoom-reset))
 
 (test-case "built-in command names are stable (relabeling never renames a symbol)"
@@ -56,9 +56,9 @@
   (check-eq? (top "remove line") 'delete-line)
   (check-eq? (top "home") 'line-start)
   (check-eq? (top "dark mode") 'toggle-theme)
-  (check-eq? (top "settings") 'open-init-file)
-  (check-eq? (top "preferences") 'open-init-file)
-  (check-eq? (top "run code") 'eval-selection)
+  (check-eq? (top "settings") 'customize-with-code)
+  (check-eq? (top "preferences") 'customize-with-code)
+  (check-eq? (top "run code") 'run-selection)
   (check-not-false (memq 'paste (palette-matches "paste")) "the ordinary word still works")
   (check-equal? (palette-matches "zzzzqqq") '() "no match gives an empty list"))
 
@@ -121,17 +121,17 @@
   (check-eq? (top "twiddle") 'vocab-meta))
 
 (test-case "renamed titles (display only) and old names still find them"
-  (for ([p '((eval-selection "Run Selection") (eval-buffer "Run Document")
-             (show-messages "Show Activity Log") (set-major-mode "Set Language…")
-             (open-init-file "Customize with Code") (reload-init "Reload Extensions")
+  (for ([p '((run-selection "Run Selection") (run-document "Run Document")
+             (show-activity-log "Show Activity Log") (set-language "Set Language…")
+             (customize-with-code "Customize with Code") (reload-init "Reload Extensions")
              (show-cheat-sheet "Keyboard Shortcuts") (list-keybindings "Shortcuts as Text")
-             (new-buffer "New Document") (describe-command "Explain a Command…"))])
+             (new-document "New Document") (describe-command "Explain a Command…"))])
     (check-equal? (command-title (find-command (car p))) (cadr p)))
-  (check-eq? (top "Run Selection") 'eval-selection)
-  (check-eq? (top "run code") 'eval-selection)
-  (check-eq? (top "evaluate selection") 'eval-selection "the old title still finds it")
+  (check-eq? (top "Run Selection") 'run-selection)
+  (check-eq? (top "run code") 'run-selection)
+  (check-eq? (top "evaluate selection") 'run-selection "the old title still finds it")
   (check-eq? (top "reload init file") 'reload-init)
-  (check-eq? (top "show messages") 'show-messages)
+  (check-eq? (top "show messages") 'show-activity-log)
   (check-eq? (top "explain command") 'describe-command)
   (check-eq? (top "cheat sheet") 'show-cheat-sheet)
   (check-eq? (top "shortcuts as text") 'list-keybindings))

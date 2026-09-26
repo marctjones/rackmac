@@ -48,7 +48,7 @@
 ;; All are ordinary commands that act on (current-buffer); the tab strip makes the
 ;; right-clicked tab current first, the same way on-close-request already does above.
 (define (tab-context-menu-groups)
-  (list '(close-buffer close-other-tabs close-tabs-to-right) '(copy-tab-path reveal-in-file-manager)))
+  (list '(close-tab close-other-tabs close-tabs-to-right) '(copy-tab-path reveal-in-file-manager)))
 
 ;; The tab strip: a tab's close box closes that document (asking to save), "+" makes a new
 ;; one, and dragging reorders the documents.
@@ -58,8 +58,8 @@
     (define/override (on-close-request i)
       (when (< i (length tab-buffers))
         (set-current-buffer! (list-ref tab-buffers i))
-        (run-command/safe 'close-buffer)))
-    (define/override (on-new-request) (run-command/safe 'new-buffer))
+        (run-command/safe 'close-tab)))
+    (define/override (on-new-request) (run-command/safe 'new-document))
     ;; `former` lists, for each tab position after the drag, the position it had before.
     (define/augment (on-reorder former)
       (set-tab-order! (for/list ([i (in-list former)]) (list-ref tab-buffers i))))

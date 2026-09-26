@@ -88,7 +88,7 @@
     (set-theme! appearance)
     (define w 400) (define h status-bar-height)
     (define dc (new bitmap-dc% [bitmap (make-bitmap w h #t #:backing-scale scale)]))
-    (define model (list (seg-view 'message "" #f #f 0) (seg-view 'lang "Markdown" 'set-major-mode #f 10)))
+    (define model (list (seg-view 'message "" #f #f 0) (seg-view 'lang "Markdown" 'set-language #f 10)))
     (send dc set-font (font-for-width w))
     (define r (second (layout-segments model w dc h)))
     (define-values (tw th td ta) (send dc get-text-extent "Markdown"))
@@ -219,7 +219,7 @@
 (test-case "clicking Language opens the Language picker"
   (doc "hello")
   (check-eq? (with-dialog escape! (lambda () (before-command-of (lambda () (click-segment! 'language)))))
-             'set-major-mode))
+             'set-language))
 
 (test-case "clicking the line-ending segment opens Line Endings"
   (doc "hello")

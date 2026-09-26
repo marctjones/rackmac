@@ -74,11 +74,11 @@
   (run-command 'delete-word-back)
   (check-equal? (text b) "hello  world"))
 
-(test-case "eval-selection runs code in the editor namespace"
+(test-case "run-selection runs code in the editor namespace"
   (define b (fresh! "(+ 1 2 3)" #:sel '(0 . 9)))
   (define echoed #f)
   (add-hook! 'echo (lambda (s) (set! echoed s)))
-  (run-command 'eval-selection)
+  (run-command 'run-selection)
   (check-equal? echoed "6"))
 
 ;; ---- key events ------------------------------------------------------------

@@ -145,7 +145,7 @@
 
 (test-case "the generated init template loads under #lang rackmac and its command works"
   (clean!)
-  (run-command 'open-init-file)                   ; writes the template and opens it
+  (run-command 'customize-with-code)                   ; writes the template and opens it
   (check-true (file-exists? (build-path dir "init.rkt")))
   (check-regexp-match #rx"^#lang rackmac" (file->string (build-path dir "init.rkt")))
   (check-regexp-match #rx"Loaded 1" (reload!))

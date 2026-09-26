@@ -69,7 +69,7 @@ The toolbar is built from a registry that extensions use too:
 
 ```racket
 (add-toolbar-item! 'shout #:group 'text)                 ; a button for your command (#:icon on the command)
-(add-toolbar-item! 'eval-selection #:mode 'racket-mode)  ; only for Racket documents
+(add-toolbar-item! 'run-selection #:mode 'racket-mode)  ; only for Racket documents
 (remove-toolbar-item! 'find)
 ```
 
@@ -83,7 +83,7 @@ the toolbar's:
 
 ```racket
 (add-context-item! 'shout #:group 'text)                 ; adds "Shout" to the menu
-(add-context-item! 'eval-selection #:mode 'racket-mode)  ; only for Racket documents
+(add-context-item! 'run-selection #:mode 'racket-mode)  ; only for Racket documents
 ```
 
 The default menu is Cut, Copy, Paste, Select All and Find; Racket documents add Run Selection, and any

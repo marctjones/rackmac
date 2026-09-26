@@ -20,7 +20,7 @@
 
 (test-case "Racket documents add Run Selection and Toggle Comment; Markdown adds neither"
   (check-equal? (names (context-items-for 'racket-mode))
-                '((cut copy paste) (select-all) (find) (eval-selection toggle-comment)))
+                '((cut copy paste) (select-all) (find) (run-selection toggle-comment)))
   (check-equal? (names (context-items-for 'markdown-mode))
                 '((cut copy paste) (select-all) (find))))
 
@@ -231,7 +231,7 @@
 
 (test-case "tab-context-menu-groups: Close/Close Others/Close Right, then Copy Path/Reveal"
   (check-equal? (tab-context-menu-groups)
-                '((close-buffer close-other-tabs close-tabs-to-right) (copy-tab-path reveal-in-file-manager))))
+                '((close-tab close-other-tabs close-tabs-to-right) (copy-tab-path reveal-in-file-manager))))
 
 (define (fresh-tabs names)
   (define bs (for/list ([n names]) (new-buffer! n)))

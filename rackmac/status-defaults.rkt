@@ -60,7 +60,7 @@
 
 (add-status-segment! 'language
   (lambda () (mode-display-name (send (current-buffer) get-mode)))
-  #:command 'set-major-mode #:hint "Click to change the Language" #:priority 70)
+  #:command 'set-language #:hint "Click to change the Language" #:priority 70)
 
 (add-status-segment! 'zoom
   (lambda () (format "~a%" (inexact->exact (round (* 100 (/ font-size (default-font-size)))))))

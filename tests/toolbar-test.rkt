@@ -14,13 +14,13 @@
 
 (test-case "default toolbar: file, history, clipboard, find, then Search commands at the end"
   (check-equal? (names (toolbar-items-for 'text-mode))
-                '((new-buffer open-file save) (undo redo) (cut copy paste) (find) (command-palette))))
+                '((new-document open-file save) (undo redo) (cut copy paste) (find) (command-palette))))
 
 (test-case "Language items appear only for that Language and its children"
-  (check-not-false (member '(eval-selection) (names (toolbar-items-for 'racket-mode))) "Run for Racket")
-  (check-false (member '(eval-selection) (names (toolbar-items-for 'markdown-mode))))
+  (check-not-false (member '(run-selection) (names (toolbar-items-for 'racket-mode))) "Run for Racket")
+  (check-false (member '(run-selection) (names (toolbar-items-for 'markdown-mode))))
   (register-mode! 'tb-child-mode #:parent 'racket-mode)
-  (check-not-false (member '(eval-selection) (names (toolbar-items-for 'tb-child-mode))) "inherited"))
+  (check-not-false (member '(run-selection) (names (toolbar-items-for 'tb-child-mode))) "inherited"))
 
 (test-case "adding the same command twice does not duplicate it"
   (define ext (make-extension "tb"))
@@ -56,17 +56,17 @@
 
 (test-case "the window shows one button per toolbar item, in order"
   (doc "" 'text-mode)
-  (check-equal? (send tb button-commands) '(new-buffer open-file save undo redo cut copy paste find command-palette)))
+  (check-equal? (send tb button-commands) '(new-document open-file save undo redo cut copy paste find command-palette)))
 
 (test-case "switching to a Racket document adds Run; back to text removes it"
   (doc "" 'racket-mode)
-  (check-not-false (memq 'eval-selection (send tb button-commands)))
+  (check-not-false (memq 'run-selection (send tb button-commands)))
   (doc "" 'text-mode)
-  (check-false (memq 'eval-selection (send tb button-commands))))
+  (check-false (memq 'run-selection (send tb button-commands))))
 
 (test-case "a button runs its command"
   (define b (doc "abc" 'text-mode))
-  (click 'new-buffer)
+  (click 'new-document)
   (check-not-eq? (current-buffer) b "New Document made a new tab"))
 
 (test-case "Cut and Copy dim without a selection and light up with one"

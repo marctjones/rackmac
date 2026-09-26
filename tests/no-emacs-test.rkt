@@ -79,3 +79,13 @@
       (and (regexp-match? #rx"emacs-names" text) (path->string p))))
   (check-equal? (filter values offenders) '()
                 "no module under rackmac/ mentions emacs-names.rktd (it is preset-only, not loaded by default)"))
+
+;; #264: command IDs show up in palette search and Explain a Command, so they use office words
+;; too. (Renamed once, pre-release: close-buffer → close-tab, eval-selection → run-selection, …)
+(test-case "no built-in command ID uses Emacs words"
+  (define id-patterns (list #px"\\bbuffers?\\b" #px"major-mode" #px"minor-mode" #px"^eval-" #px"\\byank\\b"
+                            #px"\\bkill-" #px"\\binit-file\\b"))
+  (for ([c (all-commands)])
+    (define id (symbol->string (command-name c)))
+    (for ([p id-patterns])
+      (check-false (regexp-match? p id) (format "command ID ~a matches ~a" id (object-name p))))))

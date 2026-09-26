@@ -129,7 +129,7 @@
 (test-case "the Language picker still works (2 columns, no footer)"
   (void
    (run-dialog
-    (lambda () (run-command 'set-major-mode))
+    (lambda () (run-command 'set-language))
     (lambda (d)
       (check-equal? (length (send d get-children)) 2 "no footer widget when #:footer is not given")
       (send d on-subwindow-char (tf-of d) (key 'escape))))))

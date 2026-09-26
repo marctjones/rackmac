@@ -7,5 +7,5 @@
 (for ([c '(cut copy paste)]) (add-context-item! c #:group 'clipboard))
 (add-context-item! 'select-all #:group 'select)
 (add-context-item! 'find #:group 'find)
-(add-context-item! 'eval-selection #:group 'language #:mode 'racket-mode)
+(add-context-item! 'run-selection #:group 'language #:mode 'racket-mode)
 (add-context-item! 'toggle-comment #:group 'language #:mode 'prog-mode)

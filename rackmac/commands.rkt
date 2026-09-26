@@ -70,7 +70,7 @@
     (set-current-buffer! b)
     (confirm-close-buffer? b)))
 
-(define-command (new-buffer)
+(define-command (new-document)
   #:icon "new"
   #:aliases ("new document" "new file" "new tab")
   #:help "Start a new empty document in a new tab."
@@ -138,7 +138,7 @@
   #:title "Save As…" #:menu "File" #:menu-order 21 #:keys ("Mod-Shift-s") #:keys/windows ("F12")
   (save-buffer-as! (t)))
 
-(define-command (close-buffer)
+(define-command (close-tab)
   #:icon "close"
   #:aliases ("close document" "close file")
   #:help "Close this tab, asking to save unsaved changes first."
@@ -218,7 +218,7 @@
   (define i (or (index-of bs (t)) 0))
   (set-current-buffer! (list-ref bs (modulo (+ i delta) (length bs)))))
 
-(define-command (next-buffer)
+(define-command (next-tab)
   #:icon "chevron-right"
   #:aliases ("switch tab" "next document")
   #:help "Switch to the next tab."
@@ -226,7 +226,7 @@
   #:keys ("Ctrl-Tab") #:keys/mac ("Mod-Alt-Right" "Mod-Shift-]") #:keys/windows ("Ctrl-PageDown")
   (cycle-buffer 1))
 
-(define-command (previous-buffer)
+(define-command (previous-tab)
   #:icon "chevron-left"
   #:aliases ("prev tab" "previous document")
   #:help "Switch to the previous tab."
@@ -346,7 +346,7 @@
 TEMPLATE
   )
 
-(define-command (open-init-file)
+(define-command (customize-with-code)
   #:icon "settings"
   #:aliases ("init file" "open init file" "config" "settings file" "customize" "settings" "preferences")
   #:help "Open the file that customizes Rackmac with Racket code."
@@ -783,7 +783,7 @@ TEMPLATE
   #:title "Toggle Dark/Light Theme" #:menu "View" #:menu-order 21
   (toggle-theme!) (restyle!))
 
-(define-command (show-messages)
+(define-command (show-activity-log)
   #:icon "activity"
   #:aliases ("messages" "show messages" "log" "errors")
   #:help "Open the log of messages and errors."
@@ -815,7 +815,7 @@ TEMPLATE
   (run-hook 'focus-editor)
   (when choice (run-command/safe choice)))
 
-(define-command (set-major-mode)
+(define-command (set-language)
   #:icon "language"
   #:aliases ("language mode" "change language" "syntax")
   #:help "Choose what kind of document this is, for coloring and shortcuts."
@@ -831,7 +831,7 @@ TEMPLATE
 (define (current-line-text b)
   (line-text b (send b position-paragraph (send b get-start-position))))
 
-(define-command (eval-selection)
+(define-command (run-selection)
   #:icon "run"
   #:aliases ("evaluate selection" "evaluate" "run code")
   #:help "Run the selected Racket code, or the current line."
@@ -842,7 +842,7 @@ TEMPLATE
   (define r (eval-string code))
   (message "~a" (if (string=? r "") "(no output)" r)))
 
-(define-command (eval-buffer)
+(define-command (run-document)
   #:icon "run-all"
   #:aliases ("evaluate document" "run file")
   #:help "Run the whole document as Racket code."
