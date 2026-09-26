@@ -117,6 +117,14 @@ Inline nodes are **stored in the memo cache with content-relative offsets** (§3
 absolute offsets: `block-inlines` relocates the cached tree through the block's segments on first request and caches
 the result on the block instance (a promise; the only mutable slot in the model, invisible to callers).
 
+_As built (#318, 2026-09-26):_ a paragraph's or heading's `inlines` field holds an **`inline-cell`**, not a list. The
+cell carries the content string, the segments, and two promises: the content-relative tree and the document-offset
+tree. Consumers call `block-inlines` (document offsets). The HTML renderer and #321's memo read
+`cell-relative-inlines` and `inline-cell-content`. The memo hook is
+`(parse-blocks … #:inline-parser (kind content refmap) → relative inline list)`, with `kind` `'paragraph` or
+`'heading`, and cells are built with `(make-inline-cell content segments thunk)`. Comparing two documents with
+`equal?` forces the inline parse on both sides; #321's `reparse == parse` property test relies on that.
+
 ### 1.4 Reference definitions and extension state
 
 `refmap` maps normalized labels (Unicode case fold, whitespace collapsed, per spec) to `(dest title node)`; the first
