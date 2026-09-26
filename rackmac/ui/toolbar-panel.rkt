@@ -2,6 +2,7 @@
 ;; The toolbar row: native button%s with vector icon bitmaps, built from the toolbar
 ;; registry for the current document's Language. Buttons dim when their command's #:when
 ;; says it does not apply; hovering shows the command and its shortcut in the status bar.
+;; With no document showing (the start screen), document tools are left off the row.
 (require racket/class racket/gui/base racket/list racket/string
          "../toolbar.rkt" "../command.rkt" "../hook.rkt" "icons.rkt" "layout.rkt" "context-menu.rkt")
 (provide toolbar-panel% toolbar-hint)
@@ -13,13 +14,16 @@
 
 (define toolbar-panel%
   (class horizontal-panel%
-    (init-field [mode-getter (lambda () 'text-mode)])
+    (init-field [mode-getter (lambda () 'text-mode)]
+                ;; #f while no document is showing (frame.rkt: the start screen is up)
+                [document-getter (lambda () #t)])
     (super-new [stretchable-height #f] [border grid])
     ;; Each rebuild makes a fresh inner row and swaps it in: spacer panes cannot be removed
     ;; from a panel one by one, but a whole panel can be.
     (define row #f)
     (define buttons (make-hasheq))          ; button% -> command name
     (define shown-mode #f)
+    (define shown-document? 'unset)
 
     (define/public (button-commands)        ; in display order, for tests and overflow
       (if row (for/list ([b (send row get-children)] #:when (hash-ref buttons b #f)) (hash-ref buttons b)) '()))
@@ -90,14 +94,15 @@
              b)))
 
     ;; Rebuild the buttons for `mode` (Language items appear and disappear with it).
-    (define/public (rebuild! [mode (mode-getter)])
+    (define/public (rebuild! [mode (mode-getter)] [document? (and (document-getter) #t)])
       (set! shown-mode mode)
+      (set! shown-document? document?)
       (hash-clear! buttons)
       (hash-clear! popups)
       (define new-row (new horizontal-panel% [parent this] [style '(deleted)] [spacing toolbar-spacing]
                            [alignment '(left center)] [stretchable-height #f]))
       (set! row new-row)
-      (define groups (toolbar-items-for mode))
+      (define groups (toolbar-items-for mode #:document? document?))
       (for ([g groups] [i (in-naturals)])
         (define end? (toolbar-item-end? (car g)))
         (when (and (> i 0) (not end?)) (new pane% [parent row] [min-width toolbar-group-gap] [stretchable-width #f]))
@@ -106,7 +111,9 @@
       (send this change-children (lambda (cs) (list new-row)))
       (refresh-enabled!))
 
-    (define/public (ensure-mode! mode) (unless (eq? mode shown-mode) (rebuild! mode)))
+    (define/public (ensure-mode! [mode (mode-getter)])
+      (define document? (and (document-getter) #t))
+      (unless (and (eq? mode shown-mode) (eq? document? shown-document?)) (rebuild! mode document?)))
 
     (define/public (refresh-enabled!)
       (define stale? #f)
@@ -120,7 +127,7 @@
       ;; A checked state flipped: rebuild the row rather than relabel in place, because
       ;; set-label can't take the icon-and-title form that titled buttons use. rebuild!
       ;; records the new states, so this settles in one pass.
-      (when stale? (rebuild! shown-mode)))
+      (when stale? (rebuild! shown-mode shown-document?)))
 
     ;; For tests: the label state a command's button shows (#t checked, #f not, or no button).
     (define/public (button-shows-checked? name)

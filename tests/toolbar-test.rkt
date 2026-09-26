@@ -122,3 +122,38 @@
   (check-not-false (memq 'zoom-in (send tb button-commands)))
   (unload-extension! ext)
   (check-false (memq 'zoom-in (send tb button-commands))))
+
+;; ---- with nothing open: only the tools that apply (first live look, 2026-09-26) ------------
+
+(test-case "registry: with no document, only New Note, Open and the Command Palette"
+  (check-equal? (names (toolbar-items-for 'text-mode #:document? #f))
+                '((new-note open-file) (command-palette)))
+  (check-equal? (names (toolbar-items-for 'racket-mode #:document? #f))
+                '((new-note open-file) (command-palette)) "no Run either")
+  (define ext (make-extension "tb"))
+  (parameterize ([current-extension ext])
+    (add-toolbar-item! 'zoom-in #:group 'tb-view)
+    (add-toolbar-item! 'zoom-out #:group 'tb-view #:document? #f))
+  (check-equal? (names (toolbar-items-for 'text-mode #:document? #f))
+                '((new-note open-file) (zoom-out) (command-palette))
+                "an extension's item is a document tool unless it says otherwise")
+  (unload-extension! ext))
+
+(define (close-all!) (for ([b (all-buffers)] #:unless (messages-buffer? b)) (kill-buffer! b)))
+
+(test-case "the start screen's toolbar hides document tools rather than dimming them"
+  (close-all!)
+  (check-true (start-screen-shown?))
+  (check-equal? (send tb button-commands) '(new-note open-file command-palette))
+  (for ([n '(new-note open-file command-palette)])
+    (check-true (enabled? n) (format "~a works with nothing open" n)))
+  (doc "" 'text-mode)
+  (check-false (start-screen-shown?))
+  (check-equal? (send tb button-commands)
+                '(new-note open-file save undo redo cut copy paste find command-palette)
+                "the document tools come back with a document")
+  (show-start-screen!)                          ; what Help > Start Screen runs
+  (check-equal? (send tb button-commands) '(new-note open-file command-palette)
+                "Help > Start Screen over an open document: the same short row")
+  (doc "" 'text-mode)
+  (check-not-false (memq 'save (send tb button-commands))))

@@ -13,8 +13,11 @@
 ;; command used only for the button's title, hover hint and #:when. label: #f to derive the
 ;; button's letter tile from the command's own title when it has no #:icon, or an explicit
 ;; short override (colliding titles otherwise give the same tile, e.g. "Bold" and "Bulleted
-;; List" both start with B; docs/UI-DESIGN.md #332 tracks real icons for these).
-(struct toolbar-item (command group mode end? items label) #:transparent)
+;; List" both start with B; docs/UI-DESIGN.md #332 tracks real icons for these). document?: #t
+;; (the default) for a tool that works on a document, so it is left off the bar while the start
+;; screen shows and nothing is open; #f for one that makes sense then too (New Note, Open,
+;; Command Palette). Hidden rather than dimmed: a row of dead buttons looks broken.
+(struct toolbar-item (command group mode end? items label document?) #:transparent)
 
 (define items '())          ; in insertion order
 (define groups '())         ; group symbols, first-use order
@@ -26,11 +29,11 @@
 
 ;; Adding the same command again (for the same mode) replaces it rather than duplicating.
 (define (add-toolbar-item! command #:group [group 'main] #:mode [mode #f] #:end? [end? #f]
-                            #:items [popup-items #f] #:label [label #f])
+                            #:items [popup-items #f] #:label [label #f] #:document? [document? #t])
   (unless (symbol? command) (raise-argument-error 'add-toolbar-item! "symbol?" command))
   (define old items)
   (define old-groups groups)
-  (define it (toolbar-item command group mode end? popup-items label))
+  (define it (toolbar-item command group mode end? popup-items label (and document? #t)))
   (set! items (append (filter (lambda (x) (not (and (eq? (toolbar-item-command x) command)
                                                     (eq? (toolbar-item-mode x) mode))))
                               items)
@@ -49,10 +52,13 @@
 
 ;; The items to show for a document in `mode-name`: global ones plus those for the mode or
 ;; any of its parents, ordered by group, with end? items last. Returns a list of groups,
-;; each a list of items (empty groups dropped).
-(define (toolbar-items-for mode-name)
+;; each a list of items (empty groups dropped). With #:document? #f (no document showing),
+;; only the items that apply without one.
+(define (toolbar-items-for mode-name #:document? [document? #t])
   (define chain (map mode-name* (mode-chain mode-name)))
-  (define visible (filter (lambda (x) (or (not (toolbar-item-mode x)) (memq (toolbar-item-mode x) chain))) items))
+  (define visible (filter (lambda (x) (and (or (not (toolbar-item-mode x)) (memq (toolbar-item-mode x) chain))
+                                           (or document? (not (toolbar-item-document? x)))))
+                          items))
   (define (in-group g end?) (filter (lambda (x) (and (eq? (toolbar-item-group x) g) (eq? (toolbar-item-end? x) end?))) visible))
   (filter pair? (append (for/list ([g groups]) (in-group g #f))
                         (for/list ([g groups]) (in-group g #t)))))

@@ -195,7 +195,7 @@ palette, dialogs, context menus and notifications are as built or as planned bef
 frame% (native title: "• Weekly notes.md — Rackmac")
 ├─ menu-bar%                           native, generated from #:menu: File Edit Format View Tools Help
 └─ vertical-panel% border 0 spacing 0
-   ├─ toolbar   horizontal-panel%      button% per toolbar item; Format group only for prose Languages
+   ├─ toolbar   horizontal-panel%      button% per toolbar item; Format group only for prose Languages; start screen: New Note, Open, palette only
    ├─ horizontal-panel% border 0 spacing 0
    │  ├─ sidebar  vertical-panel% 240  Library: filter, Recent, Folders (hierarchical-list%), Tags, Outline, Backlinks
    │  └─ tabs     tab-panel%           '(no-border flat-portable can-reorder can-close new-button)
@@ -766,7 +766,7 @@ _Changed 2026-09-25._
 ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ ● ● ●                                Rackmac                                                   │
 ├────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ [＋] [▭] [💾]  [↶] [↷]  [✂] [⧉] [📋]  [🔍]                                    [🔍 Search commands…] │
+│ [＋] [▭]                                                                       [🔍 Search commands…] │
 ├──────────────────────┬─────────────────────────────────────────────────────────────────────────┤
 │ [ filter…          ] │                                                                         │
 │ RECENT               │                         Rackmac                                         │  title 22 bold
