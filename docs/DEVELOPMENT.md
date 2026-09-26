@@ -54,7 +54,10 @@ Rules for anyone (person or agent) changing this repository.
 - GUI test files `(require "no-front.rkt")` FIRST (before racket/gui) so tests never take keyboard focus.
 - Never launch the GUI (`racket main.rkt`), send keystrokes, or take screenshots from an automated agent.
   Visual checks are done by the maintainer session, announced to the owner first, launched with
-  `RACKMAC_NO_FRONT=1` so the window never takes focus.
+  `RACKMAC_NO_FRONT=1` so the window never takes focus. **Exception:** when the owner directs a session to
+  do interactive testing (as on 2026-09-26), that session may launch the app and drive it with simulated
+  keyboard and mouse input. It announces each launch and why, quits the app after each check, and types
+  only test data. Subagents it starts still follow the rule above.
 
 ## Commits, issues, releases
 
@@ -68,3 +71,9 @@ Rules for anyone (person or agent) changing this repository.
   pre-release with notes, made by the maintainer after a review. Before a major change of direction, tag
   the current state first so it can always be returned to. Tags so far: `v0.1.0` foundation, `v0.2.0` native
   desktop shell (checkpoint before the office/notes re-plan).
+- **Milestone tags.** Between phase tags, each closed GitHub milestone gets an annotated pre-release tag
+  `v0.N.0-alpha.K` on `main` (N = the release being built, K counting up from 1), pushed, with a GitHub
+  pre-release whose notes name the milestone and its issues. The phase still ends in `v0.N.0`. Versions
+  stay v0.x.
+- **Handoff.** Long sessions keep `docs/HANDOFF.md` current after every tag: last tag, branches and
+  worktrees in flight, what each agent is doing, and the next issues, so a fresh session can pick up.
