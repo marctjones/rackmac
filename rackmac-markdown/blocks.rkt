@@ -487,9 +487,17 @@
   (define fully-matched? (= k (length containers)))
   (cond
     [fully-matched?
-     (if tip-is-leaf?
-         (continue-leaf! doc full-path tip source end-offset end-column content-end lr)
-         (open-new-blocks! (list-ref full-path k) source end-offset end-column content-end #f))]
+     (cond
+       [tip-is-leaf? (continue-leaf! doc full-path tip source end-offset end-column content-end lr)]
+       ;; A list whose last item has closed (an item that began with a blank line ends at the
+       ;; second blank line) still accepts a new item of its own kind; anything else closes it
+       ;; and opens under the list's parent -- never as a direct child of the list.
+       [(eq? (mblk-kind tip) 'list)
+        (unless (or (blank-from? source end-offset content-end)
+                    (continues-list? tip source end-offset end-column content-end))
+          (close-block! tip))
+        (open-new-blocks! (list-ref full-path (- n 2)) source end-offset end-column content-end #f)]
+       [else (open-new-blocks! (list-ref full-path k) source end-offset end-column content-end #f)])]
     [else
      ;; Not fully matched: try lazy continuation of a tip paragraph.
      (define lazy-candidate? (and tip-is-leaf? (eq? (mblk-kind tip) 'paragraph) (mblk-open? tip)))
@@ -531,6 +539,15 @@
         ;; brand-new list inside running prose, not to stop one from continuing itself).
         (open-new-blocks! (list-ref full-path attach-index) source end-offset end-column content-end
                            (and lazy-candidate? (not rest-blank?) (not dangling-list-marker)))])]))
+
+;; Would a line starting at (offset, column) add an item to list `lst`? A marker of the list's
+;; kind and delimiter that is not a thematic break (which outranks list items).
+(define (continues-list? lst source offset column content-end)
+  (define d (try-list-marker source offset column content-end))
+  (and d
+       (not (try-thematic-break source offset column content-end))
+       (eq? (mdata-ref lst 'ordered?) (eq? (car d) 'ordered))
+       (eqv? (mdata-ref lst 'delimiter) (cadr d))))
 
 ;; Continues an already-open leaf block (code-block, html-block, or paragraph).
 (define (continue-leaf! doc full-path leaf source offset column content-end lr)

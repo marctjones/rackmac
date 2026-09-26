@@ -170,5 +170,8 @@
                   ;; inline content across container prefixes (design §1.3)
                   "> a *b\n> c* d <span\n> class=\"x\">e</span> [l](/u\n> \"t\n> t\") `x\n> y`\n"
                   "- a **b\n  c** \\\n  d  \n  e &amp; \\* <http://x.y> ![i *j*](/k)\n"
-                  ">\tfoo *bar*\n"))])
+                  ">\tfoo *bar*\n"
+                  ;; a list whose blank-started item closed: later lines leave the list or
+                  ;; add an item, never become the list's own children (found by #321's test)
+                  "-\n\n\ntwo\n" "-\n\n\n    two\n" "-\n\n\n- b\n" "-\n\n\n* * *\n"))])
     (check-document! s)))
