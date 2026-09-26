@@ -19,15 +19,23 @@
 (struct mblk (kind [start #:mutable] [end #:mutable] [children #:mutable] [open? #:mutable]
               [data #:mutable]))
 
-;; A hash, not a growing alist: process-line! sets 'trailing-blank? on every open list item on
-;; every line, which made deeply nested lists quadratic in lines x depth x alist length.
-(define (mdata-ref b key [default #f]) (hash-ref (mblk-data b) key default))
-(define (mdata-set! b key val) (hash-set! (mblk-data b) key val))
+;; A small mutable association list updated in place: a growing alist (a fresh pair per set)
+;; made deeply nested lists quadratic in lines x depth x alist length, and a hash table per block
+;; cost more to allocate than the whole block. A block has at most a handful of keys.
+(define (mdata-ref b key [default #f])
+  (let loop ([ps (mblk-data b)])
+    (cond [(null? ps) default]
+          [(eq? (mcar (mcar ps)) key) (mcdr (mcar ps))]
+          [else (loop (mcdr ps))])))
+(define (mdata-set! b key val)
+  (let loop ([ps (mblk-data b)])
+    (cond [(null? ps) (set-mblk-data! b (mcons (mcons key val) (mblk-data b)))]
+          [(eq? (mcar (mcar ps)) key) (set-mcdr! (mcar ps) val)]
+          [else (loop (mcdr ps))])))
 
 (define (make-mblk kind start data)
-  (define h (make-hasheq))
-  (for ([p (in-list (reverse data))]) (hash-set! h (car p) (cdr p)))
-  (mblk kind start start '() #t h))
+  (mblk kind start start '() #t
+        (for/fold ([acc '()]) ([p (in-list (reverse data))]) (mcons (mcons (car p) (cdr p)) acc))))
 
 ;; Appends `child` to `parent`, closing parent's current last (open) child first, unless that
 ;; child *is* the one being reused for list continuation (callers handle that by not going
@@ -49,6 +57,15 @@
   (set-mblk-children! parent (cons child kids)))
 
 (define (close-block! b) (set-mblk-open?! b #f))
+
+;; Records a markup token (design §1.2) on a block: quote markers, list markers, heading markers,
+;; setext underlines, fences, info strings, reference-definition parts.
+(define (add-token! b role start end)
+  (when (< start end) (mdata-set! b 'tokens (cons (token role start end) (mdata-ref b 'tokens '())))))
+
+;; A block's tokens in position order: each is recorded after the ones before it on its line
+;; and lines come in order, so reversing the recorded list suffices.
+(define (block-tokens-of b) (reverse (mdata-ref b 'tokens '())))
 
 ;; Sets `end` on every block in `path` (a list root..tip) to `end`.
 (define (touch-path! path end)
@@ -104,7 +121,8 @@
 ;; Container matching (phase 1): does an already-open container continue on this line?
 ;; ============================================================================================
 
-;; Block quote: 0-3 spaces indent, '>', optional one space/tab (one column).
+;; Block quote: 0-3 spaces indent, '>', optional one space/tab (one column). Returns (values
+;; marker-offset new-offset new-column), marker-offset #f when the line does not continue it.
 (define (match-blockquote source offset column line-end)
   (define-values (ns nc) (scan-indent source offset column line-end))
   (cond
@@ -112,8 +130,8 @@
      (define after (add1 ns)) (define after-col (add1 nc))
      (if (and (< after line-end) (space-or-tab? (string-ref source after)))
          (let-values ([(o2 c2 p2) (advance-columns source after after-col 1 line-end)])
-           (values #t o2 c2))
-         (values #t after after-col))]
+           (values ns o2 c2))
+         (values ns after after-col))]
     [else (values #f offset column)]))
 
 ;; List item continuation: blank line (matches trivially), or indentation >= content-column.
@@ -158,8 +176,10 @@
        (case (mblk-kind c)
          [(list) (loop (cdr cs) (add1 i) offset column)]
          [(block-quote)
-          (define-values (ok? o2 c2) (match-blockquote source offset column content-end))
-          (if ok? (loop (cdr cs) (add1 i) o2 c2) (values i offset column #f))]
+          (define-values (marker o2 c2) (match-blockquote source offset column content-end))
+          (cond [marker (add-token! c 'quote-marker marker (add1 marker))
+                        (loop (cdr cs) (add1 i) o2 c2)]
+                [else (values i offset column #f)])]
          [(list-item)
           (define-values (ok? o2 c2 blank?)
             (match-list-item source offset column content-end c first-non-blank))
@@ -393,22 +413,31 @@
 
 (define (leaf-lines b) (reverse (mdata-ref b 'lines '())))
 
-;; Builds §1.3 segments and the joined content string from a leaf's accumulated lines.
+;; Builds §1.3 segments and the joined content string from a leaf's accumulated lines. The
+;; content is written into one string of the final length (per-line substrings joined afterwards
+;; cost twice the allocation, and this runs for every leaf on every keystroke, design §3.1).
 (define (build-segments+content source lines)
-  (let loop ([lines lines] [content-pos 0] [segs '()] [parts '()])
+  (define total
+    (let loop ([ls lines] [n 0])
+      (if (null? ls) (max 0 (sub1 n)) (loop (cdr ls) (+ n (cadr (car ls)) (caddr (car ls)) 1)))))
+  (define content (make-string total #\space))
+  (let loop ([lines lines] [content-pos 0] [segs '()])
     (cond
-      [(null? lines) (values (reverse segs) (string-join (reverse parts) "\n"))]
+      [(null? lines) (values (reverse segs) content)]
       [else
-       (match-define (list src-start src-len vindent) (car lines))
-       (define real-text (substring source src-start (+ src-start src-len)))
-       (define line-text (string-append (make-string vindent #\space) real-text))
+       (define l (car lines))
+       (define src-start (car l)) (define src-len (cadr l)) (define vindent (caddr l))
+       (define text-pos (+ content-pos vindent))
+       (string-copy! content text-pos source src-start (+ src-start src-len))
+       (define next (+ text-pos src-len))
+       (when (< next total) (string-set! content next #\newline))
        (define segs2
          (if (> vindent 0)
-             (list* (segment (+ content-pos vindent) src-len src-start src-len)
+             (list* (segment text-pos src-len src-start src-len)
                     (segment content-pos vindent src-start 0)
                     segs)
              (cons (segment content-pos src-len src-start src-len) segs)))
-       (loop (cdr lines) (+ content-pos (string-length line-text) 1) segs2 (cons line-text parts))])))
+       (loop (cdr lines) (add1 next) segs2)])))
 
 ;; Strips trailing spaces/tabs from the LAST accumulated line only (spec, "Paragraphs": raw
 ;; content has "final whitespace" removed; a non-last line's trailing spaces are left for the
@@ -458,9 +487,17 @@
   (define fully-matched? (= k (length containers)))
   (cond
     [fully-matched?
-     (if tip-is-leaf?
-         (continue-leaf! doc full-path tip source end-offset end-column content-end lr)
-         (open-new-blocks! (list-ref full-path k) source end-offset end-column content-end #f))]
+     (cond
+       [tip-is-leaf? (continue-leaf! doc full-path tip source end-offset end-column content-end lr)]
+       ;; A list whose last item has closed (an item that began with a blank line ends at the
+       ;; second blank line) still accepts a new item of its own kind; anything else closes it
+       ;; and opens under the list's parent -- never as a direct child of the list.
+       [(eq? (mblk-kind tip) 'list)
+        (unless (or (blank-from? source end-offset content-end)
+                    (continues-list? tip source end-offset end-column content-end))
+          (close-block! tip))
+        (open-new-blocks! (list-ref full-path (- n 2)) source end-offset end-column content-end #f)]
+       [else (open-new-blocks! (list-ref full-path k) source end-offset end-column content-end #f)])]
     [else
      ;; Not fully matched: try lazy continuation of a tip paragraph.
      (define lazy-candidate? (and tip-is-leaf? (eq? (mblk-kind tip) 'paragraph) (mblk-open? tip)))
@@ -503,6 +540,15 @@
         (open-new-blocks! (list-ref full-path attach-index) source end-offset end-column content-end
                            (and lazy-candidate? (not rest-blank?) (not dangling-list-marker)))])]))
 
+;; Would a line starting at (offset, column) add an item to list `lst`? A marker of the list's
+;; kind and delimiter that is not a thematic break (which outranks list items).
+(define (continues-list? lst source offset column content-end)
+  (define d (try-list-marker source offset column content-end))
+  (and d
+       (not (try-thematic-break source offset column content-end))
+       (eq? (mdata-ref lst 'ordered?) (eq? (car d) 'ordered))
+       (eqv? (mdata-ref lst 'delimiter) (cadr d))))
+
 ;; Continues an already-open leaf block (code-block, html-block, or paragraph).
 (define (continue-leaf! doc full-path leaf source offset column content-end lr)
   (case (mblk-kind leaf)
@@ -512,6 +558,7 @@
         (define fc (mdata-ref leaf 'fence-char)) (define flen (mdata-ref leaf 'fence-length))
         (cond
           [(fence-closes? source offset column content-end fc flen)
+           (add-fence-tokens! leaf source offset column content-end)
            (close-block! leaf) (touch-path! full-path content-end)]
           [else
            (define indent (mdata-ref leaf 'fence-indent))
@@ -561,6 +608,10 @@
              (try-setext source offset column content-end))
         => (lambda (level)
              (set-mblk-kind-heading! leaf level)
+             (let*-values ([(ns nc) (scan-indent source offset column content-end)]
+                           [(c) (string-ref source ns)])
+               (add-token! leaf 'setext-underline ns
+                           (let run ([i ns]) (if (and (< i content-end) (eqv? (string-ref source i) c)) (run (add1 i)) i))))
              (touch-path! full-path content-end)
              (close-block! leaf))]
        [(find-new-block-start source offset column content-end #t)
@@ -604,14 +655,16 @@
     (cond
       [(blank-from? source offset content-end) (void)] ; nothing to open on a blank remainder
       [(match-blockquote-start? source offset column content-end)
-       (define-values (ok? o2 c2) (match-blockquote source offset column content-end))
+       (define-values (marker o2 c2) (match-blockquote source offset column content-end))
        (define bq (make-mblk 'block-quote offset '()))
+       (add-token! bq 'quote-marker marker (add1 marker))
        (append-child! parent bq)
        (loop bq o2 c2 #f)]
       [(try-atx source offset column content-end)
        => (lambda (d)
             (match-define (list level content-start) d)
             (define h (make-mblk 'heading offset (list (cons 'level level) (cons 'setext? #f))))
+            (add-token! h 'heading-marker (- content-start level) content-start)
             (add-atx-content! h source content-start content-end)
             ;; Closed on the same line it opens: process-line!'s end-of-line touch-path! (which
             ;; only walks the *open* path) will never reach it, so its span is fixed up here.
@@ -625,6 +678,7 @@
                                                             (cons 'fence-length flen)
                                                             (cons 'fence-indent findent)
                                                             (cons 'info info))))
+            (add-fence-tokens! cb source offset column content-end)
             (append-child! parent cb))]
       [(try-html-block-start source offset column content-end interrupt?)
        => (lambda (kind)
@@ -653,6 +707,9 @@
                (define item (make-mblk 'list-item offset (list (cons 'content-column content-column)
                                                                 (cons 'marker-end after)
                                                                 (cons 'blank-start? blank-first?))))
+               ;; A marker holds no tabs, so its width in columns is its width in characters.
+               (add-token! item (if (eq? kind 'bullet) 'bullet 'ordered-marker)
+                           (- after (- after-col marker-col)) after)
                (define existing (let ([kids (mblk-children parent)])
                                    (and (pair? kids) (eq? (mblk-kind (car kids)) 'list) (mblk-open? (car kids))
                                         (car kids))))
@@ -696,6 +753,16 @@
      (add-line! p src-start content-end vindent)
      (append-child! parent p)]))
 
+;; The fence run of an opening or closing fence line, and an opening fence's info string.
+(define (add-fence-tokens! cb source offset column content-end)
+  (define-values (ns nc) (scan-indent source offset column content-end))
+  (define c (string-ref source ns))
+  (define run-end (let run ([i ns]) (if (and (< i content-end) (eqv? (string-ref source i) c)) (run (add1 i)) i)))
+  (add-token! cb 'fence ns run-end)
+  (define-values (info-start _c) (scan-indent source run-end nc content-end))
+  (define info-end (let back ([j content-end]) (if (and (> j info-start) (space-or-tab? (string-ref source (sub1 j)))) (back (sub1 j)) j)))
+  (add-token! cb 'fence-info info-start info-end))
+
 (define (add-atx-content! h source content-start content-end)
   ;; Trims leading whitespace, then a trailing closing sequence of '#'s (preceded by
   ;; whitespace or at the very start) and trailing whitespace.
@@ -711,8 +778,11 @@
                                            (cond [(and (> j start) (eqv? (string-ref source (sub1 j)) #\#))
                                                   (closing (sub1 j) (add1 count))]
                                                  [(= count 0) end]
-                                                 [(= j start) j] ; whole content was '#'s
+                                                 [(= j start) ; whole content was '#'s
+                                                  (add-token! h 'heading-marker j end)
+                                                  j]
                                                  [(space-or-tab? (string-ref source (sub1 j)))
+                                                  (add-token! h 'heading-marker j end)
                                                   (let trim2 ([k (sub1 j)])
                                                     (if (and (> k start) (space-or-tab? (string-ref source (sub1 k))))
                                                         (trim2 (sub1 k)) k))]
@@ -735,7 +805,7 @@
 (define (parse-blocks source #:extensions [extensions no-extensions]
                       #:inline-parser [inline-parser default-inline-parser])
   (define lines (source-lines source))
-  (define line-idx (build-line-index source))
+  (define line-idx (lines->line-index lines))
   (define doc (make-mblk 'document 0 '()))
   (for ([lr (in-list lines)]) (process-line! doc source lr))
   (close-all! doc)
@@ -760,20 +830,20 @@
   (case (mblk-kind b)
     [(document) '()] ; not reachable (only doc's children are finalized)
     [(block-quote)
-     (list (block-quote (mblk-start b) (mblk-end b) '() (finalize-children source (reverse (mblk-children b)) refmap)))]
+     (list (block-quote (mblk-start b) (mblk-end b) (block-tokens-of b) (finalize-children source (reverse (mblk-children b)) refmap)))]
     [(list)
      (define kids (finalize-children source (reverse (mblk-children b)) refmap))
      (list (list-block (mblk-start b) (mblk-end b) '() (mdata-ref b 'ordered?) (mdata-ref b 'start-number)
                        (mdata-ref b 'delimiter) (list-tight? b) kids))]
     [(list-item)
      (define kids (finalize-children source (reverse (mblk-children b)) refmap))
-     (list (list-item (mblk-start b) (mblk-end b) '() (mdata-ref b 'marker-end) (mdata-ref b 'content-column) #f kids))]
+     (list (list-item (mblk-start b) (mblk-end b) (block-tokens-of b) (mdata-ref b 'marker-end) (mdata-ref b 'content-column) #f kids))]
     [(thematic-break) (list (thematic-break (mblk-start b) (mblk-end b) '()))]
     [(code-block)
      (define lns (leaf-lines b))
      (define out-lines (for/list ([l (in-list lns)]) (list (first l) (+ (first l) (second l)) (third l))))
      (define fenced? (mdata-ref b 'fenced?))
-     (list (code-block (mblk-start b) (mblk-end b) '() fenced?
+     (list (code-block (mblk-start b) (mblk-end b) (block-tokens-of b) fenced?
                        (and fenced? (mdata-ref b 'fence-char))
                        (and fenced? (let ([i (mdata-ref b 'info)]) (if (equal? i "") #f i)))
                        (trim-trailing-blank-lines source out-lines fenced?)))]
@@ -783,7 +853,7 @@
      (list (html-block (mblk-start b) (mblk-end b) '() (mdata-ref b 'kind) out-lines))]
     [(heading)
      (define-values (segs content) (build-segments+content source (leaf-lines b)))
-     (list (heading (mblk-start b) (mblk-end b) '() (mdata-ref b 'level) #f #f segs
+     (list (heading (mblk-start b) (mblk-end b) (block-tokens-of b) (mdata-ref b 'level) #f #f segs
                     (leaf-cell 'heading segs content refmap)))]
     [(paragraph)
      (cond
@@ -794,7 +864,7 @@
                (build-segments+content source (trim-trailing-line-ws source remaining)))
              (append refdefs
                      (list (heading (if (null? refdefs) (mblk-start b) (first (car remaining)))
-                                    (mblk-end b) '() level #t #f segs
+                                    (mblk-end b) (block-tokens-of b) level #t #f segs
                                     (leaf-cell 'heading segs content refmap)))))]
        [else
         (define-values (remaining refdefs) (strip-link-ref-defs source (leaf-lines b) refmap))
@@ -840,24 +910,46 @@
 (define (strip-link-ref-defs source lines refmap)
   ;; The paragraph is joined once and definitions are read from successive offsets, keeping a
   ;; paragraph of 50,000 definitions linear (tests/pathological-test.rkt, "many references").
+  (if (starts-with-bracket? source lines)
+      (strip-link-ref-defs* source lines refmap)
+      (values lines '())))
+
+(define (strip-link-ref-defs* source lines refmap)
   (define text (line-join source lines))
-  (let loop ([lines lines] [pos 0] [defs '()])
+  (define line-vec (list->vector lines))
+  (define joined-starts ; where each line starts in `text`
+    (for/fold ([acc '()] [pos 0] #:result (list->vector (reverse acc))) ([l (in-list lines)])
+      (values (cons pos acc) (+ pos (second l) 1))))
+  ;; A token over [a, b) of `text`, as source tokens, one per line it touches among the
+  ;; definition's lines [from, to) (only those: a paragraph of 50,000 definitions stays linear).
+  (define (source-tokens role a b from to)
+    (for/list ([i (in-range from to)]
+               #:when (let ([js (vector-ref joined-starts i)])
+                        (< (max a js) (min b (+ js (second (vector-ref line-vec i)))))))
+      (define l (vector-ref line-vec i)) (define js (vector-ref joined-starts i))
+      (token role (+ (first l) (- (max a js) js)) (+ (first l) (- (min b (+ js (second l))) js)))))
+  (let loop ([lines lines] [pos 0] [defs '()] [line-no 0])
     (cond
       [(null? lines) (values lines (reverse defs))]
       [else
        (match (parse-one-ref-def text pos)
-         [(list label dest title consumed-lines next-pos)
+         [(list label dest title consumed-lines next-pos (vector ls le ds de ts te))
           (define norm (normalize-label label))
           (cond
             [(non-empty-normalized? norm)
              (define used (take lines consumed-lines))
              (define def-start (first (car used)))
              (define def-end (let ([l (last used)]) (+ (first l) (second l))))
-             (define node (link-ref-def def-start def-end '() label dest title))
+             (define to (+ line-no consumed-lines))
+             (define tokens
+               (append (source-tokens 'refdef-label ls le line-no to)
+                       (source-tokens 'refdef-dest ds de line-no to)
+                       (if te (source-tokens 'refdef-title ts te line-no to) '())))
+             (define node (link-ref-def def-start def-end tokens label dest title))
              ;; Design §1.4: normalized label -> (dest title node); the first definition wins.
              (unless (hash-has-key? refmap norm)
                (hash-set! refmap norm (list dest title node)))
-             (loop (list-tail lines consumed-lines) next-pos (cons node defs))]
+             (loop (list-tail lines consumed-lines) next-pos (cons node defs) to)]
             [else (values lines (reverse defs))])] ; invalid (empty) label: keep as paragraph text
          [#f (values lines (reverse defs))])])))
 
@@ -867,6 +959,12 @@
   (define-values (remaining defs) (strip-link-ref-defs source lines (make-hash)))
   (null? remaining))
 
+;; Every definition starts with `[` at the paragraph's first character: most paragraphs are
+;; ruled out here without joining their lines.
+(define (starts-with-bracket? source lines)
+  (and (pair? lines)
+       (let ([l (car lines)]) (and (> (cadr l) 0) (eqv? (string-ref source (car l)) #\[)))))
+
 (define (non-empty-normalized? s) (> (string-length s) 0))
 
 (define (line-join source lines)
@@ -875,7 +973,9 @@
 ;; A reader for "[label]: dest \"title\"" possibly spanning several of `lines`, following
 ;; commonmark.js's parseReference with the scanners shared with the inline phase (refs.rkt).
 ;; Reads the definition starting at offset `start` (a line start) of `joined`. Returns (list
-;; label dest title lines-consumed next-line-start) or #f if no definition starts there.
+;; label dest title lines-consumed next-line-start positions) or #f if no definition starts
+;; there; positions is (vector label-start label-end dest-start dest-end title-start title-end),
+;; offsets into `joined`, title-end #f without a title.
 (define (parse-one-ref-def joined start)
   (define len (string-length joined))
   (let/ec return
@@ -895,7 +995,8 @@
           (values #f after-dest)))
     (define (finish title end)
       (define nl (line-end-at joined end))
-      (list label dest title (add1 (count-newlines joined start end)) (min len (add1 nl))))
+      (list label dest title (add1 (count-newlines joined start end)) (min len (add1 nl))
+            (vector start label-end dest-start after-dest title-start (and title after-title))))
     (cond
       [(and title (rest-of-line-blank? joined after-title)) (finish title after-title)]
       [(rest-of-line-blank? joined after-dest) (finish #f after-dest)]
