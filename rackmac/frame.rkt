@@ -314,7 +314,7 @@
 ;; tested on a bitmap-dc%); this just makes one and wires the hooks above.
 
 (define (build-status-bar!)
-  (set! status-bar (new status-bar% [parent frame])))
+  (set! status-bar (new status-bar% [parent frame] [document-getter (lambda () (not show-start-screen?))])))
 
 ;; ---- menus (generated from command metadata) -----------------------------
 

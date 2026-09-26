@@ -782,7 +782,7 @@ _Changed 2026-09-25._
 │                      │        └───────────────────────────────────────────────────────┘        │
 │                      │        Get Started  ·  a short note that shows what Rackmac does        │  opens Getting started.md
 ├──────────────────────┴─────────────────────────────────────────────────────────────────────────┤
-│                                                                                  Markdown  100% │
+│                                                                                                 │
 └────────────────────────────────────────────────────────────────────────────────────────────────┘
    Empty Library: the sidebar shows "No folders yet. Add the folder where you keep your notes (OneDrive and
    SharePoint folders work)." with an Add Folder… button; the Recent list says "Notes you open appear here."
