@@ -206,7 +206,8 @@
 ;; ---- defaults, memory, long notes -----------------------------------------------------------
 
 (test-case "the markdown-default-view setting decides how new notes open"
-  (check-equal? (setting-ref 'markdown-default-view) 'formatted)
+  (check-equal? (setting-default (find-setting 'markdown-default-view)) 'formatted)
+  (setting-set! 'markdown-default-view 'formatted)          ; whatever the real settings file says
   (check-equal? (map car (setting-choices (find-setting 'markdown-default-view))) '(formatted source))
   (setting-set! 'markdown-default-view 'source)
   (define b (note))

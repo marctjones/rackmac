@@ -357,6 +357,8 @@ recoloring shortly after typing stops, as before #266) and `center-measure` (#f:
 80-column wrap stays). Formatted removes the shadows. The status segment sits right after the Language. Windows has no
 shortcut yet (Ctrl+Alt+letter is AltGr; Ctrl+U is Underline). The per-document memory is on only in the app
 (`enable-markdown-view-memory!`, like recents tracking). A 227 KB, 5,000-line note switches in about 0.5 s each way.
+Copy (#334) is `buffer%`'s `copy` override (text%'s `cut` calls it): plain text only, never text%'s styled snips, so
+nothing of either view's rendering reaches the clipboard.
 
 ### 2.3 Format group and Format menu
 

@@ -203,9 +203,10 @@
          (define pos (event-position ev))
          (super on-event ev)                 ; the normal single click first (caret, drag-select)
          (click-at! pos (send ev get-time-stamp))]
-        [(send ev moving?)
+        [(and (send ev moving?) (or hovered-link (local-ref 'link-at #f)))   ; only where links exist
          (link-hover-at! (and (not (send ev dragging?)) (event-position ev)))
          (super on-event ev)]
+        [(send ev leaving?) (link-hover-at! #f) (super on-event ev)]
         [else (super on-event ev)]))
 
     ;; ---- links (#338): ⌘-click follows, hover names the target -------------

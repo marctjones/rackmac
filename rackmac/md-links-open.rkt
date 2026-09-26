@@ -12,10 +12,10 @@
 (define (system-open target)
   (cond
     [(string? target) (send-url target)]
-    [(mac?) (void (process* "/usr/bin/open" (path->string target)))]
+    [(mac?) (void (system* "/usr/bin/open" (path->string target)))]      ; returns at once
     [(windows?) (void (shell-execute "open" (path->string target) "" (current-directory) 'sw_shownormal))]
     [else (let ([xdg (find-executable-path "xdg-open")])
-            (when xdg (void (process* xdg (path->string target)))))]))
+            (when xdg (void (system* xdg (path->string target)))))]))
 (define open-externally (make-parameter system-open))
 
 (define (follow-link! b target)
