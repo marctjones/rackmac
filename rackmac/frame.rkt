@@ -104,10 +104,12 @@
     (super-new)
     ;; Prose documents sit centered at their measure, like a page (docs/UI-DESIGN.md 1.4):
     ;; the insets grow with the window instead of every paragraph getting margins. Code
-    ;; documents keep the normal insets.
+    ;; documents keep the normal insets, and so does a document whose `center-measure` local
+    ;; is #f (the Markdown Source view, md-view.rkt: wrapped at its measure, not centered).
     (define/public (fit-measure!)
       (define ed (send this get-editor))
-      (define measure (and ed (send ed auto-wrap) (send ed measure-width)))
+      (define measure (and ed (send ed auto-wrap) (send ed local-ref 'center-measure #t)
+                           (send ed measure-width)))
       (define-values (cw ch) (send this get-client-size))
       (define x (centered-inset cw measure))
       (define y (if measure prose-inset-y editor-inset-y))
@@ -148,6 +150,7 @@
   (add-hook! 'current-buffer-changed (lambda (b) (show-buffer! b) (refresh-tabs!) (send status-bar refresh)))
   (add-hook! 'status-changed (lambda () (send status-bar refresh)))
   (add-hook! 'mode-changed (lambda (b) (send canvas fit-measure!) (send status-bar refresh)))
+  (add-hook! 'markdown-view-changed (lambda (b) (send canvas fit-measure!) (send status-bar refresh)))   ; #269
   (add-hook! 'status-segments-changed (lambda () (send status-bar refresh)))
   ;; An edit that leaves the caret where it was (e.g. Replace All at position 0) fires
   ;; 'text-changed but not 'status-changed; the word count still needs a repaint.

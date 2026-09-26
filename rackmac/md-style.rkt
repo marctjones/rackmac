@@ -259,12 +259,20 @@
     (define rest (let skip ([ls ls]) (if (and (pair? ls) (< (layout-end (car ls)) ps)) (skip (cdr ls)) ls)))
     (define l (and (pair? rest) (<= (layout-start (car rest)) pe) (car rest)))
     (cond
-      [(not l) (send b set-paragraph-margins para 0 0 0)]
+      [(not l) (set-margins! b para 0 0)]
       [else
        (define left (* indent-step (layout-depth l)))
        (define first-left (if (item-first-line? b doc l para) (max 0 (- left hang-indent)) left))
-       (send b set-paragraph-margins para first-left left 0)])
+       (set-margins! b para first-left left)])
     rest))
+
+;; text% (mline.rkt) sometimes cannot find the last paragraph once a paragraph before it wraps
+;; (its paragraph search runs off the end of the line tree and lands on a wrapped line, which
+;; has no paragraph), and set-paragraph-margins then raises. Seen with the empty paragraph after
+;; the last newline, which has nothing to indent; skipped rather than breaking the render.
+(define (set-margins! b para first-left left)
+  (with-handlers ([exn:fail:contract? void])
+    (send b set-paragraph-margins para first-left left 0)))
 
 ;; Does paragraph `para` hold the marker of the list item that `l` (a leaf) begins?
 (define (item-first-line? b doc l para)
@@ -280,6 +288,6 @@
   (define was-modified? (send b is-modified?))
   (send b begin-edit-sequence #f #f)
   (for ([para (in-range (add1 (send b last-paragraph)))])
-    (send b set-paragraph-margins para 0 0 0))
+    (set-margins! b para 0 0))
   (send b end-edit-sequence)
   (send b set-modified was-modified?))

@@ -289,6 +289,14 @@ Indents: 24 px per quote or list level, an item's first line hanging 16 px. Code
 only (`text%` has no full-width paragraph fill). On a 282 KB, 5,000-line note: 5-6 ms CPU per keystroke (one
 paragraph restyled), about 0.65 s for the first render.
 
+_As built (#338, 2026-09-26):_ links are not clickbacks (text%'s fire on a plain click). `buffer%` asks the
+Language's `link-at` local (Markdown: `rackmac/md-links.rkt`, from the parser's document; in the Source view from the
+line under the pointer) and, on ⌘-click (Ctrl+click on Windows), runs the `follow-link` hook
+(`rackmac/md-links-open.rkt`): http(s)/mailto to the browser or mail app, `.md` in Rackmac, other files and folders
+with the default app (`open-externally`, a parameter), relative paths against the note's folder, `[[Name]]` as
+`Name.md` beside the note until the Library index resolves titles. Hover puts the target in the status message; ⌘
+shows the hand cursor over a link.
+
 Behavior: Enter continues lists and checklists; Enter on an empty item ends the list; Tab/Shift+Tab indent and
 outdent an item; typing `[[` opens the note picker (v0.4); a smart-typing setting is **off** (lawyers paste
 citations with straight quotes; the file is Markdown, not typography). The find row, selection, undo, zoom and
@@ -341,6 +349,16 @@ Both edit the same `text%`; the file never changes shape.
 - **Switching** is a full restyle of the document (clear to Standard, then either render or the source coloring),
   inside one edit sequence so it paints once; cursor and scroll position are kept; nothing enters undo. A 5,000-line
   note switches in well under a second (acceptance in `md-view-toggle`).
+
+_As built (#269, 2026-09-26):_ `rackmac/md-view.rkt` (the views; markdown-mode's highlighter, `#:on-enable` and
+`#:on-disable`) and `rackmac/md-view-commands.rkt` (`toggle-markdown-view`). The view is the document local
+`markdown-view`; Source shadows `document-style` ("Standard"), `restyle-edit`/`restyle-flush` (#f: whole-document
+recoloring shortly after typing stops, as before #266) and `center-measure` (#f: the canvas keeps the code insets; the
+80-column wrap stays). Formatted removes the shadows. The status segment sits right after the Language. Windows has no
+shortcut yet (Ctrl+Alt+letter is AltGr; Ctrl+U is Underline). The per-document memory is on only in the app
+(`enable-markdown-view-memory!`, like recents tracking). A 227 KB, 5,000-line note switches in about 0.5 s each way.
+Copy (#334) is `buffer%`'s `copy` override (text%'s `cut` calls it): plain text only, never text%'s styled snips, so
+nothing of either view's rendering reaches the clipboard.
 
 ### 2.3 Format group and Format menu
 

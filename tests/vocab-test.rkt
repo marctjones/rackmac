@@ -9,7 +9,8 @@
 (require rackunit racket/class racket/list racket/string
          "../rackmac/command.rkt" "../rackmac/commands.rkt" "../rackmac/mode.rkt"
          "../rackmac/keymap.rkt" "../rackmac/editor.rkt" "../rackmac/picker.rkt"
-         "../rackmac/ui/settings-dialog.rkt" "../rackmac/tools-menu.rkt")
+         "../rackmac/ui/settings-dialog.rkt" "../rackmac/tools-menu.rkt"
+         "../rackmac/md-view-commands.rkt")
 
 (define golden-names
   '(about close-tab close-other-tabs close-tabs-to-right command-palette copy copy-tab-path
@@ -27,6 +28,17 @@
 (test-case "built-in command names are stable (relabeling never renames a symbol)"
   (check-equal? (sort builtin-command-names symbol<?) (sort golden-names symbol<?))
   (for ([n golden-names]) (check-not-false (find-command n) (format "~a still resolves" n))))
+
+;; Commands from feature modules (their own files, not commands.rkt): pinned the same way.
+(define feature-command-names
+  '(toggle-markdown-view))                                   ; #269
+
+(test-case "feature command names are stable, with help and aliases"
+  (for ([n feature-command-names])
+    (define c (find-command n))
+    (check-not-false c (format "~a still resolves" n))
+    (check-false (string=? (command-help c) "") (format "~a has help" n))
+    (check-true (pair? (command-aliases c)) (format "~a has aliases" n))))
 
 (test-case "the Emacs glossary command is gone from the default product (moved to docs/emacs-glossary.md, #263)"
   (check-false (find-command 'show-glossary))

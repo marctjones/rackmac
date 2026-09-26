@@ -1,7 +1,8 @@
 #lang racket/base
 ;; The default status-bar segments: position, word/selection count, encoding, line ending,
 ;; Language and zoom. Registered through the same registry extensions use (rackmac/status.rkt).
-(require racket/class "status.rkt" "editor.rkt" "mode.rkt" "hook.rkt" "theme.rkt" "fileio.rkt")
+(require racket/class "status.rkt" "editor.rkt" "mode.rkt" "hook.rkt" "theme.rkt" "fileio.rkt"
+         "md-view.rkt" "md-view-commands.rkt")   ; the view segment and the command it runs
 (provide word-count word-count-scans reset-word-count-scans!)   ; test instrumentation
 
 ;; ---- word count: cached per buffer, invalidated on edits ------------------
@@ -73,6 +74,12 @@
 (add-status-segment! 'language
   (lambda () (mode-display-name (send (current-buffer) get-mode)))
   #:command 'set-language #:hint "Click to change the Language" #:priority 70)
+
+;; #269: which view a Markdown note is in, next to its Language; clicking switches.
+(add-status-segment! 'markdown-view
+  (lambda () (markdown-view-label (current-buffer)))
+  #:command 'toggle-markdown-view
+  #:hint "Click to switch between the formatted view and Markdown source" #:priority 60)
 
 (add-status-segment! 'zoom
   (lambda () (format "~a%" (inexact->exact (round (* 100 (/ font-size (default-font-size)))))))
