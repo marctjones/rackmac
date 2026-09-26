@@ -95,6 +95,12 @@
 ;; virtual spaces of a partially-consumed tab).
 (struct segment (content-start content-length source-start source-length) #:transparent)
 
+;; --- Edits ----------------------------------------------------------------------------------
+
+;; One text edit (design §3.1, §4.4): the characters [start, end) of the old text are replaced by
+;; `text`. `parser-reparse!` takes one; mdlib-edits' operations will return them.
+(struct edit (start end text) #:transparent)
+
 ;; --- Extensions -----------------------------------------------------------------------------
 
 (struct extension-set (tables tasks strike autolink-literal wiki tags dates keywords front-matter)

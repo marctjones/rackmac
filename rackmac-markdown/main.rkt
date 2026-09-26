@@ -1,18 +1,23 @@
 #lang racket/base
-;; Public API (design §6.2). This is the mdlib-pkg/mdlib-blocks/mdlib-inlines slice of the
-;; eventual surface: parsing, `block-inlines`, the HTML renderer, and line/column conversion.
-;; `style-runs`, `markup-tokens`, the parser/memo object, and the edit operations arrive with
-;; mdlib-runs, mdlib-parser, and mdlib-edits.
+;; Public API (design §6.2). This is the mdlib-pkg/mdlib-blocks/mdlib-inlines/mdlib-parser slice
+;; of the eventual surface: parsing, the parser object with its inline memo and change report,
+;; `block-inlines`, the HTML renderer, and line/column conversion. `style-runs`, `markup-tokens`
+;; and the edit operations arrive with mdlib-runs and mdlib-edits.
 (require racket/contract/base
-         "ast.rkt" "blocks.rkt" "html.rkt" "inlines.rkt"
+         "ast.rkt" "blocks.rkt" "html.rkt" "inlines.rkt" "parser.rkt"
          (rename-in "lines.rkt"
                     [offset->line+col offset->line+col/index]
                     [line+col->offset line+col->offset/index]))
 
 (provide (all-from-out "ast.rkt")
          leaf-block?
+         parser? (struct-out change-report)
          (contract-out
           [parse-document (->* (string?) (#:extensions extension-set?) document?)]
+          [make-parser (->* () (#:extensions extension-set?) parser?)]
+          [parser-parse! (-> parser? string? document?)]
+          [parser-reparse! (-> parser? string? edit? (values document? change-report?))]
+          [parser-document (-> parser? (or/c document? #f))]
           [document-blocks (-> document? (listof block?))]
           [block-inlines (-> leaf-block? (listof inline?))]
           [document->html (->* (document?) (#:unsafe? boolean?) string?)]
