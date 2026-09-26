@@ -59,6 +59,10 @@
 
 ;; --- Inlines ------------------------------------------------------------------------------------
 
+;; The wiki-link resolver of the current render: (target heading-or-#f) -> href.
+(define current-resolve-wiki
+  (make-parameter (lambda (target heading) (if heading (string-append target "#" heading) target))))
+
 (define (render-inlines content xs unsafe?)
   (define out (open-output-string))
   (for ([x (in-list xs)]) (render-inline x content unsafe? out))
@@ -76,6 +80,20 @@
     [(strong? x)
      (write-string "<strong>" out) (render-children (strong-children x) content unsafe? out)
      (write-string "</strong>" out)]
+    [(strike? x)
+     (write-string "<del>" out) (render-children (strike-children x) content unsafe? out) (write-string "</del>" out)]
+    [(wiki-link? x)
+     (write-string "<a class=\"wiki\" href=\"" out)
+     (write-string (escape-href ((current-resolve-wiki) (wiki-link-target x) (wiki-link-heading x))) out)
+     (write-string "\">" out) (write-escaped (wiki-link-text x) out) (write-string "</a>" out)]
+    [(tag? x)
+     (write-string "<span class=\"tag\">#" out) (write-escaped (tag-name x) out) (write-string "</span>" out)]
+    [(date-ref? x)
+     (write-string "<time datetime=\"" out) (write-string (date-ref-date x) out) (write-string "\">" out)
+     (write-escaped (substring content (inline-start x) (inline-end x)) out) (write-string "</time>" out)]
+    [(state-keyword? x)
+     (write-string "<span class=\"keyword\">" out) (write-escaped (state-keyword-keyword x) out)
+     (write-string "</span>" out)]
     [(link? x)
      (write-string "<a href=\"" out) (write-string (escape-href (link-dest x)) out) (write-string "\"" out)
      (write-title (link-title x) out)
@@ -111,9 +129,18 @@
       [(raw-html? x) (write-string (substring content (inline-start x) (inline-end x)) out)]
       [(emph? x) (plain-text (emph-children x) content out)]
       [(strong? x) (plain-text (strong-children x) content out)]
+      [(strike? x) (plain-text (strike-children x) content out)]
+      [(wiki-link? x) (write-string (wiki-link-text x) out)]
+      [(or (tag? x) (date-ref? x) (state-keyword? x))
+       (write-string (substring content (inline-start x) (inline-end x)) out)]
       [(link? x) (plain-text (link-children x) content out)]
       [(image? x) (plain-text (image-children x) content out)]
       [else (void)])))
+
+;; What a wiki link shows: its alias, else its target (and heading).
+(define (wiki-link-text x)
+  (or (wiki-link-alias x)
+      (if (wiki-link-heading x) (string-append (wiki-link-target x) "#" (wiki-link-heading x)) (wiki-link-target x))))
 
 (define (leaf-html cell unsafe?)
   (render-inlines (inline-cell-content cell) (cell-relative-inlines cell) unsafe?))
@@ -123,10 +150,12 @@
 ;; otherwise copy its inner HTML once per level (quadratic; tests/pathological-test.rkt).
 
 ;; `unsafe?` #f replaces raw HTML (blocks and inline) with cmark's placeholder comment.
-(define (document->html doc #:unsafe? [unsafe? #t] #:resolve-wiki [resolve-wiki (lambda (t h) t)])
+;; `resolve-wiki` maps a wiki link's target and heading (or #f) to its href.
+(define (document->html doc #:unsafe? [unsafe? #t] #:resolve-wiki [resolve-wiki (current-resolve-wiki)])
   (define source (document-text doc))
   (define out (open-output-string))
-  (for ([b (in-list (document-children doc))]) (render-block source b #f unsafe? out))
+  (parameterize ([current-resolve-wiki resolve-wiki])
+    (for ([b (in-list (document-children doc))]) (render-block source b #f unsafe? out)))
   (get-output-string out))
 
 ;; `bare-paragraph?` is #t only for a paragraph that is the direct child of a tight list item.
@@ -173,7 +202,23 @@
      (for ([i (in-list (list-block-children b))])
        (render-list-item source i (list-block-tight? b) unsafe? out))
      (emit "</" tag ">\n")]
-    [else 'none]))
+    [(table? b)
+     (define (row cells tag)
+       (write-string "<tr>\n" out)
+       (for ([c (in-list cells)] [a (in-list (table-alignments b))])
+         (write-string (string-append "<" tag (if a (format " align=\"~a\"" a) "") ">") out)
+         (write-string (leaf-html (table-cell-inlines c) unsafe?) out)
+         (write-string (string-append "</" tag ">\n") out))
+       (write-string "</tr>\n" out))
+     (write-string "<table>\n<thead>\n" out)
+     (row (table-head b) "th")
+     (write-string "</thead>\n" out)
+     (unless (null? (table-rows b))
+       (write-string "<tbody>\n" out)
+       (for ([r (in-list (table-rows b))]) (row r "td"))
+       (write-string "</tbody>\n" out))
+     (emit "</table>\n")]
+    [else 'none])) ; front matter is metadata, not content
 
 ;; A list item's children, always exactly one "\n" apart, with one exception (cmark's own
 ;; rendering, verified against spec examples 300/321/325 among others): a tight list's first
@@ -182,6 +227,11 @@
 ;; code-first item still gets "<li>\n...".
 (define (render-list-item source item tight? unsafe? out)
   (write-string "<li>" out)
+  (case (list-item-task item) ; GFM's rendering; ours, cancelled, is marked with a class
+    [(open) (write-string "<input disabled=\"\" type=\"checkbox\"> " out)]
+    [(done) (write-string "<input checked=\"\" disabled=\"\" type=\"checkbox\"> " out)]
+    [(cancelled) (write-string "<input class=\"cancelled\" disabled=\"\" type=\"checkbox\"> " out)]
+    [else (void)])
   (for/fold ([ends-with-newline? #f]) ([k (in-list (list-item-children item))] [idx (in-naturals)])
     (define bare? (and tight? (paragraph? k)))
     (unless (or (and (= idx 0) bare?) ends-with-newline?) (write-string "\n" out))

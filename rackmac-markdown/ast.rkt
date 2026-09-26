@@ -113,3 +113,22 @@
 
 (define no-extensions (extension-set #f #f #f #f #f #f #f #f #f))
 (define all-extensions (extension-set #t #t #t #t #t #t #t #t #t))
+;; GitHub Flavored Markdown's extensions only: tables, task lists, strikethrough, autolinks.
+(define gfm-extensions (extension-set #t #t #t #t #f #f #f #f #f))
+
+;; The keyword lists of design §2.3, read when a document is parsed (`parse-document`) or when a
+;; parser is made (`make-parser` snapshots them: a list changing under its memo would be unsound).
+;; heading-keywords: a heading whose content starts with one of these and a space carries it as
+;; `heading-keyword` and a `state-keyword` inline. date-keywords: a date preceded by one of these
+;; and a space is a date-ref with that keyword (matched without regard to case).
+(define heading-keywords (make-parameter '("TODO" "WAITING" "DONE")))
+(define date-keywords (make-parameter '("due")))
+
+;; The heading keyword a heading's content starts with, or #f.
+(define (heading-keyword-of content keywords)
+  (for/first ([k (in-list keywords)]
+              #:when (let ([n (string-length k)])
+                       (and (> (string-length content) n)
+                            (string=? (substring content 0 n) k)
+                            (eqv? (string-ref content n) #\space))))
+    k))

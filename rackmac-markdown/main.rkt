@@ -27,7 +27,9 @@
           [markup-tokens (->* (document?) (#:start exact-nonnegative-integer? #:end exact-nonnegative-integer?)
                               (listof token?))]
           [block-layouts (-> document? (listof layout?))]
-          [document->html (->* (document?) (#:unsafe? boolean?) string?)]
+          [document->html (->* (document?) (#:unsafe? boolean?
+                                             #:resolve-wiki (-> string? (or/c string? #f) string?))
+                               string?)]
           [offset->line+col (-> document? exact-nonnegative-integer?
                                  (values exact-nonnegative-integer? exact-nonnegative-integer?))]
           [line+col->offset (-> document? exact-nonnegative-integer? exact-nonnegative-integer?
@@ -51,18 +53,20 @@
           [toggle-task-edits (-> document? exact-nonnegative-integer? (listof edit?))]
           [set-task-edits (-> document? exact-nonnegative-integer? (or/c 'open 'done 'cancelled) (listof edit?))]))
 
+;; The keyword lists are the `heading-keywords` and `date-keywords` parameters' values now.
 (define (parse-document text #:extensions [extensions no-extensions])
   (parse-blocks text #:extensions extensions))
 
 (define (document-blocks doc) (document-children doc))
 
-;; A block with inline content (tables' cells join this with mdlib-ext).
-(define (leaf-block? b) (or (paragraph? b) (heading? b)))
+;; A block with inline content: paragraphs, headings, and table cells (mdlib-ext).
+(define (leaf-block? b) (or (paragraph? b) (heading? b) (table-cell? b)))
 
 ;; The block's inline nodes with absolute (document) offsets, parsed and relocated on first
 ;; request and cached on the block (design §1.3).
 (define (block-inlines b)
-  (cell-inlines (if (paragraph? b) (paragraph-inlines b) (heading-inlines b))))
+  (cell-inlines (cond [(paragraph? b) (paragraph-inlines b)] [(heading? b) (heading-inlines b)]
+                      [else (table-cell-inlines b)])))
 
 (define (offset->line+col doc offset)
   (offset->line+col/index (document-line-index doc) offset))
