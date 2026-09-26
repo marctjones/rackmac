@@ -427,6 +427,12 @@ performance acceptance replaces `md-parser`'s "5,000-line note under 50 ms": the
 | `mdlib-edits` | Token-based edit operations of §4.4 for `md-format-commands`, `md-lists-enter`, task toggle | M | each operation's diff touches only the tokens it names; toggling twice is the identity; tests across nested markup | `mdlib-runs` |
 | `mdlib-bench` | Fixtures (150 KB notes, 300 KB / 5,500 lines, `spec.txt`), block/inline split, budgets with 3× margin | S | 150 KB full parse ≤ 40 ms, block pass ≤ 5 ms at 300 KB, numbers recorded in this document | `mdlib-parser` |
 
+_Measured (#324, 2026-09-26; Racket 9.3 CS, Apple Silicon, `rackmac-markdown/tests/bench.rkt`, stable over three
+runs):_ `notes-150k.md` (150,298 chars) block 3 ms / inline 19 ms / full 20 ms; `notes-300k.md` (300,010 chars,
+5,262 lines) block 8 ms / inline 41 ms / full 46 ms; spec-derived text (14,818 chars) 1 / 2 / 3 ms; a keystroke on
+the 300 KB fixture averages 10.4 ms (reparse and style runs). Both budgets hold with more than 3× headroom; the
+tests assert them with a 3× margin, and 5× more on CI runners.
+
 **v0.4 Tasks and links**: conformance is the release gate.
 
 | Key | Title | Size | Acceptance | Depends |
