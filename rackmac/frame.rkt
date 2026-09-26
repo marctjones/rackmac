@@ -10,7 +10,8 @@
          set-find-options! main-find-bar tab-strip-style
          main-toolbar toolbar-shown? set-toolbar-shown! main-status-bar
          menu-for-title menu-item-for refresh-menu-enabled! tab-context-menu-groups
-         register-submenu!)
+         register-submenu!
+         register-start-screen! main-start-panel start-screen-shown? show-start-screen!)
 
 (define frame #f)
 (define (main-frame) frame)
@@ -26,7 +27,8 @@
 (define (set-toolbar-shown! on?) (set! show-toolbar? (and on? #t)) (layout-rows!))
 (define (layout-rows!)
   (send frame change-children
-        (lambda (cs) (append (if show-toolbar? (list toolbar) '()) (list tabs)
+        (lambda (cs) (append (if show-toolbar? (list toolbar) '())
+                             (list (if show-start-screen? start-panel tabs))
                              (if show-find? (list find-bar) '()) (list status-bar)))))
 (define menu-bar #f)
 (define tabs #f)
@@ -39,6 +41,43 @@
 (define syncing? #f)
 
 (define (focus-editor!) (when canvas (send canvas focus)))
+
+;; ---- start screen (#277 start-view) ---------------------------------------
+;; A native-controls panel that takes the tabs/canvas's spot when there is no document open,
+;; built by rackmac/library/start-screen.rkt (which owns New Note/Add Folder/Recent/Get
+;; Started -- frame.rkt only decides when to show it). `register-start-screen!` is called once,
+;; like register-submenu!, but a builder rather than a registry: there is exactly one start
+;; screen. A test that never requires that module gets an empty placeholder instead, so
+;; existing frame tests are unaffected.
+(define start-panel #f)
+(define (main-start-panel) start-panel)
+(define start-screen-builder #f)
+(define (register-start-screen! builder) (set! start-screen-builder builder))
+
+(define show-start-screen? #f)
+;; Set by the `show-start-screen` command below; stays #t (even with documents open) until a
+;; document actually becomes current again, per document -- see the current-buffer-changed
+;; handler in make-main-frame, the only place that clears it.
+(define forced-start-screen? #f)
+(define (start-screen-shown?) show-start-screen?)
+
+;; Called from a command (rackmac/library/start-screen.rkt's `show-start-screen`) to bring the
+;; screen back on demand. Sets the flags directly rather than going through
+;; recompute-start-screen! below, which would see the still-current real document and
+;; immediately clear the force.
+(define (show-start-screen!)
+  (when frame
+    (set! forced-start-screen? #t)
+    (set! show-start-screen? #t)
+    (layout-rows!)))
+
+;; Recomputes visibility from the current flags; called on 'buffers-changed (so the screen
+;; comes back once the last document closes) and, after clearing the force, on
+;; 'current-buffer-changed (so it leaves once a document opens).
+(define (recompute-start-screen!)
+  (when frame
+    (set! show-start-screen? (or forced-start-screen? (no-document-open?)))
+    (layout-rows!)))
 
 ;; ---- window --------------------------------------------------------------
 
@@ -141,9 +180,16 @@
                     [horizontal-inset editor-inset-x] [vertical-inset editor-inset-y]))
   (set! find-bar (new find-bar% [parent frame] [on-close (lambda () (hide-find-bar!))]))
   (send frame change-children (lambda (cs) (remq find-bar cs)))   ; hidden until Find
+  (set! start-panel (if start-screen-builder (start-screen-builder frame)
+                        (new vertical-panel% [parent frame])))    ; no start-screen module loaded
   (build-status-bar!)
 
   (add-hook! 'buffers-changed refresh-tabs!)
+  (add-hook! 'buffers-changed recompute-start-screen!)
+  (add-hook! 'current-buffer-changed
+             (lambda (b)
+               (when (and (send b is-shown?) (not (placeholder-buffer? b))) (set! forced-start-screen? #f))
+               (recompute-start-screen!)))
   (add-hook! 'buffer-modified-changed (lambda (b) (refresh-tabs!) (send status-bar refresh)))
   (add-hook! 'current-buffer-changed (lambda (b) (show-buffer! b) (refresh-tabs!) (send status-bar refresh)))
   (add-hook! 'status-changed (lambda () (send status-bar refresh)))
@@ -170,6 +216,7 @@
   (send toolbar rebuild!)
   (refresh-tabs!)
   (show-buffer! (current-buffer))
+  (recompute-start-screen!)
   (rebuild-menus!)
   frame)
 
@@ -198,7 +245,9 @@
   (when frame
     (define b (current-buffer))
     (send frame set-label
-          (format "~a~a — Rackmac" (if (send b is-modified?) "• " "") (send b get-name)))))
+          (if (placeholder-buffer? b)
+              "Rackmac"
+              (format "~a~a — Rackmac" (if (send b is-modified?) "• " "") (send b get-name))))))
 
 ;; ---- status bar ----------------------------------------------------------
 ;; The widget itself lives in ui/status-bar.rkt (pure layout and drawing, so it can be

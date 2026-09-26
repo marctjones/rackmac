@@ -47,7 +47,8 @@
   (check-eq? (current-buffer) a)
   (check-true (send (current-buffer) is-shown?))
   (kill-buffer! a)
-  (check-equal? (send (current-buffer) get-name) "Scratch Pad" "a fresh Scratch Pad when nothing is left")
+  (check-true (placeholder-buffer? (current-buffer)) "the hidden placeholder when nothing is left")
+  (check-false (send (current-buffer) is-shown?))
   (check-false (messages-buffer? (current-buffer))))
 
 (test-case "closing the Activity log hides it; later messages are still recorded"
