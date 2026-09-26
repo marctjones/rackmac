@@ -9,12 +9,10 @@
 ;; An autosave timer (#75) debounces per document: each edit restarts a one-shot timer at the
 ;; `autosave-interval` setting (off when #f), matching buffer.rkt's own highlight-timer
 ;; pattern; when it fires, a still-modified document's snapshot is (re)written. Saving, or
-;; closing a document that is no longer modified, deletes its snapshot (#76); closing WITHOUT
-;; saving (Don't Save) leaves the snapshot in place -- that unsaved text is exactly what
-;; recovery exists for.
+;; closing a document that is no longer modified, deletes its snapshot (#76), and so does
+;; Don't Save, as in Word and Pages -- on quit only once the whole quit is confirmed.
 ;;
-;; On launch (#77), any snapshots left behind (a crash, `kill -9`, or a previous Don't Save)
-;; are offered back through `recover-on-launch!`, which asks `recovery-decide!` (a parameter,
+;; On launch (#77), any snapshots left behind (a crash or `kill -9`) are offered back through `recover-on-launch!`, which asks `recovery-decide!` (a parameter,
 ;; like commands.rkt's confirm-* dialogs) what to do with each one, so tests and scripts can
 ;; answer without the real window.
 (require racket/class racket/gui/base racket/path racket/file racket/os racket/list racket/port racket/system

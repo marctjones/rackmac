@@ -289,10 +289,13 @@
 
 ;; ---- adversarial review fixes (E3.M1) ------------------------------------------------------
 
+(define unix? (not (eq? (system-type 'os) 'windows)))
+
 (define (activity-since before)
   (define now (send (messages-buffer) get-text))
   (substring now (min (string-length before) (string-length now))))
 
+(when unix?   ; file permissions and kill -0 are Unix/macOS behaviour
 (test-case "a failed autosave is reported once in the Activity log and never claims a backup exists"
   (setting-set! 'autosave-interval 30)
   (define b (new-buffer! "untitled"))
@@ -320,8 +323,9 @@
    (lambda () (file-or-directory-permissions (recovery-dir) #o500))
    (lambda () (autosave-buffer! b))
    (lambda () (file-or-directory-permissions (recovery-dir) #o700)))
-  (check-regexp-match #rx"Could not save an automatic backup" (activity-since before2)))
+  (check-regexp-match #rx"Could not save an automatic backup" (activity-since before2))))
 
+(when unix?   ; file permissions and kill -0 are Unix/macOS behaviour
 (test-case "the recovery folder is private (0700) and every snapshot file is 0600"
   (clear-recovery!)
   (delete-directory/files (recovery-dir))
@@ -337,7 +341,7 @@
   (send b insert "!")
   (snapshot-buffer! b)
   (check-equal? (file-or-directory-permissions (recovery-dir) 'bits) #o700)
-  (check-equal? (file-or-directory-permissions f 'bits) #o600))
+  (check-equal? (file-or-directory-permissions f 'bits) #o600)))
 
 (test-case "quarantined snapshots older than 30 days are pruned; newer ones are kept"
   (make-directory* (recovery-dir))
@@ -479,6 +483,7 @@
                 (format "~a moved aside" id)))
   (check-regexp-match #rx"not a valid recovery snapshot" (activity-since before)))
 
+(when unix?   ; file permissions and kill -0 are Unix/macOS behaviour
 (test-case "one snapshot that fails to restore is moved aside and reported; the others still restore"
   (clear-recovery!)
   (define p (doc-path 16))
@@ -500,8 +505,9 @@
   (check-true (for/or ([f (directory-list (recovery-dir))])
                 (regexp-match? (regexp (format "^~a[.]rktd[.]corrupt-" bad-id)) (path->string f))))
   (check-regexp-match #rx"could not be restored" (activity-since before))
-  (check-not-false (snapshot-for ok-id)))
+  (check-not-false (snapshot-for ok-id))))
 
+(when unix?   ; file permissions and kill -0 are Unix/macOS behaviour
 (test-case "a second Rackmac leaves a running one's snapshots alone; once it has exited they are offered"
   (clear-recovery!)
   (define-values (sp o i e) (subprocess #f #f #f (string->path "/bin/sleep") "60"))  ; a live process
@@ -525,4 +531,4 @@
      (check-not-false (snapshot-for "3-1") "and Discard on the others did not delete it"))
    (lambda () (subprocess-kill sp #t) (subprocess-wait sp)))
   (check-equal? (offered-ids) '("3-1") "its owner has exited: offered now")
-  (check-false (snapshot-for "3-1")))
+  (check-false (snapshot-for "3-1"))))
