@@ -323,3 +323,51 @@
         (check-true (>= (ink-contrast bm (token-hex 'bench a)) 4.5))
         (check-true (get-field on? (bench-row-marker (send fl get-selected))) "the selected row's marker is on")
         (check-not-false (hash-ref colors (token-hex 'accent a) #f) "and it is painted in the accent")))))
+
+;; ---- one bench surface: no scrollbar gutter, no boxed lists (first live look, 2026-09-26) ----
+;; The live window showed a light strip down the right of each list (hierlist keeps a vertical
+;; scrollbar by default) and a box around each. The canvas style is checked through the hidden
+;; window's own geometry: a gutter or a border makes the client area narrower than the canvas.
+
+(test-case "the lists have no scrollbar gutter or border while their rows fit"
+  (check-equal? bench-list-style '(no-hscroll auto-vscroll no-border))
+  (send f reflow-container)
+  (for ([lst (list (recent) (folders))])
+    (define-values (w h) (send lst get-size))
+    (define-values (cw ch) (send lst get-client-size))
+    (check-true (> w 0))
+    (check-equal? cw w (format "~a: the whole width is list, no gutter down the right" (if (eq? lst (recent)) "Recent" "Folders")))
+    (check-equal? ch h "no border box")))
+
+;; The sidebar as it reads top to bottom (filter row, Recent, Folders), rendered headless: every
+;; pixel column is bench, rule or ink, never white or the OS panel grey.
+(define (render-sidebar w h)
+  (render-bitmap
+   w h
+   (lambda (dc)
+     (define y 0)
+     (define (at! height draw)
+       (send dc set-origin 0 y)
+       (draw)
+       (set! y (+ y height)))
+     (at! 36 (lambda () (draw-filter-row dc w 36 #:shortcut "⇧⌘O")))
+     (at! 26 (lambda () (draw-section-header dc w 26 "Recent" #:rule? #f)))
+     (at! (send (recent) min-height) (lambda () (send (send (recent) get-editor) print-to-dc dc 1)))
+     (at! 26 (lambda () (draw-section-header dc w 26 "Folders")))
+     (at! 0 (lambda () (send (send (folders) get-editor) print-to-dc dc 1)))
+     (send dc set-origin 0 0))
+   #:background (token 'bench)))
+
+(test-case "the whole sidebar is one bench: no white column, sections split by bench-rule lines"
+  (for ([a appearances])
+    (with-appearance a
+      (lambda ()
+        (send (panel) refresh-colors!)
+        (define bm (render-sidebar 240 420))
+        (write-tour-png! (format "sidebar-~a" a) bm)
+        (check-false (hash-ref (bitmap-colors bm) "#FFFFFF" #f) "no white anywhere")
+        (for ([x (in-list '(1 120 230 238))])
+          (check-equal? (bitmap-pixel-hex bm x 410) (token-hex 'bench a)
+                        (format "~a: column ~a is bench to the bottom" a x)))
+        (check-equal? (bitmap-pixel-hex bm 238 (+ 36 26 (send (recent) min-height)))
+                      (token-hex 'bench-rule a) "a bench-rule line, full width, between Recent and Folders")))))

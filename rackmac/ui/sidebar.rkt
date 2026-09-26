@@ -21,7 +21,7 @@
 ;; contrast against whichever ground it is actually on.
 (require racket/class racket/gui/base racket/list mrlib/hierlist
          "tokens.rkt" "../theme.rkt" "../command.rkt" "context-menu.rkt")
-(provide filter-row% section-header% bench-list% rule-column%
+(provide filter-row% section-header% bench-list% rule-column% bench-list-style bench-list-fixed-style
          draw-filter-row draw-section-header
          add-bench-row! set-bench-row-label! bench-row-label bench-row-data
          row-font header-font row-text-color selected-row-text-color highlight-hex
@@ -217,6 +217,16 @@
   (when on? (send (bench-row-marker item) set-on! #t)))
 
 ;; ---- the list -----------------------------------------------------------------------------
+
+;; The list's editor-canvas% style. hierarchical-list%'s default keeps a vertical scrollbar
+;; at all times, which on macOS is a light gutter down the right of every list (the white
+;; strips of the first live look), and a canvas border boxes each list; the bench is one
+;; surface, divided only by bench-rule lines (brand: "lines, not layers"). So: no border, and
+;; the scrollbar appears only while a list is taller than its space (Folders with many open
+;; folders). Recent is sized to its rows (`fit-height!`), so it never needs one: it takes
+;; `bench-list-fixed-style`, which has no scrollbar at all (a wheel still scrolls it).
+(define bench-list-style '(no-hscroll auto-vscroll no-border))
+(define bench-list-fixed-style '(no-hscroll hide-vscroll no-border))
 ;; on-activate: (item how) with how 'click, 'double or 'key -- called for a mouse click that
 ;; selects a row, a double-click, and Return (the panel calls `activate-selected!`). Arrow keys
 ;; only move the selection, never open (on-selected: (item-or-#f) hears every change). on-context: (item x y) for a right-click, after the row
@@ -224,9 +234,10 @@
 (define bench-list%
   (class hierarchical-list%
     (init-field [on-activate void] [on-context void] [on-opened void] [on-closed void] [on-selected void])
-    (super-new [style '(no-hscroll)])
+    (init [style bench-list-style])
+    (super-new [style style])
     (inherit get-selected set-canvas-background show-focus allow-tab-exit has-focus? get-items
-             allow-deselect select)
+             allow-deselect select min-height get-editor vertical-inset)
     (show-focus #t)
     (allow-tab-exit #f)       ; Tab reaches the sidebar panel, which moves focus itself
     (allow-deselect #t)
@@ -265,6 +276,14 @@
     (define/override (on-focus on?)
       (super on-focus on?)
       (restyle-selection!))
+
+    ;; Makes the list exactly as tall as its rows (plus the canvas's own inset), so it never
+    ;; scrolls and leaves no empty band of bench below the last row.
+    (define/public (fit-height!)
+      (define ed (get-editor))
+      (define h (box 0))
+      (send ed get-extent #f h)
+      (min-height (max 1 (inexact->exact (ceiling (+ (unbox h) (* 2 (vertical-inset))))))))
 
     (define/public (activate-selected!)
       (define i (get-selected))

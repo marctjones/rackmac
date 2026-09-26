@@ -267,6 +267,9 @@ OS-colored strip). Keyboard: showing the Library (⌥⌘S) puts focus on the fil
 Folders → document; Escape returns to the document; Return opens (a folder opens or closes); ⌘ shortcuts work
 from inside it. A click opens a file; the selection follows the current document. The width is a setting
 (`library-width`), not yet draggable (pane splitters are E9). Windows has no Show Library shortcut yet.
+The lists have no canvas border and no standing scrollbar (the first live look showed a light gutter down each
+list and a box around it): Folders shows the native scrollbar only while it overflows, and Recent is sized to its
+rows and never shows one, so the sidebar reads as one bench divided by `bench-rule` lines.
 
 ### 2.2 The document area for notes (Markdown, WYSIWYM)
 
