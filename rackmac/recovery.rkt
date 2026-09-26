@@ -17,7 +17,7 @@
 ;; are offered back through `recover-on-launch!`, which asks `recovery-decide!` (a parameter,
 ;; like commands.rkt's confirm-* dialogs) what to do with each one, so tests and scripts can
 ;; answer without the real window.
-(require racket/class racket/gui/base racket/path racket/file
+(require racket/class racket/gui/base racket/path racket/file racket/os
          "hook.rkt" "settings.rkt" "platform.rkt" "fileio.rkt" "editor.rkt" "mode.rkt")
 (provide (struct-out snapshot) recovery-dir list-snapshots delete-snapshot!
          recovery-decide! recover-on-launch! enable-autosave-recovery!
@@ -35,7 +35,14 @@
 ;; #f for a document that has never been saved (an "untitled" tab); `name` is always set, so
 ;; an untitled document still has something to show in the recovery list. `#:prefab` so `write`
 ;; and `read` round-trip it directly, with no custom (de)serializer to keep in sync.
-(struct snapshot (id path name mode cursor saved-at text) #:prefab)
+;;
+;; `file-mtime` is the file's modify-seconds when the snapshot was taken (#f when there was no
+;; file on disk yet), so a restore can tell whether the file was changed elsewhere since and
+;; must not be overwritten by Save. `owner` is the process id of the Rackmac that wrote it, so
+;; a second running Rackmac never offers (or discards) the first one's live backups.
+;; Snapshots written before these two fields existed have 7 fields; read-snapshot upgrades them
+;; with file-mtime 'unknown and owner #f (see stale-reason for what 'unknown means).
+(struct snapshot (id path name mode cursor saved-at text file-mtime owner) #:prefab)
 
 (define (recovery-dir) (build-path (config-dir) "recovery"))
 (define (snapshot-file-path id) (build-path (recovery-dir) (format "~a.rktd" id)))
@@ -73,18 +80,38 @@
   (when (file-exists? p)
     (with-handlers ([exn:fail? (lambda (e) (report-error! 'recovery e))]) (delete-file p))))
 
-;; #f (after quarantining the file, in the spirit of store.rkt's corruption handling) when `p`
-;; is not a readable snapshot -- a half-written or hand-edited file must never crash startup.
+;; Moves a snapshot file aside (never deletes it: it may still hold text worth digging out by
+;; hand) and says so in the Activity log.
+(define (quarantine! p why)
+  (define aside (string->path (format "~a.corrupt-~a" (path->string p) (current-seconds))))
+  (with-handlers ([exn:fail? void]) (rename-file-or-directory p aside #t))
+  (report-error! 'recovery (format "~a: ~a; moved aside to ~a" (path->string p) why (path->string aside))))
+
+;; The id names the snapshot's own file (delete-snapshot! builds a path from it), so it must be
+;; exactly that file's name: never a path of its own.
+(define (valid-snapshot-fields? p id path name mode cursor saved-at text file-mtime owner)
+  (and (string? id) (regexp-match? #px"^[A-Za-z0-9_-]+$" id)
+       (equal? (path->string (file-name-from-path p)) (format "~a.rktd" id))
+       (or (not path) (and (string? path) (absolute-path? path)))
+       (string? name) (symbol? mode) (exact-nonnegative-integer? cursor) (real? saved-at)
+       (string? text)
+       (or (not file-mtime) (eq? file-mtime 'unknown) (exact-integer? file-mtime))
+       (or (not owner) (exact-positive-integer? owner))))
+
+;; A snapshot read from `p`, or #f (after quarantining the file, in the spirit of store.rkt's
+;; corruption handling) when it is not a readable snapshot with fields of the right types -- a
+;; half-written or hand-edited file must never crash startup.
 (define (read-snapshot p)
   (define v (with-handlers ([exn:fail? (lambda (e) e)]) (call-with-input-file p read)))
+  (define fields (and (eq? (prefab-struct-key v) 'snapshot) (cdr (vector->list (struct->vector v)))))
+  (define all-fields
+    (and fields (case (length fields)
+                  [(9) fields]
+                  [(7) (append fields (list 'unknown #f))]   ; written before file-mtime/owner
+                  [else #f])))
   (cond
-    [(snapshot? v) v]
-    [else
-     (define aside (string->path (format "~a.corrupt-~a" (path->string p) (current-seconds))))
-     (with-handlers ([exn:fail? void]) (rename-file-or-directory p aside #t))
-     (report-error! 'recovery (format "~a: not a valid recovery snapshot; moved aside to ~a"
-                                      (path->string p) (path->string aside)))
-     #f]))
+    [(and all-fields (apply valid-snapshot-fields? p all-fields)) (apply snapshot all-fields)]
+    [else (quarantine! p "not a valid recovery snapshot") #f]))
 
 ;; Quarantined files are kept for a while in case someone wants to dig text out of them by
 ;; hand, then removed, so the private store does not grow forever. The age comes from the
@@ -113,12 +140,17 @@
 ;; file still holds the previous snapshot).
 (define (snapshot-buffer! b)
   (define id (or (buffer-recovery-id b) (fresh-id!)))
+  (define p (send b get-path))
   (write-snapshot!
-   (snapshot id
-             (and (send b get-path) (path->string (send b get-path)))
-             (send b get-name) (send b get-mode)
-             (send b get-start-position) (current-seconds) (send b get-text)))
+   (snapshot id (and p (path->string p)) (send b get-name) (send b get-mode)
+             (send b get-start-position) (current-seconds) (send b get-text)
+             (and p (file-seconds p)) (getpid)))
   (hash-set! ids b id))
+
+;; #f when there is no file at `p`.
+(define (file-seconds p)
+  (with-handlers ([exn:fail:filesystem? (lambda (e) #f)])
+    (and (file-exists? p) (file-or-directory-modify-seconds p))))
 
 (define (forget-buffer-snapshot! b)
   (define id (buffer-recovery-id b))
@@ -175,10 +207,43 @@
   (or (and (snapshot-path s) (path->string (file-name-from-path (string->path (snapshot-path s)))))
       (snapshot-name s)))
 
+;; A Language this Rackmac no longer has (an extension since removed) falls back to the one
+;; the file name suggests.
+(define (snapshot-language s)
+  (define m (snapshot-mode s))
+  (cond [(find-mode m) m]
+        [(snapshot-path s) (or (mode-for-path (string->path (snapshot-path s))) 'text-mode)]
+        [else 'text-mode]))
+
+;; Why the snapshot's file must not be written over by Save any more, or #f when it is safe to
+;; keep the path. For a snapshot from before file-mtime existed ('unknown) the only clue is the
+;; backup's own time: a file modified after that was certainly changed elsewhere; one that is
+;; gone cannot be told apart from one that was moved or deleted on purpose, so both detach.
+(define (stale-reason s p)
+  (define now (file-seconds p))
+  (define then (snapshot-file-mtime s))
+  (cond
+    [(not now) (and then "its file has been moved or deleted since")]
+    [(not then) "a file with its name was created since"]
+    [(eq? then 'unknown) (and (> now (snapshot-saved-at s)) "its file was changed since")]
+    [(= now then) #f]
+    [else "its file was changed since"]))
+
+;; Puts the snapshot's text back. With a trustworthy file, the document is (re)opened from it
+;; first -- or reused, if the file was already opened from the command line -- so its encoding
+;; and line endings come from the file and Save writes them back unchanged; then the text is
+;; replaced by the backup's. Otherwise the text goes into a new document with no file, so Save
+;; asks where to put it instead of silently overwriting someone else's changes.
 (define (restore-snapshot! s)
-  (define b (new-buffer! (snapshot-display-name s) #:mode (snapshot-mode s)))
+  (define p (and (snapshot-path s) (string->path (snapshot-path s))))
+  (define open (and p (find-buffer-by-path p)))
+  (define why (and p (or (stale-reason s p)
+                         (and open (send open is-modified?) "it is already open with other unsaved changes"))))
+  (define b (if (and p (not why))
+                (open-file! p)
+                (new-buffer! (snapshot-display-name s) #:mode (snapshot-language s))))
+  (unless (eq? (send b get-mode) (snapshot-language s)) (send b set-mode! (snapshot-language s)))
   (hash-set! ids b (snapshot-id s))          ; keep autosaving to the file it came from
-  (when (snapshot-path s) (send b set-path! (string->path (snapshot-path s))))
   (send b begin-edit-sequence)
   (send b erase)
   (send b insert (snapshot-text s))
@@ -186,7 +251,10 @@
   (send b set-position (min (snapshot-cursor s) (send b last-position)))
   (send b set-modified #t)
   (set-current-buffer! b)
-  (message "Restored ~a from an automatic backup." (send b get-name)))
+  (if why
+      (message "Restored ~a from an automatic backup as a document with no file, because ~a. Use Save As to keep it."
+               (send b get-name) why)
+      (message "Restored ~a from an automatic backup." (send b get-name))))
 
 ;; A real dialog: one row per recovered document, a checkbox defaulting to Restore, one OK
 ;; button that applies every row's current choice.
@@ -200,7 +268,7 @@
   (for ([s (in-list snaps)])
     (define row (new horizontal-panel% [parent dlg] [alignment '(left center)] [stretchable-height #f]))
     (new message% [parent row]
-         [label (format "~a — ~a" (snapshot-display-name s) (mode-display-name (snapshot-mode s)))])
+         [label (format "~a — ~a" (snapshot-display-name s) (mode-display-name (snapshot-language s)))])
     (new check-box% [parent row] [label "Restore"] [value #t]
          [callback (lambda (cb e) (hash-set! decisions (snapshot-id s) (if (send cb get-value) 'restore 'discard)))]))
   (define buttons (new horizontal-panel% [parent dlg] [alignment '(right center)] [stretchable-height #f]))
@@ -216,7 +284,11 @@
   (define snaps (list-snapshots))
   (when (pair? snaps)
     (define decisions ((recovery-decide!) snaps))
+    ;; One snapshot that cannot be restored is moved aside and reported; the rest still are.
     (for ([s (in-list snaps)])
-      (case (cond [(assoc (snapshot-id s) decisions) => cdr] [else 'discard])
-        [(restore) (restore-snapshot! s)]
-        [(discard) (delete-snapshot! (snapshot-id s))]))))
+      (with-handlers ([exn:fail? (lambda (e)
+                                   (quarantine! (snapshot-file-path (snapshot-id s))
+                                                (format "could not be restored (~a)" (exn-message e))))])
+        (case (cond [(assoc (snapshot-id s) decisions) => cdr] [else 'discard])
+          [(restore) (restore-snapshot! s)]
+          [(discard) (delete-snapshot! (snapshot-id s))])))))

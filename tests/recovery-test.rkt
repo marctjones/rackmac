@@ -245,6 +245,7 @@
   (send b2 set-position 5)
   (snapshot-buffer! b2)
   (define id2 (buffer-recovery-id b2))
+  (kill-buffer! b2)   ; as after a crash: the file is no longer open, its snapshot remains
 
   ;; id1 (untitled, text-mode) is discarded and id2 (a .md file, markdown-mode) is restored --
   ;; distinct Languages, so a restore that ignored snapshot-mode entirely would still be caught.
@@ -347,3 +348,156 @@
   (check-false (file-exists? old))
   (check-true (file-exists? recent))
   (delete-file recent))
+
+;; Restores just `id` (and discards every other snapshot on disk), returning the document the
+;; restore made current.
+(define (restore-only! id)
+  (parameterize ([recovery-decide!
+                  (lambda (snaps)
+                    (for/list ([s snaps]) (cons (snapshot-id s) (if (equal? (snapshot-id s) id) 'restore 'discard))))])
+    (recover-on-launch!))
+  (current-buffer))
+
+;; Edits the file at `p` (created with `bytes` first), snapshots it and closes it unsaved, as a
+;; crash would leave it. Returns the snapshot id.
+(define (crash-with-edits! p bytes edit)
+  (call-with-output-file p #:exists 'truncate (lambda (o) (write-bytes bytes o)))
+  (define b (open-file! p))
+  (send b insert edit (send b last-position))
+  (snapshot-buffer! b)
+  (define id (buffer-recovery-id b))
+  (kill-buffer! b)
+  id)
+
+(define (write-raw-snapshot! id . fields)
+  (make-directory* (recovery-dir))
+  (with-output-to-file (build-path (recovery-dir) (format "~a.rktd" id)) #:exists 'truncate
+    (lambda () (write (apply make-prefab-struct 'snapshot id fields)))))
+
+(define (buffers-for p) (filter (lambda (b) (equal? (send b get-path) p)) (all-buffers)))
+
+(test-case "restore keeps a Latin-1 CRLF file's encoding and line endings: Save writes them back"
+  (clear-recovery!)
+  (define p (doc-path 10))
+  (define id (crash-with-edits! p #"caf\351\r\nsecond line\r\n" "déjà vu\n"))
+  (define r (restore-only! id))
+  (check-equal? (send r get-path) p)
+  (check-equal? (send r local-ref 'encoding) 'latin-1)
+  (check-equal? (send r local-ref 'eol) "\r\n")
+  (check-true (send r is-modified?))
+  (check-true (save-buffer! r))
+  (check-equal? (file->bytes p) #"caf\351\r\nsecond line\r\nd\351j\340 vu\r\n" "bytes on disk, not UTF-8/LF")
+  (check-false (snapshot-for id) "saving discarded the snapshot"))
+
+(test-case "restore detaches the file when it was changed elsewhere since the backup, so Save cannot overwrite it"
+  (clear-recovery!)
+  (define p (doc-path 11))
+  (define id (crash-with-edits! p #"original" " and my edits"))
+  (define before (send (messages-buffer) get-text))
+  (display-to-file "edited in another app" p #:exists 'truncate)
+  (file-or-directory-modify-seconds p (+ (file-or-directory-modify-seconds p) 60))
+  (define r (restore-only! id))
+  (check-equal? (send r get-text) "original and my edits" "the recovered text is kept")
+  (check-false (send r get-path) "no file: Save will ask Save As")
+  (check-true (send r is-modified?))
+  (check-regexp-match #rx"changed since.*Save As" (activity-since before))
+  (check-equal? (file->string p) "edited in another app" "the other app's changes are untouched"))
+
+(test-case "restore detaches the file when it has been moved or deleted since the backup"
+  (clear-recovery!)
+  (define p (doc-path 12))
+  (define id (crash-with-edits! p #"here" " then gone"))
+  (delete-file p)
+  (define r (restore-only! id))
+  (check-equal? (send r get-text) "here then gone")
+  (check-false (send r get-path)))
+
+(test-case "a document whose file never existed on disk keeps its path"
+  (clear-recovery!)
+  (define p (doc-path 13))
+  (when (file-exists? p) (delete-file p))
+  (define b (open-file! p))
+  (send b insert "brand new")
+  (snapshot-buffer! b)
+  (define id (buffer-recovery-id b))
+  (kill-buffer! b)
+  (define r (restore-only! id))
+  (check-equal? (send r get-path) p)
+  (check-equal? (send r get-text) "brand new"))
+
+(test-case "snapshots from before file-mtime/owner existed are still read and restored"
+  (clear-recovery!)
+  (define p (doc-path 14))
+  (display-to-file "old format" p #:exists 'truncate)
+  (define mtime (file-or-directory-modify-seconds p))
+  ;; 7 fields: id path name mode cursor saved-at text. Backup taken after the file's last change.
+  (write-raw-snapshot! "1-1" (path->string p) "note-14.md" 'markdown-mode 2 (+ mtime 100) "old format, edited")
+  (write-raw-snapshot! "1-2" #f "untitled" 'text-mode 0 (current-seconds) "old untitled")
+  (check-equal? (length (list-snapshots)) 2 "neither is quarantined")
+  (check-equal? (snapshot-file-mtime (snapshot-for "1-1")) 'unknown)
+  (define r (restore-only! "1-1"))
+  (check-equal? (send r get-text) "old format, edited")
+  (check-equal? (send r get-path) p "file unchanged since the backup: path kept")
+  (send r set-modified #f) (kill-buffer! r)
+  ;; The same old snapshot, but the file was modified after the backup: detached.
+  (write-raw-snapshot! "1-3" (path->string p) "note-14.md" 'markdown-mode 0 (- mtime 100) "older backup")
+  (define r2 (restore-only! "1-3"))
+  (check-equal? (send r2 get-text) "older backup")
+  (check-false (send r2 get-path)))
+
+(test-case "a file already open (from the command line) is reused, not opened a second time"
+  (clear-recovery!)
+  (define p (doc-path 15))
+  (define id (crash-with-edits! p #"disk text" " + recovered"))
+  (define opened (open-file! p))                 ; as main.rkt does before recover-on-launch!
+  (check-false (send opened is-modified?))
+  (define r (restore-only! id))
+  (check-eq? r opened "the recovered text went into the open document")
+  (check-equal? (length (buffers-for p)) 1 "one document for the file")
+  (check-equal? (send r get-text) "disk text + recovered")
+  (check-true (send r is-modified?)))
+
+(test-case "a snapshot with a wrong field type or a bad id is quarantined; the valid ones still restore"
+  (clear-recovery!)
+  (define before (send (messages-buffer) get-text))
+  (write-raw-snapshot! "2-1" #f "untitled" 'text-mode 0 (current-seconds) 42 #f #f)       ; text = 42
+  (write-raw-snapshot! "2-2" "relative/path" "x" 'text-mode 0 (current-seconds) "t" #f #f) ; relative path
+  (with-output-to-file (build-path (recovery-dir) "2-3.rktd") #:exists 'truncate        ; id is a path
+    (lambda () (write (make-prefab-struct 'snapshot "../../escape" #f "x" 'text-mode 0 0 "t" #f #f))))
+  (write-raw-snapshot! "2-4" #f "untitled" 'no-such-language 0 (current-seconds) "the good one" #f #f)
+  (define offered #f)
+  (parameterize ([recovery-decide! (lambda (snaps) (set! offered (map snapshot-id snaps))
+                                     (for/list ([s snaps]) (cons (snapshot-id s) 'restore)))])
+    (recover-on-launch!))
+  (check-equal? offered '("2-4"))
+  (check-equal? (send (current-buffer) get-text) "the good one")
+  (check-eq? (send (current-buffer) get-mode) 'text-mode "an unknown Language falls back")
+  (for ([id '("2-1" "2-2" "2-3")])
+    (check-false (file-exists? (build-path (recovery-dir) (format "~a.rktd" id))))
+    (check-true (for/or ([f (directory-list (recovery-dir))])
+                  (regexp-match? (regexp (format "^~a[.]rktd[.]corrupt-" id)) (path->string f)))
+                (format "~a moved aside" id)))
+  (check-regexp-match #rx"not a valid recovery snapshot" (activity-since before)))
+
+(test-case "one snapshot that fails to restore is moved aside and reported; the others still restore"
+  (clear-recovery!)
+  (define p (doc-path 16))
+  (define bad-id (crash-with-edits! p #"unreadable" " soon"))
+  (define ok (new-buffer! "untitled"))
+  (send ok insert "restore me anyway")
+  (snapshot-buffer! ok)
+  (define ok-id (buffer-recovery-id ok))
+  (kill-buffer! ok)                       ; still modified: its snapshot stays
+  (define before (send (messages-buffer) get-text))
+  (dynamic-wind
+   (lambda () (file-or-directory-permissions p #o000))   ; opening the file now raises
+   (lambda ()
+     (parameterize ([recovery-decide! (lambda (snaps) (for/list ([s snaps]) (cons (snapshot-id s) 'restore)))])
+       (recover-on-launch!)))
+   (lambda () (file-or-directory-permissions p #o644)))
+  (check-not-false (findf (lambda (b) (equal? (send b get-text) "restore me anyway")) (all-buffers)))
+  (check-false (snapshot-for bad-id) "the failing one is no longer offered")
+  (check-true (for/or ([f (directory-list (recovery-dir))])
+                (regexp-match? (regexp (format "^~a[.]rktd[.]corrupt-" bad-id)) (path->string f))))
+  (check-regexp-match #rx"could not be restored" (activity-since before))
+  (check-not-false (snapshot-for ok-id)))
