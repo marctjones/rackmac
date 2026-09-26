@@ -9,7 +9,7 @@
 (require rackunit racket/class racket/list racket/string
          "../rackmac/command.rkt" "../rackmac/commands.rkt" "../rackmac/mode.rkt"
          "../rackmac/keymap.rkt" "../rackmac/editor.rkt" "../rackmac/picker.rkt"
-         "../rackmac/ui/settings-dialog.rkt")
+         "../rackmac/ui/settings-dialog.rkt" "../rackmac/tools-menu.rkt")
 
 (define golden-names
   '(about close-tab close-other-tabs close-tabs-to-right command-palette copy copy-tab-path
@@ -60,6 +60,7 @@
   (check-eq? (top "settings") 'open-settings)
   (check-eq? (top "preferences") 'open-settings)
   (check-eq? (top "edit as code") 'customize-with-code)
+  (check-eq? (top "scratch pad") 'open-scratch-pad)
   (check-eq? (top "run code") 'run-selection)
   (check-not-false (memq 'paste (palette-matches "paste")) "the ordinary word still works")
   (check-equal? (palette-matches "zzzzqqq") '() "no match gives an empty list"))

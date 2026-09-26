@@ -4,7 +4,7 @@
          "commands.rkt" "toolbar-defaults.rkt" "status-defaults.rkt" "context-defaults.rkt"
          "command.rkt" "editor.rkt" "frame.rkt" "eval.rkt" "theme.rkt" "hook.rkt"
          "library/recents.rkt" "library/open-recent.rkt" "appearance.rkt"
-         "ui/settings-dialog.rkt")
+         "ui/settings-dialog.rkt" "tools-menu.rkt")
 (provide main)
 
 (define (main args)

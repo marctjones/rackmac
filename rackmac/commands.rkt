@@ -346,14 +346,16 @@
 TEMPLATE
   )
 
-;; #291 (settings-dialog-min): ⌘, moves to the Settings dialog's `open-settings`
-;; (rackmac/ui/settings-dialog.rkt), which is also where "settings"/"preferences" now find
-;; a command; this one keeps the words that name it as the code escape hatch.
+;; #289 (menu-tools): these three move off the File/Help menus into Tools > Extensions
+;; (rackmac/tools-menu.rkt builds that submenu from the command registry, by name). ⌘, moved
+;; to the Settings dialog's `open-settings` already (#291, rackmac/ui/settings-dialog.rkt).
+;; #:menu #f keeps them out of the top-level menu loop in frame.rkt while leaving them
+;; registered (so the submenu, the palette and #lang rackmac scripts can still run them by name).
 (define-command (customize-with-code)
   #:icon "settings"
   #:aliases ("init file" "open init file" "config" "settings file" "customize" "edit as code")
   #:help "Open the file that customizes Rackmac with Racket code."
-  #:title "Customize with Code" #:menu "File" #:menu-order 40
+  #:title "Customize with Code" #:category "Extensions" #:menu #f
   #:doc "Open (creating from a template if needed) the init file that customizes Rackmac."
   (define p (init-file-path))
   (unless (file-exists? p)
@@ -365,14 +367,14 @@ TEMPLATE
   #:icon "extensions"
   #:aliases ("reload init" "reload init file" "reload config")
   #:help "Run your customization files again, replacing what they registered before."
-  #:title "Reload Extensions" #:menu "File" #:menu-order 41
+  #:title "Reload Extensions" #:category "Extensions" #:menu #f
   (load-init!))
 
 (define-command (list-extensions)
   #:icon "extensions"
   #:aliases ("list packages" "installed extensions" "add-ons")
   #:help "Show which customization files are loaded and what each one added."
-  #:title "List Extensions" #:menu "Help" #:menu-order 13
+  #:title "List Extensions" #:category "Extensions" #:menu #f
   #:doc "Show the loaded extension files and what each registered."
   (define exts (loaded-extensions))
   (show-text-buffer!
