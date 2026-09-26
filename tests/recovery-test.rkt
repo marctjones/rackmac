@@ -186,30 +186,34 @@
   (define p2 (doc-path 4))
   (display-to-file "on disk" p2 #:exists 'truncate)
   (define b2 (open-file! p2))
-  (send b2 insert " plus edits")
+  (send b2 insert " plus edits" (send b2 last-position))
+  (send b2 set-position 5)
   (snapshot-buffer! b2)
   (define id2 (buffer-recovery-id b2))
 
+  ;; id1 (untitled, text-mode) is discarded and id2 (a .md file, markdown-mode) is restored --
+  ;; distinct Languages, so a restore that ignored snapshot-mode entirely would still be caught.
   (define before-count (length (visible-buffers)))   ; excludes the hidden Activity log
   (define seen #f)
   (parameterize ([recovery-decide!
                   (lambda (snaps)
                     (set! seen snaps)
-                    (for/list ([s snaps]) (cons (snapshot-id s) (if (equal? (snapshot-id s) id1) 'restore 'discard))))])
+                    (for/list ([s snaps]) (cons (snapshot-id s) (if (equal? (snapshot-id s) id2) 'restore 'discard))))])
     (recover-on-launch!))
 
   (check-equal? (length seen) 2 "both documents were offered")
-  (check-false (snapshot-for id2) "the discarded one is gone from disk")
-  (check-not-false (snapshot-for id1) "the restored one keeps its file (still unsaved)")
+  (check-false (snapshot-for id1) "the discarded one is gone from disk")
+  (check-not-false (snapshot-for id2) "the restored one keeps its file (still unsaved)")
   (check-equal? (length (visible-buffers)) (add1 before-count) "exactly one new document was opened")
 
   (define restored (findf (lambda (b) (and (not (memq b (list b1 b2))) (send b is-modified?)
-                                           (regexp-match? #rx"restore this text" (send b get-text))))
+                                           (regexp-match? #rx"on disk plus edits" (send b get-text))))
                           (all-buffers)))
   (check-not-false restored)
   (check-true (send restored is-modified?))
-  (check-equal? (send restored get-mode) (send b1 get-mode))
-  (check-equal? (send restored get-start-position) 3 "cursor restored"))
+  (check-eq? (send restored get-mode) 'markdown-mode "Language restored, not just copied from a coincidentally-matching default")
+  (check-equal? (send restored get-path) (send b2 get-path) "original path restored")
+  (check-equal? (send restored get-start-position) 5 "cursor restored"))
 
 (test-case "when the decision function omits a snapshot, it is discarded"
   (define b (new-buffer! "untitled"))
