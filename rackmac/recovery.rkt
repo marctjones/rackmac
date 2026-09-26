@@ -12,10 +12,16 @@
 ;; closing a document that is no longer modified, deletes its snapshot (#76); closing WITHOUT
 ;; saving (Don't Save) leaves the snapshot in place -- that unsaved text is exactly what
 ;; recovery exists for.
-(require racket/class racket/gui/base racket/file
-         "hook.rkt" "settings.rkt" "platform.rkt" "fileio.rkt" "editor.rkt")
+;;
+;; On launch (#77), any snapshots left behind (a crash, `kill -9`, or a previous Don't Save)
+;; are offered back through `recover-on-launch!`, which asks `recovery-decide!` (a parameter,
+;; like commands.rkt's confirm-* dialogs) what to do with each one, so tests and scripts can
+;; answer without the real window.
+(require racket/class racket/gui/base racket/path racket/file
+         "hook.rkt" "settings.rkt" "platform.rkt" "fileio.rkt" "editor.rkt" "mode.rkt")
 (provide (struct-out snapshot) recovery-dir list-snapshots delete-snapshot!
-         enable-autosave-recovery! snapshot-buffer! forget-buffer-snapshot! buffer-recovery-id)
+         recovery-decide! recover-on-launch! enable-autosave-recovery!
+         snapshot-buffer! forget-buffer-snapshot! buffer-recovery-id)
 
 (define-setting autosave-interval
   #:contract (lambda (v) (or (not v) (and (real? v) (positive? v))))
@@ -120,3 +126,55 @@
   (add-hook! 'text-changed on-text-changed)
   (add-hook! 'after-save on-after-save)
   (add-hook! 'before-close-buffer on-before-close))
+
+;; ---- restore on launch (#77) ----------------------------------------------------------------
+
+(define (snapshot-display-name s)
+  (or (and (snapshot-path s) (path->string (file-name-from-path (string->path (snapshot-path s)))))
+      (snapshot-name s)))
+
+(define (restore-snapshot! s)
+  (define b (new-buffer! (snapshot-display-name s) #:mode (snapshot-mode s)))
+  (hash-set! ids b (snapshot-id s))          ; keep autosaving to the file it came from
+  (when (snapshot-path s) (send b set-path! (string->path (snapshot-path s))))
+  (send b begin-edit-sequence)
+  (send b erase)
+  (send b insert (snapshot-text s))
+  (send b end-edit-sequence)
+  (send b set-position (min (snapshot-cursor s) (send b last-position)))
+  (send b set-modified #t)
+  (set-current-buffer! b)
+  (message "Restored ~a from an automatic backup." (send b get-name)))
+
+;; A real dialog: one row per recovered document, a checkbox defaulting to Restore, one OK
+;; button that applies every row's current choice.
+(define (recovery-dialog snaps)
+  (define decisions (make-hash (for/list ([s (in-list snaps)]) (cons (snapshot-id s) 'restore))))
+  (define dlg (new dialog% [label "Recover Documents"] [parent (ui-parent)] [width 460]))
+  (new message% [parent dlg]
+       [label (if (= (length snaps) 1)
+                 "Rackmac closed before this document was saved:"
+                 "Rackmac closed before these documents were saved:")])
+  (for ([s (in-list snaps)])
+    (define row (new horizontal-panel% [parent dlg] [alignment '(left center)] [stretchable-height #f]))
+    (new message% [parent row]
+         [label (format "~a — ~a" (snapshot-display-name s) (mode-display-name (snapshot-mode s)))])
+    (new check-box% [parent row] [label "Restore"] [value #t]
+         [callback (lambda (cb e) (hash-set! decisions (snapshot-id s) (if (send cb get-value) 'restore 'discard)))]))
+  (define buttons (new horizontal-panel% [parent dlg] [alignment '(right center)] [stretchable-height #f]))
+  (new button% [parent buttons] [label "OK"] [callback (lambda (b e) (send dlg show #f))])
+  (send dlg show #t)
+  (hash-map decisions cons))
+
+;; "Restore or Discard each" (#77's acceptance criterion), as a parameter so tests and scripts
+;; can answer without the real dialog -- (listof snapshot) -> (listof (cons id 'restore/'discard)).
+(define recovery-decide! (make-parameter recovery-dialog))
+
+(define (recover-on-launch!)
+  (define snaps (list-snapshots))
+  (when (pair? snaps)
+    (define decisions ((recovery-decide!) snaps))
+    (for ([s (in-list snaps)])
+      (case (cond [(assoc (snapshot-id s) decisions) => cdr] [else 'discard])
+        [(restore) (restore-snapshot! s)]
+        [(discard) (delete-snapshot! (snapshot-id s))]))))

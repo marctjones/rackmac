@@ -23,6 +23,7 @@
   (application-file-handler (lambda (p) (set-current-buffer! (open-file! p))))
   (for ([a (in-list args)]) (set-current-buffer! (open-file! a)))
   (define f (make-main-frame))
+  (recover-on-launch!)               ; #77: offer back anything a previous crash left behind
   (load-init!)
   (send f show #t)
   (focus-editor!)                    ; focus set while the window was hidden does not stick

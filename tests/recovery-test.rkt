@@ -1,8 +1,9 @@
 #lang racket/base
-;; Recovery store, autosave timer, and save/close cleanup (#74, #75, #76): every check here
-;; does a real disk round trip through rackmac/recovery.rkt -- list-snapshots always re-reads
-;; recovery/*.rktd from disk, never a cache, so a struct-serialization bug cannot hide behind
-;; an in-memory assertion.
+;; Recovery store, autosave timer, save/close cleanup, and restore on launch
+;; (#74, #75, #76, #77): every check here does a real disk round trip through
+;; rackmac/recovery.rkt -- list-snapshots always re-reads recovery/*.rktd from disk, never a
+;; cache, so a struct-serialization bug cannot hide behind an in-memory assertion. #78's
+;; crash-and-kill test lives in crash-test.rkt, which drives a real subprocess.
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/file racket/class racket/path racket/list racket/gui/base
          "../rackmac/recovery.rkt" "../rackmac/editor.rkt" "../rackmac/hook.rkt"
@@ -170,3 +171,58 @@
   (check-true (send b is-modified?))
   (kill-buffer! b)                        ; Don't Save: still modified when it closes
   (check-not-false (snapshot-for id) "the snapshot survives so the text can be recovered"))
+
+;; ---- #77: restore on next launch --------------------------------------------------------------
+
+(clear-recovery!)   ; only the snapshots this section creates should be on disk to count
+
+(test-case "recover-on-launch! lists every snapshot and applies Restore/Discard per document"
+  (define b1 (new-buffer! "untitled"))
+  (send b1 insert "restore this text")
+  (send b1 set-position 3)
+  (snapshot-buffer! b1)
+  (define id1 (buffer-recovery-id b1))
+
+  (define p2 (doc-path 4))
+  (display-to-file "on disk" p2 #:exists 'truncate)
+  (define b2 (open-file! p2))
+  (send b2 insert " plus edits")
+  (snapshot-buffer! b2)
+  (define id2 (buffer-recovery-id b2))
+
+  (define before-count (length (visible-buffers)))   ; excludes the hidden Activity log
+  (define seen #f)
+  (parameterize ([recovery-decide!
+                  (lambda (snaps)
+                    (set! seen snaps)
+                    (for/list ([s snaps]) (cons (snapshot-id s) (if (equal? (snapshot-id s) id1) 'restore 'discard))))])
+    (recover-on-launch!))
+
+  (check-equal? (length seen) 2 "both documents were offered")
+  (check-false (snapshot-for id2) "the discarded one is gone from disk")
+  (check-not-false (snapshot-for id1) "the restored one keeps its file (still unsaved)")
+  (check-equal? (length (visible-buffers)) (add1 before-count) "exactly one new document was opened")
+
+  (define restored (findf (lambda (b) (and (not (memq b (list b1 b2))) (send b is-modified?)
+                                           (regexp-match? #rx"restore this text" (send b get-text))))
+                          (all-buffers)))
+  (check-not-false restored)
+  (check-true (send restored is-modified?))
+  (check-equal? (send restored get-mode) (send b1 get-mode))
+  (check-equal? (send restored get-start-position) 3 "cursor restored"))
+
+(test-case "when the decision function omits a snapshot, it is discarded"
+  (define b (new-buffer! "untitled"))
+  (send b insert "leftover")
+  (snapshot-buffer! b)
+  (define id (buffer-recovery-id b))
+  (parameterize ([recovery-decide! (lambda (snaps) '())])
+    (recover-on-launch!))
+  (check-false (snapshot-for id)))
+
+(test-case "nothing happens when there is nothing to recover"
+  (for ([s (list-snapshots)]) (delete-snapshot! (snapshot-id s)))
+  (define called? #f)
+  (parameterize ([recovery-decide! (lambda (snaps) (set! called? #t) '())])
+    (recover-on-launch!))
+  (check-false called? "recovery-decide! is never asked when there are no snapshots"))
