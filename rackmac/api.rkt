@@ -2,7 +2,8 @@
 ;; The public API: what init files and live-evaluated code get with (require rackmac/api).
 (require racket/class
          "command.rkt" "keymap.rkt" "mode.rkt" "hook.rkt" "editor.rkt" "eval.rkt" "theme.rkt"
-         "owner.rkt" "version.rkt" "toolbar.rkt" "status.rkt" "picker.rkt" "context-menu.rkt")
+         "owner.rkt" "version.rkt" "toolbar.rkt" "status.rkt" "picker.rkt" "context-menu.rkt"
+         "settings.rkt")
 (provide (all-from-out racket/class)
          define-command run-command find-command all-commands
          define-mode register-mode!
@@ -19,7 +20,12 @@
          add-status-segment! remove-status-segment!
          add-context-item! remove-context-item!
          command-enabled? command-title command-icon command-help command-shortcut
-         ui-parent pick)
+         ui-parent pick
+         ;; settings (rackmac/settings.rkt): name/contract/default/doc/category/scope,
+         ;; resolved document -> Language -> global; #:document and #:language are explicit
+         ;; here (no default to current-buffer, so calling setting-ref for a global setting
+         ;; never has the side effect of creating a Scratch Pad document).
+         define-setting setting-ref setting-set!)
 
 ;; (bind-key! "Mod-Shift-i" 'insert-date)                    ; everywhere
 ;; (bind-key! "Mod-b" 'my-command #:mode 'racket-mode)       ; only in one mode

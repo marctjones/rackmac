@@ -63,6 +63,7 @@
                  (message "~a is a large file, so syntax coloring is off for it." (send b get-name)))]
               [else (send b set-mode! (or (mode-for-path p) 'text-mode))])   ; a new file still gets its Language
         (send b set-path! p)
+        (run-hook 'after-open-file b)          ; recents.rkt (#274) records path/time/cursor here
         b)))
 
 ;; Re-read a document from its file, keeping the cursor near where it was. Returns #f
@@ -103,6 +104,7 @@
      (send b set-shown! #f)
      (when (eq? b current) (set! current #f) (set-current-buffer! (current-buffer)))]
     [else
+     (run-hook 'before-close-buffer b)         ; recents.rkt (#274) records the final cursor here
      (when (send b get-path) (set! closed (cons (send b get-path) (remove (send b get-path) closed))))
      (define vs (visible-buffers))
      (define i (or (index-of vs b) 0))
