@@ -18,7 +18,7 @@ jobs:
           variant: CS
           distribution: full
       - name: Compile
-        run: raco make -v rackmac/*.rkt rackmac/ui/*.rkt rackmac/lang/*.rkt tests/*.rkt main.rkt tools/*.rkt
+        run: raco make -v rackmac/*.rkt rackmac/ui/*.rkt rackmac/lang/*.rkt rackmac/library/*.rkt tests/*.rkt main.rkt tools/*.rkt
       - name: App tests
         env:
           RACKMAC_NO_FRONT: '1'

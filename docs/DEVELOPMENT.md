@@ -34,7 +34,7 @@ Rules for anyone (person or agent) changing this repository.
 
 ## Tests
 
-- Run everything: `raco make rackmac/*.rkt rackmac/ui/*.rkt rackmac/lang/*.rkt tests/*.rkt main.rkt && raco test tests`
+- Run everything: `raco make rackmac/*.rkt rackmac/ui/*.rkt rackmac/lang/*.rkt rackmac/library/*.rkt tests/*.rkt main.rkt && raco test tests`
 - `rackmac-markdown/` (docs/MARKDOWN-DESIGN.md) is a separate sibling package with its own tests:
   `raco test rackmac-markdown` (no install needed; it also runs unlinked). Locally and in CI,
   installing both is two steps: `raco pkg install --link ./rackmac-markdown` (its own package;
