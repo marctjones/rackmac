@@ -4,7 +4,7 @@
 ;; character references" and "Backslash escapes"). CommonMark only recognizes the
 ;; semicolon-terminated form, so `entity-lookup` requires the trailing `;` in `name`.
 (require racket/runtime-path "chars.rkt")
-(provide entity-lookup entity-table match-entity unescape-string)
+(provide entity-lookup entity-table match-entity unescape-string nul->replacement)
 
 (define-runtime-path entities-data-path "entities.rktd")
 
@@ -65,12 +65,19 @@
          [else (fail)]))]
     [else (fail)]))
 
+;; Spec, "Insecure characters": U+0000 in decoded values and output becomes U+FFFD (the
+;; document string, and with it every position, is left untouched).
+(define (nul->replacement s)
+  (if (for/or ([c (in-string s)]) (eqv? c #\nul))
+      (list->string (for/list ([c (in-string s)]) (if (eqv? c #\nul) (integer->char #xFFFD) c)))
+      s))
+
 ;; Decodes backslash escapes (before ASCII punctuation) and entity/numeric references in `s`,
 ;; as CommonMark does for link destinations, titles and fenced-code info strings.
 (define (unescape-string s)
   (define len (string-length s))
   (cond
-    [(not (for/or ([c (in-string s)]) (or (eqv? c #\\) (eqv? c #\&)))) s]
+    [(not (for/or ([c (in-string s)]) (or (eqv? c #\\) (eqv? c #\&) (eqv? c #\nul)))) s]
     [else
      (define out (open-output-string))
      (let loop ([i 0])
@@ -85,4 +92,4 @@
             (cond [decoded (write-string decoded out) (loop next)]
                   [else (write-char c out) (loop (add1 i))])]
            [else (write-char c out) (loop (add1 i))])))
-     (get-output-string out)]))
+     (nul->replacement (get-output-string out))]))

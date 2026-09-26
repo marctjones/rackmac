@@ -14,16 +14,20 @@
 
 ;; kind: 'document 'block-quote 'list 'list-item 'paragraph 'heading 'thematic-break
 ;;       'code-block 'html-block
-;; data: an association list (mutated via set-mblk-data!) of kind-specific fields; see the
+;; data: a mutable hasheq of kind-specific fields (built from an association list); see the
 ;; `mdata` helpers below for the keys each kind uses.
 (struct mblk (kind [start #:mutable] [end #:mutable] [children #:mutable] [open? #:mutable]
               [data #:mutable]))
 
-(define (mdata-ref b key [default #f]) (let ([p (assq key (mblk-data b))]) (if p (cdr p) default)))
-(define (mdata-set! b key val) (set-mblk-data! b (cons (cons key val) (mblk-data b))))
+;; A hash, not a growing alist: process-line! sets 'trailing-blank? on every open list item on
+;; every line, which made deeply nested lists quadratic in lines x depth x alist length.
+(define (mdata-ref b key [default #f]) (hash-ref (mblk-data b) key default))
+(define (mdata-set! b key val) (hash-set! (mblk-data b) key val))
 
 (define (make-mblk kind start data)
-  (mblk kind start start '() #t data))
+  (define h (make-hasheq))
+  (for ([p (in-list (reverse data))]) (hash-set! h (car p) (cdr p)))
+  (mblk kind start start '() #t h))
 
 ;; Appends `child` to `parent`, closing parent's current last (open) child first, unless that
 ;; child *is* the one being reused for list continuation (callers handle that by not going
@@ -116,25 +120,36 @@
 ;; A "dead" item (one whose first line was blank and that saw a further blank line before any
 ;; real content) never matches again (spec: such an item's content stops right there, and later
 ;; indented material is not pulled into it -- e.g. "-\n\n  foo" leaves "foo" outside the list).
-(define (match-list-item source offset column line-end item)
+;; `first-non-blank` maps an offset to the first non-space/tab position at or after it (memoized
+;; per line by match-containers): rescanning the whole indentation at every level made 1,000
+;; nested items over 1,000 lines cubic (tests/pathological-test.rkt, "deeply nested lists").
+(define (match-list-item source offset column line-end item first-non-blank)
   (define content-column (mdata-ref item 'content-column))
-  (define-values (ns nc) (scan-indent source offset column line-end))
   (cond
     [(mdata-ref item 'dead?) (values #f offset column #f)]
-    [(>= ns line-end)
+    [(>= (first-non-blank offset) line-end)
      (when (and (mdata-ref item 'blank-start?) (null? (mblk-children item)))
        (mdata-set! item 'dead? #t))
      (values #t offset column #t)] ; blank remainder: matches, contributes nothing
-    [(>= nc content-column)
-     (define need (- content-column column))
-     (define-values (o2 c2 p2) (advance-columns source offset column need line-end))
-     (values #t o2 c2 #f)]
-    [else (values #f offset column #f)]))
+    [else
+     ;; advance-columns stops at the first non-space/tab, so reaching content-column means the
+     ;; indentation is at least that deep (what scan-indent's full column told us before).
+     (define-values (o2 c2 p2) (advance-columns source offset column (- content-column column) line-end))
+     (if (>= c2 content-column)
+         (values #t o2 c2 #f)
+         (values #f offset column #f))]))
 
 ;; Runs the generic container-matching loop over `containers` (a list of mblk, all 'block-quote,
 ;; 'list, or 'list-item -- 'list itself always "matches", contributing nothing). Returns
 ;; (values matched-count offset column blank-stop?).
 (define (match-containers containers source line-start content-end)
+  (define memo-from -1) (define memo-result -1)
+  (define (first-non-blank offset)
+    (unless (<= memo-from offset memo-result)
+      (set! memo-from offset)
+      (set! memo-result (let scan ([i offset])
+                          (if (and (< i content-end) (space-or-tab? (string-ref source i))) (scan (add1 i)) i))))
+    memo-result)
   (let loop ([cs containers] [i 0] [offset line-start] [column 0])
     (cond
       [(null? cs) (values i offset column #f)]
@@ -147,7 +162,7 @@
           (if ok? (loop (cdr cs) (add1 i) o2 c2) (values i offset column #f))]
          [(list-item)
           (define-values (ok? o2 c2 blank?)
-            (match-list-item source offset column content-end c))
+            (match-list-item source offset column content-end c first-non-blank))
           ;; A blank line matches trivially and contributes no columns, but still has to keep
           ;; walking into any deeper containers (a nested list-item several levels down matches
           ;; the same blank line just as trivially) -- stopping here would wrongly look like a
@@ -161,8 +176,11 @@
 ;; New-block-start detection (phase 2).
 ;; ============================================================================================
 
+;; Scans in place: a substring here copied the rest of the line at every nesting level, which
+;; made a 50,000-deep `>>>>...` line quadratic (tests/pathological-test.rkt).
 (define (blank-from? source offset line-end)
-  (blank-string? (substring source offset line-end)))
+  (let loop ([i offset])
+    (or (>= i line-end) (and (space-or-tab? (string-ref source i)) (loop (add1 i))))))
 
 ;; ATX heading: 0-3 indent, 1-6 '#', then space/tab/eol. Returns (list level content-start) or #f.
 (define (try-atx source offset column line-end)
@@ -292,8 +310,14 @@
 ;; Returns the html-block kind (1-7) that starts at (offset, column) on this line, given whether
 ;; a paragraph is currently open (kind 7 cannot interrupt a paragraph), or #f.
 (define (try-html-block-start source offset column line-end tip-is-paragraph?)
-  (define s (substring source offset line-end))
+  ;; Every start condition is up to 3 spaces then `<`: check that before copying the line.
+  (define lt (let loop ([i offset] [k 0])
+               (cond [(or (>= i line-end) (> k 3)) #f]
+                     [(eqv? (string-ref source i) #\space) (loop (add1 i) (add1 k))]
+                     [else (eqv? (string-ref source i) #\<)])))
+  (define s (if lt (substring source offset line-end) ""))
   (cond
+    [(not lt) #f]
     [(regexp-match? rx-html1-start s) 1]
     [(regexp-match? rx-html2-start s) 2]
     [(regexp-match? rx-html3-start s) 3]
@@ -416,8 +440,7 @@
   ;; Looseness bookkeeping (see append-child!): every list-item still reachable records whether
   ;; *this* line was blank, so the next thing attached to it (a sibling item, or a second child
   ;; of the same item) can tell whether a blank line came immediately before it.
-  (define line-blank?
-    (blank-string? (substring source (line-record-start lr) (line-record-content-end lr))))
+  (define line-blank? (blank-from? source (line-record-start lr) (line-record-content-end lr)))
   (for ([b (in-list fresh-path)] #:when (eq? (mblk-kind b) 'list-item))
     (mdata-set! b 'trailing-blank? line-blank?)))
 
@@ -778,7 +801,7 @@
         (define para
           (and (pair? remaining)
                (let-values ([(segs content) (build-segments+content source (trim-trailing-line-ws source remaining))])
-                 (and (> (string-length (string-trim content)) 0)
+                 (and (for/or ([c (in-string content)]) (not (char-whitespace? c))) ; not string-trim: it costs ~25 ns/char
                       ;; Start after any stripped leading ref-defs, not at b's original start,
                       ;; so this span doesn't overlap the ref-def nodes' own spans.
                       (paragraph (first (car remaining)) (mblk-end b) '() segs
@@ -815,13 +838,15 @@
 ;; the list of finalized link-ref-def structs (design §1.4: "kept in the tree so it can be
 ;; styled and edited"), each registered into `refmap` too (first definition for a label wins).
 (define (strip-link-ref-defs source lines refmap)
-  (let loop ([lines lines] [defs '()])
+  ;; The paragraph is joined once and definitions are read from successive offsets, keeping a
+  ;; paragraph of 50,000 definitions linear (tests/pathological-test.rkt, "many references").
+  (define text (line-join source lines))
+  (let loop ([lines lines] [pos 0] [defs '()])
     (cond
       [(null? lines) (values lines (reverse defs))]
       [else
-       (define text (line-join source lines))
-       (match (parse-one-ref-def text)
-         [(list label dest title consumed-lines)
+       (match (parse-one-ref-def text pos)
+         [(list label dest title consumed-lines next-pos)
           (define norm (normalize-label label))
           (cond
             [(non-empty-normalized? norm)
@@ -832,7 +857,7 @@
              ;; Design §1.4: normalized label -> (dest title node); the first definition wins.
              (unless (hash-has-key? refmap norm)
                (hash-set! refmap norm (list dest title node)))
-             (loop (list-tail lines consumed-lines) (cons node defs))]
+             (loop (list-tail lines consumed-lines) next-pos (cons node defs))]
             [else (values lines (reverse defs))])] ; invalid (empty) label: keep as paragraph text
          [#f (values lines (reverse defs))])])))
 
@@ -849,16 +874,17 @@
 
 ;; A reader for "[label]: dest \"title\"" possibly spanning several of `lines`, following
 ;; commonmark.js's parseReference with the scanners shared with the inline phase (refs.rkt).
-;; Returns (list label dest title lines-consumed) or #f if `joined` does not start with one.
-(define (parse-one-ref-def joined)
+;; Reads the definition starting at offset `start` (a line start) of `joined`. Returns (list
+;; label dest title lines-consumed next-line-start) or #f if no definition starts there.
+(define (parse-one-ref-def joined start)
   (define len (string-length joined))
   (let/ec return
     (define (fail) (return #f))
-    (unless (and (> len 0) (eqv? (string-ref joined 0) #\[)) (fail))
-    (define label-end (scan-link-label joined 0 len)) ; just after `]`
+    (unless (and (< start len) (eqv? (string-ref joined start) #\[)) (fail))
+    (define label-end (scan-link-label joined start len)) ; just after `]`
     (unless label-end (fail))
     (unless (and (< label-end len) (eqv? (string-ref joined label-end) #\:)) (fail))
-    (define label (substring joined 1 (sub1 label-end)))
+    (define label (substring joined (add1 start) (sub1 label-end)))
     (define dest-start (skip-spnl joined (add1 label-end) len))
     (define-values (dest after-dest) (scan-link-destination joined dest-start len #:allow-empty? #f))
     (unless dest (fail))
@@ -867,17 +893,20 @@
       (if (> title-start after-dest)
           (scan-link-title joined title-start len)
           (values #f after-dest)))
+    (define (finish title end)
+      (define nl (line-end-at joined end))
+      (list label dest title (add1 (count-newlines joined start end)) (min len (add1 nl))))
     (cond
-      [(and title (rest-of-line-blank? joined after-title))
-       (list label dest title (add1 (count-newlines joined 0 after-title)))]
-      [(rest-of-line-blank? joined after-dest)
-       (list label dest #f (add1 (count-newlines joined 0 after-dest)))]
+      [(and title (rest-of-line-blank? joined after-title)) (finish title after-title)]
+      [(rest-of-line-blank? joined after-dest) (finish #f after-dest)]
       [else (fail)])))
 
+(define (line-end-at s pos)
+  (or (for/first ([i (in-range pos (string-length s))] #:when (eqv? (string-ref s i) #\newline)) i)
+      (string-length s)))
+
 (define (rest-of-line-blank? s pos)
-  (define nl (or (for/first ([i (in-range pos (string-length s))] #:when (eqv? (string-ref s i) #\newline)) i)
-                  (string-length s)))
-  (blank-string? (substring s pos nl)))
+  (blank-string? (substring s pos (line-end-at s pos))))
 
 (define (count-newlines s from to)
   (for/sum ([i (in-range from (min to (string-length s)))] #:when (eqv? (string-ref s i) #\newline)) 1))

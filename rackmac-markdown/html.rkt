@@ -8,14 +8,20 @@
 (require racket/string racket/list "ast.rkt" "entities.rkt" "inlines.rkt")
 (provide document->html escape-href)
 
+;; Writes unescaped stretches with one write-string each (per-character writes made a 12 MB
+;; paragraph cost several hundred ms).
 (define (write-escaped s out)
-  (for ([c (in-string s)])
-    (case c
-      [(#\&) (write-string "&amp;" out)]
-      [(#\<) (write-string "&lt;" out)]
-      [(#\>) (write-string "&gt;" out)]
-      [(#\") (write-string "&quot;" out)]
-      [else (write-char c out)])))
+  (define n (string-length s))
+  (let loop ([from 0] [i 0])
+    (cond
+      [(= i n) (write-string s out from n)]
+      [else
+       (define rep
+         (case (string-ref s i)
+           [(#\&) "&amp;"] [(#\<) "&lt;"] [(#\>) "&gt;"] [(#\") "&quot;"] [else #f]))
+       (cond
+         [rep (write-string s out from i) (write-string rep out) (loop (add1 i) (add1 i))]
+         [else (loop from (add1 i))])])))
 
 ;; cmark escapes &, <, >, and " everywhere it emits text (not just inside attributes).
 (define (escape-html s)
@@ -82,7 +88,10 @@
      (write-title (image-title x) out)
      (write-string " />" out)]
     [(raw-html? x)
-     (write-string (if unsafe? (substring content (inline-start x) (inline-end x)) "<!-- raw HTML omitted -->") out)]
+     (write-string (if unsafe?
+                        (nul->replacement (substring content (inline-start x) (inline-end x)))
+                        "<!-- raw HTML omitted -->")
+                    out)]
     [else (void)]))
 
 (define (render-children xs content unsafe? out)
@@ -110,67 +119,74 @@
   (render-inlines (inline-cell-content cell) (cell-relative-inlines cell) unsafe?))
 
 ;; --- Blocks -------------------------------------------------------------------------------------
+;; Written to one output port, never by nested string-append: a 50,000-deep block quote would
+;; otherwise copy its inner HTML once per level (quadratic; tests/pathological-test.rkt).
 
 ;; `unsafe?` #f replaces raw HTML (blocks and inline) with cmark's placeholder comment.
 (define (document->html doc #:unsafe? [unsafe? #t] #:resolve-wiki [resolve-wiki (lambda (t h) t)])
   (define source (document-text doc))
-  (apply string-append (map (lambda (b) (render-block source b #f unsafe?)) (document-children doc))))
+  (define out (open-output-string))
+  (for ([b (in-list (document-children doc))]) (render-block source b #f unsafe? out))
+  (get-output-string out))
 
 ;; `bare-paragraph?` is #t only for a paragraph that is the direct child of a tight list item.
-(define (render-block source b bare-paragraph? unsafe?)
+;; Returns 'newline when the output ended with a line ending, 'inline when it did not (a bare
+;; paragraph), 'none when nothing was written; list items need this to place separators.
+(define (render-block source b bare-paragraph? unsafe? out)
+  (define (emit . strs) (for ([x (in-list strs)]) (write-string x out)) 'newline)
   (cond
     [(paragraph? b)
      (define content (leaf-html (paragraph-inlines b) unsafe?))
-     (if bare-paragraph? content (string-append "<p>" content "</p>\n"))]
+     (cond [bare-paragraph? (write-string content out) (if (equal? content "") 'none 'inline)]
+           [else (emit "<p>" content "</p>\n")])]
     [(heading? b)
-     (define lvl (heading-level b))
-     (define content (leaf-html (heading-inlines b) unsafe?))
-     (format "<h~a>~a</h~a>\n" lvl content lvl)]
-    [(thematic-break? b) "<hr />\n"]
+     (define lvl (number->string (heading-level b)))
+     (emit "<h" lvl ">" (leaf-html (heading-inlines b) unsafe?) "</h" lvl ">\n")]
+    [(thematic-break? b) (emit "<hr />\n")]
     [(code-block? b)
-     (define content (escape-html (lines->content source (code-block-lines b))))
+     (define content (escape-html (nul->replacement (lines->content source (code-block-lines b)))))
      (define lang (code-block-info b))
      ;; cmark decodes escapes and entities in the info string, then takes its first word.
      (define first-word (and lang (let ([t (unescape-string (string-trim lang))])
                                      (and (> (string-length t) 0)
                                           (car (string-split t))))))
      (if first-word
-         (format "<pre><code class=\"language-~a\">~a</code></pre>\n" (escape-html first-word) content)
-         (format "<pre><code>~a</code></pre>\n" content))]
-    [(html-block? b) (if unsafe? (lines->content source (html-block-lines b)) "<!-- raw HTML omitted -->\n")]
+         (emit "<pre><code class=\"language-" (escape-html first-word) "\">" content "</code></pre>\n")
+         (emit "<pre><code>" content "</code></pre>\n"))]
+    [(html-block? b)
+     (if unsafe?
+         (let ([content (nul->replacement (lines->content source (html-block-lines b)))])
+           (write-string content out)
+           (cond [(equal? content "") 'none]
+                 [(eqv? (string-ref content (sub1 (string-length content))) #\newline) 'newline]
+                 [else 'inline]))
+         (emit "<!-- raw HTML omitted -->\n"))]
     [(block-quote? b)
-     (string-append "<blockquote>\n"
-                    (apply string-append (map (lambda (c) (render-block source c #f unsafe?)) (block-quote-children b)))
-                    "</blockquote>\n")]
+     (write-string "<blockquote>\n" out)
+     (for ([c (in-list (block-quote-children b))]) (render-block source c #f unsafe? out))
+     (emit "</blockquote>\n")]
     [(list-block? b)
      (define tag (if (list-block-ordered? b) "ol" "ul"))
-     (define open-tag
-       (if (and (list-block-ordered? b) (not (equal? (list-block-start-number b) 1)))
-           (format "<~a start=\"~a\">\n" tag (list-block-start-number b))
-           (format "<~a>\n" tag)))
-     (string-append open-tag
-                    (apply string-append (map (lambda (i) (render-list-item source i (list-block-tight? b) unsafe?))
-                                               (list-block-children b)))
-                    (format "</~a>\n" tag))]
-    [else ""]))
+     (if (and (list-block-ordered? b) (not (equal? (list-block-start-number b) 1)))
+         (emit "<" tag " start=\"" (number->string (list-block-start-number b)) "\">\n")
+         (emit "<" tag ">\n"))
+     (for ([i (in-list (list-block-children b))])
+       (render-list-item source i (list-block-tight? b) unsafe? out))
+     (emit "</" tag ">\n")]
+    [else 'none]))
 
-;; Concatenates a list-item's children, always exactly one "\n" apart, with one exception (cmark's
-;; own rendering, verified against spec examples 300/321/325 among others): a tight list's first
-;; child, if it's a paragraph, is glued directly onto "<li>" with no newline at all -- not even
-;; the usual one-newline separator -- which is what collapses a single-paragraph item onto one
-;; line ("<li>foo</li>") while a heading- or code-first item still gets "<li>\n...".
-(define (render-list-item source item tight? unsafe?)
-  (define kids (list-item-children item))
-  (let loop ([kids kids] [idx 0] [acc "<li>"])
-    (cond
-      [(null? kids) (string-append acc "</li>\n")]
-      [else
-       (define k (car kids))
-       (define bare? (and tight? (paragraph? k)))
-       (define rendering (render-block source k bare? unsafe?))
-       (define first-bare-exception? (and (= idx 0) bare?))
-       (define need-sep?
-         (and (not first-bare-exception?)
-              (> (string-length acc) 0)
-              (not (eqv? (string-ref acc (sub1 (string-length acc))) #\newline))))
-       (loop (cdr kids) (add1 idx) (string-append acc (if need-sep? "\n" "") rendering))])))
+;; A list item's children, always exactly one "\n" apart, with one exception (cmark's own
+;; rendering, verified against spec examples 300/321/325 among others): a tight list's first
+;; child, if it's a paragraph, is glued directly onto "<li>" with no newline at all -- which is
+;; what collapses a single-paragraph item onto one line ("<li>foo</li>") while a heading- or
+;; code-first item still gets "<li>\n...".
+(define (render-list-item source item tight? unsafe? out)
+  (write-string "<li>" out)
+  (for/fold ([ends-with-newline? #f]) ([k (in-list (list-item-children item))] [idx (in-naturals)])
+    (define bare? (and tight? (paragraph? k)))
+    (unless (or (and (= idx 0) bare?) ends-with-newline?) (write-string "\n" out))
+    (case (render-block source k bare? unsafe? out)
+      [(newline) #t]
+      [(inline) #f]
+      [else (or ends-with-newline? (not (and (= idx 0) bare?)))]))
+  (write-string "</li>\n" out))

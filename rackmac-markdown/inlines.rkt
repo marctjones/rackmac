@@ -198,6 +198,9 @@
   ;; commonmark.js processEmphasis: match closers left to right with the nearest eligible
   ;; opener above `bottom`, honoring the rule of 3; openers-bottom keeps it linear.
   (define (process-emphasis! bottom)
+    (unless (eq? delims bottom) (process-emphasis-above! bottom)))
+
+  (define (process-emphasis-above! bottom)
     (define openers-bottom (make-vector 14 bottom))
     (define first-closer
       (and delims (not (eq? delims bottom))
@@ -340,7 +343,7 @@
          [end
           (define image? (br-image? opener))
           (define onode (br-node opener))
-          (define tokens
+          (define tokens ; in position order, as every node's tokens are
             (append (list (token 'link-open (nd-start onode) (nd-end onode)) (token 'link-close pos after))
                     (if inline-end inline-tokens label-tokens)))
           (define node (mk (if image? 'image 'link) (nd-start onode) end #f tokens
@@ -458,24 +461,22 @@
        (let run ([t (nd-next c)] [end (nd-end c)] [vals (list (nd-value c))] [tokens (reverse (nd-tokens c))])
          (if (and t (eq? (nd-kind t) 'text) (= (nd-start t) end))
              (run (nd-next t) (nd-end t) (cons (nd-value t) vals) (append (reverse (nd-tokens t)) tokens))
-             (loop t (cons (text (nd-start c) end (reverse tokens) (apply string-append (reverse vals))) acc))))]
+             (loop t (cons (text (nd-start c) end (reverse tokens) (nul->replacement (apply string-append (reverse vals)))) acc))))]
       [else (loop (nd-next c) (cons (freeze c) acc))])))
-
-(define (sorted-tokens node) (sort (nd-tokens node) < #:key token-start))
 
 (define (freeze c)
   (define s (nd-start c)) (define e (nd-end c))
   (case (nd-kind c)
     [(soft-break) (soft-break s e '())]
     [(hard-break) (hard-break s e (nd-tokens c))]
-    [(code) (code-span s e (nd-tokens c) (nd-value c))]
+    [(code) (code-span s e (nd-tokens c) (nul->replacement (nd-value c)))]
     [(html) (raw-html s e (nd-tokens c))]
     [(emph) (emph s e (nd-tokens c) (freeze-children c))]
     [(strong) (strong s e (nd-tokens c) (freeze-children c))]
     [(link image)
      (define d (nd-data c))
      ((if (eq? (nd-kind c) 'link) link image)
-      s e (sorted-tokens c) (vector-ref d 0) (vector-ref d 1) (vector-ref d 2) (freeze-children c)
+      s e (nd-tokens c) (vector-ref d 0) (vector-ref d 1) (vector-ref d 2) (freeze-children c)
       (vector-ref d 3))]
     [else (error 'freeze "unexpected inline kind ~a" (nd-kind c))]))
 
