@@ -40,7 +40,19 @@
 (define tab-buffers '())
 (define syncing? #f)
 
-(define (focus-editor!) (when canvas (send canvas focus)))
+;; With the start screen showing, focus goes to its default control (its own New Note button)
+;; instead of the hidden canvas -- otherwise every shortcut (⌘N, ⌘O, ⌘,...) would need a click
+;; first, since key events dispatch through the focused editor canvas (see the header comment)
+;; and a detached canvas never receives them.
+(define (focus-editor!)
+  (cond [(and show-start-screen? start-panel) (send start-panel focus-default!)]
+        [canvas (send canvas focus)]))
+
+;; The fallback when no feature module has called register-start-screen! (isolated tests that
+;; require frame.rkt alone): a plain panel with the same focus-default! contract the real one
+;; (rackmac/library/start-screen.rkt) provides.
+(define trivial-start-panel%
+  (class vertical-panel% (super-new) (define/public (focus-default!) (send this focus))))
 
 ;; ---- start screen (#277 start-view) ---------------------------------------
 ;; A native-controls panel that takes the tabs/canvas's spot when there is no document open,
@@ -69,15 +81,19 @@
   (when frame
     (set! forced-start-screen? #t)
     (set! show-start-screen? #t)
-    (layout-rows!)))
+    (layout-rows!)
+    (run-hook 'focus-editor)))
 
 ;; Recomputes visibility from the current flags; called on 'buffers-changed (so the screen
 ;; comes back once the last document closes) and, after clearing the force, on
-;; 'current-buffer-changed (so it leaves once a document opens).
+;; 'current-buffer-changed (so it leaves once a document opens). The focus-editor hook runs
+;; last, after every other current-buffer-changed handler (including the one that focuses the
+;; canvas unconditionally), so this always has the final say on where focus actually lands.
 (define (recompute-start-screen!)
   (when frame
     (set! show-start-screen? (or forced-start-screen? (no-document-open?)))
-    (layout-rows!)))
+    (layout-rows!)
+    (run-hook 'focus-editor)))
 
 ;; ---- window --------------------------------------------------------------
 
@@ -181,7 +197,7 @@
   (set! find-bar (new find-bar% [parent frame] [on-close (lambda () (hide-find-bar!))]))
   (send frame change-children (lambda (cs) (remq find-bar cs)))   ; hidden until Find
   (set! start-panel (if start-screen-builder (start-screen-builder frame)
-                        (new vertical-panel% [parent frame])))    ; no start-screen module loaded
+                        (new trivial-start-panel% [parent frame])))    ; no start-screen module loaded
   (build-status-bar!)
 
   (add-hook! 'buffers-changed refresh-tabs!)

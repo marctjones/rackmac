@@ -7,7 +7,7 @@
          "../rackmac/library/folders.rkt" "../rackmac/library/new-note.rkt"
          "../rackmac/library/start-screen.rkt" "../rackmac/library/recents.rkt"
          "../rackmac/settings.rkt" "../rackmac/editor.rkt" "../rackmac/frame.rkt"
-         "../rackmac/command.rkt" "../rackmac/platform.rkt")
+         "../rackmac/command.rkt" "../rackmac/platform.rkt" "../rackmac/hook.rkt")
 
 (define dir (make-temporary-file "rackmac-startview~a" 'directory))
 (void (putenv "RACKMAC_HOME" (path->string dir)))
@@ -120,3 +120,37 @@
   (maybe-skip-start-screen!)
   (check-true (no-document-open?))
   (setting-set! 'skip-start-screen #f))
+
+;; ---- keyboard: shortcuts still work with the canvas detached -------------------------------
+;; Every shortcut normally dispatches through the focused editor canvas; with the start screen
+;; showing that canvas is not even a child of the window, so a Mod-key reaching one of this
+;; screen's own controls (any control can have focus) is routed the same way instead.
+
+(define (cmd-key code)
+  (new key-event% [key-code code] [meta-down (mac?)] [control-down (not (mac?))]))
+
+(test-case "Mod-N from the start screen creates a new note, just like the button"
+  (for ([b (all-buffers)] #:unless (messages-buffer? b)) (kill-buffer! b))
+  (check-true (start-screen-shown?))
+  (define some-control (car (find-by-class button%)))
+  (send (panel) on-subwindow-char some-control (cmd-key #\n))
+  (check-regexp-match #rx"^Untitled" (send (current-buffer) get-name))
+  (check-false (start-screen-shown?)))
+
+(test-case "an unmodified key on the panel is not swallowed as a shortcut"
+  (for ([b (all-buffers)] #:unless (messages-buffer? b)) (kill-buffer! b))
+  (define lb (car (find-by-class list-box%)))
+  (send (panel) on-subwindow-char lb (new key-event% [key-code #\n]))
+  (check-true (start-screen-shown?) "plain 'n' did not run New Note"))
+
+;; A never-shown window (docs/DEVELOPMENT.md: tests never call `show`) does not track real OS
+;; focus, so this only proves 'focus-editor routes to the right *widget's* focus method without
+;; raising in either state -- not that the OS actually moves focus there (README's own caveat
+;; about real keystrokes applies equally here).
+(test-case "'focus-editor does not raise while the start screen is shown or while a document is open"
+  (for ([b (all-buffers)] #:unless (messages-buffer? b)) (kill-buffer! b))
+  (check-true (start-screen-shown?))
+  (run-hook 'focus-editor)
+  (run-command 'new-note)
+  (check-false (start-screen-shown?))
+  (run-hook 'focus-editor))

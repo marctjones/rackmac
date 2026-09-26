@@ -6,7 +6,7 @@
 ;; which decides *when* to show it; this module only builds it and supplies its commands.
 (require racket/class racket/gui/base racket/draw racket/list racket/file racket/path
          "folders.rkt" "recents.rkt" "../command.rkt" "../editor.rkt" "../frame.rkt"
-         "../hook.rkt" "../settings.rkt" "../platform.rkt")
+         "../hook.rkt" "../settings.rkt" "../platform.rkt" "../input.rkt")
 
 (provide maybe-skip-start-screen!)
 
@@ -109,11 +109,19 @@ TEXT
     ;; list-box% has no Return callback of its own (RM-039's `pick` hits the same thing) --
     ;; caught here at the panel so Enter on a highlighted Recent row opens it, same as a
     ;; double-click (docs/UI-DESIGN.md S2.8: "keyboard reachable").
+    ;;
+    ;; Every other shortcut (⌘N, ⌘O, ⇧⌘O, ⌘,...) normally dispatches through the focused editor
+    ;; canvas (frame.rkt's header comment); with the canvas detached while this screen shows,
+    ;; a Mod-combination reaching any control here is sent through the same dispatcher instead,
+    ;; against the placeholder document's (global) keymap, so shortcuts keep working with
+    ;; nothing open rather than needing a click first.
     (define/override (on-subwindow-char receiver ev)
       (cond
         [(and (eq? receiver recent-list) (memq (send ev get-key-code) '(#\return #\newline numpad-enter)))
          (open-recent-row! recent-items (send recent-list get-selection))
          #t]
+        [(if (mac?) (send ev get-meta-down) (send ev get-control-down))
+         (or (dispatch-key-event (current-buffer) ev) (super on-subwindow-char receiver ev))]
         [else (super on-subwindow-char receiver ev)]))
 
     (define/public (refresh-recent!)
