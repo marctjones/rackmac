@@ -50,7 +50,7 @@
      "Heading 1" "Heading 2" "Heading 3" "Body Text" "---"
      "Bulleted List" "Numbered List" "Checklist" "Quote" "---" "Mark Done")
     ("View" "Zoom In" "Zoom Out" "Actual Size" "---" "Toggle Word Wrap" "Toggle Dark/Light Theme"
-     "Toggle Full Screen" ("Editor Theme" "Use System Setting" "Light" "Dark") "Show Toolbar"
+     "Toggle Full Screen" ("Editor Theme" "Use System Setting" "Light" "Dark") "Show Toolbar" "Show Library"
      "Show Markdown Source" "---" "Show Activity Log" "---" "Command Palette…" "Set Language…")
     ("Tools" "Run Selection" "Run Document" "---" "Scratch Pad" "New Code File…" "---"
      ("Extensions" "Customize with Code" "Reload Extensions" "List Extensions"))
@@ -71,7 +71,7 @@
      "Insert Date" "Insert Date and Time" "---"
      ("Spelling" "Check Spelling While Typing" "Check Document Now"))
     ("View" "Zoom In" "Zoom Out" "Actual Size" "---" "Toggle Word Wrap" "Toggle Dark/Light Theme"
-     "Toggle Full Screen" ("Editor Theme" "Use System Setting" "Light" "Dark") "Show Toolbar"
+     "Toggle Full Screen" ("Editor Theme" "Use System Setting" "Light" "Dark") "Show Toolbar" "Show Library"
      "Show Markdown Source" "---" "Show Activity Log" "---" "Command Palette…" "Set Language…")
     ("Tools" "Run Selection" "Run Document" "---" "Scratch Pad" "New Code File…" "---"
      ("Extensions" "Customize with Code" "Reload Extensions" "List Extensions"))
