@@ -11,7 +11,7 @@
          "../rackmac/keymap.rkt" "../rackmac/editor.rkt" "../rackmac/picker.rkt"
          "../rackmac/ui/settings-dialog.rkt" "../rackmac/tools-menu.rkt"
          "../rackmac/md-view-commands.rkt"
-         "../rackmac/md-format.rkt" "../rackmac/md-lists.rkt")
+         "../rackmac/md-format.rkt" "../rackmac/md-lists.rkt" "../rackmac/md-toolbar.rkt")
 
 (define golden-names
   '(about close-tab close-other-tabs close-tabs-to-right command-palette copy copy-tab-path
@@ -36,7 +36,8 @@
     toggle-bold toggle-italic toggle-inline-code toggle-strikethrough insert-link              ; #335
     heading-1 heading-2 heading-3 body-text
     toggle-bulleted-list toggle-numbered-list toggle-checklist toggle-quote mark-done
-    markdown-enter markdown-indent markdown-outdent))                                          ; #337
+    markdown-enter markdown-indent markdown-outdent                                             ; #337
+    heading-menu))                                                                              ; #336
 
 (test-case "feature command names are stable, with help and aliases"
   (for ([n feature-command-names])
