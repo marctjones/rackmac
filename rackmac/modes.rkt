@@ -1,6 +1,6 @@
 #lang racket/base
 ;; Built-in modes. Every one uses the same public define-mode that user code gets.
-(require "mode.rkt" "keymap.rkt" "highlight.rkt" "ui/layout.rkt")
+(require "mode.rkt" "keymap.rkt" "highlight.rkt" "md-style.rkt" "ui/layout.rkt")
 
 (define-mode text-mode
   #:label "Plain Text"
@@ -21,9 +21,14 @@
   #:highlighter highlight-racket!
   #:doc "Racket source: syntax coloring and ; comments.")
 
+
+;; The Formatted view (md-style.rkt): styled from the Markdown parser, restyled per edit.
+;; highlight-markdown! (regex coloring) stays for the Markdown Source view (#269).
 (define-mode markdown-mode
   #:label "Markdown"
   #:parent 'text-mode
   #:files '("*.md" "*.markdown")
-  #:highlighter highlight-markdown!
-  #:doc "Markdown: headings and inline code are colored.")
+  #:locals `((restyle-edit . ,markdown-edit!) (restyle-flush . ,markdown-flush!))
+  #:highlighter render-markdown!
+  #:on-disable reset-paragraph-margins!
+  #:doc "Markdown: headings, emphasis, code, links, lists and quotes are formatted as you type.")

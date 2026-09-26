@@ -207,10 +207,21 @@
         (set! highlight-timer (new timer% [notify-callback (lambda () (rehighlight!))])))
       (send highlight-timer start 120 #t))
 
+    ;; A Language that restyles only what an edit touched (Markdown, md-style.rkt) names its
+    ;; procedures in the locals `restyle-edit` (document start old-end new-length) and
+    ;; `restyle-flush` (document, when an edit sequence ends); others recolor the whole document
+    ;; shortly after typing stops.
+    (define (note-edit! s old-end new-len)
+      (define f (local-ref 'restyle-edit #f))
+      (if f (f this s old-end new-len) (schedule-highlight!)))
     (define/augment (after-insert s l)
-      (schedule-highlight!) (run-hook 'text-changed this) (inner (void) after-insert s l))
+      (note-edit! s s l) (run-hook 'text-changed this) (inner (void) after-insert s l))
     (define/augment (after-delete s l)
-      (schedule-highlight!) (run-hook 'text-changed this) (inner (void) after-delete s l))
+      (note-edit! s (+ s l) 0) (run-hook 'text-changed this) (inner (void) after-delete s l))
+    (define/augment (after-edit-sequence)
+      (define f (local-ref 'restyle-flush #f))
+      (when f (f this))
+      (inner (void) after-edit-sequence))
     ;; Readable measure: a Language can set the local `measure` (characters per line); when
     ;; wrapping, lines then wrap at that width or the window edge, whichever is narrower.
     (define/public (measure-width)
