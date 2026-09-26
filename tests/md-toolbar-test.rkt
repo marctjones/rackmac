@@ -1,18 +1,19 @@
 #lang racket/base
 ;; The Format toolbar group for notes (#336, docs/UI-DESIGN.md §2.3): Bold, Italic, Link, a
-;; Heading popup (Heading 1-3, Body Text), Bulleted, Numbered, Checklist and the Formatted/Source
-;; toggle, shown only for Markdown (the same #:mode scoping that already shows Run only for
+;; Heading popup (Heading 1-3, Body Text), Bulleted, Numbered, Checklist, an Export popup (Word,
+;; PDF) and the Formatted/Source toggle, shown only for Markdown (the same #:mode scoping that already shows Run only for
 ;; Racket) and dimming from #:when. Driven through the real (hidden) window.
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/gui/base racket/list
          "../rackmac/commands.rkt" "../rackmac/command.rkt" "../rackmac/frame.rkt"
          "../rackmac/editor.rkt" "../rackmac/toolbar.rkt" "../rackmac/ui/context-menu.rkt"
-         "../rackmac/md-format.rkt" "../rackmac/md-toolbar.rkt")
+         "../rackmac/md-format.rkt" "../rackmac/md-toolbar.rkt"
+         "../rackmac/office.rkt" "../rackmac/pdf-export.rkt" "../rackmac/pandoc.rkt")
 
 (define (names groups) (map (lambda (g) (map toolbar-item-command g)) groups))
 (define expected-format
   '(toggle-bold toggle-italic insert-link heading-menu
-    toggle-bulleted-list toggle-numbered-list toggle-checklist toggle-markdown-view))
+    toggle-bulleted-list toggle-numbered-list toggle-checklist export-menu toggle-markdown-view))
 
 ;; ---- registry ----------------------------------------------------------------------
 
@@ -26,7 +27,12 @@
   (check-equal? (tile 'toggle-italic) "I")
   (check-equal? (tile 'toggle-bulleted-list) "•")
   (check-equal? (tile 'toggle-numbered-list) "1.")
-  (check-equal? (tile 'heading-menu) "H▾"))
+  (check-equal? (tile 'heading-menu) "H▾")
+  (check-equal? (tile 'export-menu) "⇪▾"))
+
+(test-case "the Export button pops up Export to Word and Export as PDF"
+  (define it (findf (lambda (it) (eq? (toolbar-item-command it) 'export-menu)) (toolbar-items)))
+  (check-equal? (toolbar-item-items it) '(export-word export-pdf)))
 
 (test-case "the Heading button pops up Heading 1-3 and Body Text"
   (define it (findf (lambda (it) (eq? (toolbar-item-command it) 'heading-menu)) (toolbar-items)))
@@ -96,3 +102,22 @@
   (doc "hello" 'markdown-mode)
   (check-false (send tb popup-for 'toggle-bold)))
 
+(test-case "the Export popup offers Word and PDF; Word dims without pandoc"
+  (doc "hello" 'markdown-mode)
+  (define (enabled menu prefix)
+    (for/first ([i (send menu get-items)] #:when (regexp-match? (regexp (string-append "^" prefix)) (send i get-label)))
+      (send i is-enabled?)))
+  (parameterize ([pandoc-candidates '()])
+    (reset-pandoc!)
+    (define menu (send tb popup-for 'export-menu))
+    (check-equal? (length (labels menu)) 2)
+    (check-false (enabled menu "Export to Word"))
+    (check-true (enabled menu "Export as PDF")))
+  (reset-pandoc!))
+
+(test-case "picking Export as PDF runs export-pdf (the save dialog answered by the test)"
+  (define b (doc "hello" 'markdown-mode))
+  (define asked #f)
+  (parameterize ([ask-pdf-path (lambda (suggested dir) (set! asked suggested) #f)])
+    (pick (send tb popup-for 'export-menu) "Export as PDF"))
+  (check-not-false asked))

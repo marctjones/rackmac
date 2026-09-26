@@ -39,7 +39,7 @@
     heading-1 heading-2 heading-3 body-text
     toggle-bulleted-list toggle-numbered-list toggle-checklist toggle-quote mark-done
     markdown-enter markdown-indent markdown-outdent                                             ; #337
-    heading-menu))                                                                              ; #336
+    heading-menu export-menu))                                                                  ; #336
 
 (test-case "feature command names are stable, with help and aliases"
   (for ([n feature-command-names])
