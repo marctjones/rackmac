@@ -13,6 +13,7 @@
          "insert-date.rkt"
          "md-view.rkt"
          "md-view-commands.rkt"
+         "md-links-open.rkt"
          ;; feature modules: one per line, so parallel work doesn't collide here
          )
 (provide main)

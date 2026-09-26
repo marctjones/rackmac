@@ -3,7 +3,7 @@
 ;; name, file, major/minor modes and buffer-local variables. Keys are routed through
 ;; the keymap layers before text% sees them.
 (require racket/class racket/gui/base racket/string racket/list racket/file
-         "keymap.rkt" "mode.rkt" "hook.rkt" "input.rkt" "theme.rkt" "fileio.rkt")
+         "keymap.rkt" "mode.rkt" "hook.rkt" "input.rkt" "theme.rkt" "fileio.rkt" "platform.rkt")
 (provide buffer% large-file-threshold)
 
 ;; Documents longer than this many characters open without syntax coloring (it re-lexes the
@@ -17,6 +17,9 @@
 ;; A double/triple click's second and third click must land within this many milliseconds
 ;; of the previous one (racket/gui has no get-double-click-time; this is the OS ballpark).
 (define double-click-interval 500)
+
+;; Shown over a link while ⌘ (Ctrl) is held: the click will follow it.
+(define hand-cursor (make-object cursor% 'hand))
 
 (define buffer%
   (class text%
@@ -188,14 +191,46 @@
         [(3) (select-line-at! pos)]
         [else (void)]))
 
+    (define (event-position ev)
+      (define-values (ex ey) (send this dc-location-to-editor-location (send ev get-x) (send ev get-y)))
+      (send this find-position ex ey))
+
     (define/override (on-event ev)
       (cond
+        [(and (send ev button-down? 'left) (command-click? ev) (link-click-at! (event-position ev)))
+         (void)]                             ; followed a link; the caret stays where it was
         [(send ev button-down? 'left)
-         (define-values (ex ey) (send this dc-location-to-editor-location (send ev get-x) (send ev get-y)))
-         (define pos (send this find-position ex ey))
+         (define pos (event-position ev))
          (super on-event ev)                 ; the normal single click first (caret, drag-select)
          (click-at! pos (send ev get-time-stamp))]
+        [(send ev moving?)
+         (link-hover-at! (and (not (send ev dragging?)) (event-position ev)))
+         (super on-event ev)]
         [else (super on-event ev)]))
+
+    ;; ---- links (#338): ⌘-click follows, hover names the target -------------
+    ;; A Language that has links names a procedure in the local `link-at` (document position ->
+    ;; target string or #f; Markdown's is md-links.rkt). ⌘-click (Ctrl+click on Windows), Word's
+    ;; convention, runs the 'follow-link hook with the target (md-links-open.rkt opens it); a
+    ;; plain click only places the caret. Clickbacks (text%'s set-clickback) are not used because
+    ;; they fire on a plain click. Position-based, like click-at!, so tests need no pixels.
+    (define (command-click? ev) (if (mac?) (send ev get-meta-down) (send ev get-control-down)))
+    (define (link-target pos)
+      (define f (local-ref 'link-at #f))
+      (and f pos (f this pos)))
+    (define/public (link-click-at! pos)
+      (define target (link-target pos))
+      (and target (begin (run-hook 'follow-link this target) #t)))
+    (field [hovered-link #f])
+    (define/public (link-hover-at! pos)
+      (define target (link-target pos))
+      (unless (equal? target hovered-link)
+        (set! hovered-link target)
+        (run-hook 'echo (if target (format "~a  (~a to open)" target (if (mac?) "⌘-click" "Ctrl+click")) ""))))
+    (define/override (adjust-cursor ev)
+      (if (and (command-click? ev) (link-target (event-position ev)))
+          hand-cursor
+          (super adjust-cursor ev)))
 
     ;; RM-058: a right-click (or Ctrl-click on macOS) outside the current selection moves
     ;; the caret there and selects the word under the pointer; inside it, the selection is

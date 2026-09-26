@@ -1,6 +1,6 @@
 #lang racket/base
 ;; Built-in modes. Every one uses the same public define-mode that user code gets.
-(require "mode.rkt" "keymap.rkt" "highlight.rkt" "md-style.rkt" "md-view.rkt" "ui/layout.rkt")
+(require "mode.rkt" "keymap.rkt" "highlight.rkt" "md-style.rkt" "md-view.rkt" "md-links.rkt" "ui/layout.rkt")
 
 (define-mode text-mode
   #:label "Plain Text"
@@ -28,7 +28,8 @@
   #:label "Markdown"
   #:parent 'text-mode
   #:files '("*.md" "*.markdown")
-  #:locals `((restyle-edit . ,markdown-edit!) (restyle-flush . ,markdown-flush!))
+  #:locals `((restyle-edit . ,markdown-edit!) (restyle-flush . ,markdown-flush!)
+             (link-at . ,markdown-link-at))                  ; ⌘-click and hover (#338)
   #:highlighter markdown-highlight!
   #:on-enable markdown-view-enable!
   #:on-disable markdown-view-disable!
