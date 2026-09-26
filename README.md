@@ -239,3 +239,13 @@ status bar (position, word/selection count, encoding, line ending, Language, zoo
 Deferred (in DESIGN.md, not built): Rackorg (Org-compatible mode), multiple cursors, splits,
 a piece-tree text store and custom renderer, undo tree, tree-sitter, LSP, session restore,
 line-number gutter, and everything in the legal-workspace section (PDF/Word/Outlook integrations).
+
+## Third-party material
+
+- `rackmac-markdown/tests/spec/spec-0.31.2.json`: the CommonMark specification's examples (0.31.2), used only as
+  test data; CC BY-SA 4.0, attributed in `rackmac-markdown/tests/spec/LICENSE.md`.
+- `rackmac-markdown/entities.rktd`: the WHATWG HTML named-character-reference table (`entities.json`), reformatted;
+  the WHATWG HTML Living Standard is licensed CC BY 4.0.
+- `rackmac/ui/workbench-icons.rktd`: icons from the Skeptical Engineering Workbench set
+  (`skepticalengineering-design`, vendored by `tools/workbench-icons.rkt`).
+- IBM Plex is used when installed and is not bundled (#330); if it is bundled, its SIL OFL 1.1 license files ship with it.
