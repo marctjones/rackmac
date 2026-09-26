@@ -104,11 +104,57 @@
                         (+ (segment-source-start g) (segment-source-length g))))
                   (format "~a: token ~a is not inside one segment" where t)))))
 
+;; Block tokens (mdlib-runs, #322): each lies inside its block's span and on one line; every
+;; token of the document, block and inline, is disjoint from every other; every non-blank
+;; character lies in a leaf block or a container token (a quote marker or list marker) --
+;; design §5's coverage property, stated on tokens instead of container spans; and no container
+;; token touches a leaf's content (a leaf's span may enclose the `>` of its later lines, its
+;; segments and code lines never do), so each character has exactly one owner.
+(define (container? b) (or (block-quote? b) (list-block? b) (list-item? b)))
+
+(define (check-block-tokens! doc source)
+  (define nodes (all-non-document-nodes doc))
+  (for* ([b (in-list nodes)] [t (in-list (block-tokens b))])
+    (check-true (<= (block-start b) (token-start t) (token-end t) (block-end b))
+                (format "~s: block token ~a outside its block [~a,~a)" source t (block-start b) (block-end b)))
+    (check-true (< (token-start t) (token-end t)) (format "~s: empty token ~a" source t))
+    (check-false (for/or ([c (in-string source (token-start t) (token-end t))]) (eqv? c #\newline))
+                 (format "~s: block token ~a covers a line ending" source t)))
+  (define (inline-tokens-of x) (append (inline-tokens x) (append-map inline-tokens-of (inline-children x))))
+  (define all-tokens
+    (sort (append (append-map block-tokens nodes)
+                  (append-map (lambda (b) (if (leaf-block? b) (append-map inline-tokens-of (block-inlines b)) '()))
+                              nodes))
+          < #:key token-start))
+  (for ([a (in-list all-tokens)] [c (in-list (if (null? all-tokens) '() (cdr all-tokens)))])
+    (check-true (<= (token-end a) (token-start c)) (format "~s: tokens ~a and ~a overlap" source a c)))
+  (define len (string-length source))
+  (define covered (make-vector len #f))
+  (define content (make-vector len #f))
+  (define (mark! v s e) (for ([i (in-range s (min e len))]) (vector-set! v i #t)))
+  (for ([b (in-list nodes)])
+    (cond
+      [(container? b) (for ([t (in-list (block-tokens b))]) (mark! covered (token-start t) (token-end t)))]
+      [else
+       (mark! covered (block-start b) (block-end b))
+       (for ([g (in-list (cond [(paragraph? b) (paragraph-segments b)] [(heading? b) (heading-segments b)] [else '()]))])
+         (mark! content (segment-source-start g) (+ (segment-source-start g) (segment-source-length g))))
+       (for ([l (in-list (cond [(code-block? b) (code-block-lines b)] [(html-block? b) (html-block-lines b)] [else '()]))])
+         (mark! content (first l) (second l)))]))
+  (for ([i (in-range len)] #:unless (char-whitespace? (string-ref source i)))
+    (unless (vector-ref covered i)
+      (fail-check (format "~s: non-blank char ~s at ~a is in no leaf block or container token"
+                          source (string-ref source i) i))))
+  (for* ([b (in-list nodes)] #:when (container? b) [t (in-list (block-tokens b))])
+    (when (for/or ([i (in-range (token-start t) (token-end t))]) (vector-ref content i))
+      (fail-check (format "~s: container token ~a covers leaf content" source t)))))
+
 (define (check-document! source)
   (define doc (parse-document source))
   (check-node! doc "doc")
   (check-coverage! doc source)
   (check-leaf-inlines! doc source)
+  (check-block-tokens! doc source)
   (check-equal? doc (parse-document source) "parsing is deterministic and equal? is structural"))
 
 (test-case "positions: every spec example"
