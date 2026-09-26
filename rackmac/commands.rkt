@@ -325,7 +325,7 @@
   #:icon "save"
   #:aliases ("save everything" "save all documents")
   #:help "Save every open document that has unsaved changes."
-  #:title "Save All" #:menu "File" #:menu-order 26 #:keys/mac ("Mod-Alt-s")
+  #:title "Save All" #:menu "File" #:menu-order 26   ; ⌥⌘S is Show Library now (#273, REPLAN S9)
   (define bs (unsaved-buffers))
   (define saved (for/sum ([b bs]) (if (save-buffer! b) 1 0)))
   (message (if (null? bs) "Nothing to save." (format "Saved ~a of ~a document~a." saved (length bs) (if (= 1 (length bs)) "" "s")))))

@@ -8,6 +8,7 @@
          "library/folders.rkt"
          "library/new-note.rkt"
          "library/start-screen.rkt"
+         "library/sidebar.rkt"           ; #273: the Library sidebar and View > Show Library
          "appearance.rkt"
          "office.rkt"
          "recovery.rkt"

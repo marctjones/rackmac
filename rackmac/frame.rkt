@@ -11,7 +11,8 @@
          main-toolbar toolbar-shown? set-toolbar-shown! main-status-bar
          menu-for-title menu-item-for refresh-menu-enabled! tab-context-menu-groups
          register-submenu!
-         register-start-screen! main-start-panel start-screen-shown? show-start-screen!)
+         register-start-screen! main-start-panel start-screen-shown? show-start-screen!
+         register-sidebar! main-sidebar main-body sidebar-shown? set-sidebar-shown!)
 
 (define frame #f)
 (define (main-frame) frame)
@@ -28,8 +29,29 @@
 (define (layout-rows!)
   (send frame change-children
         (lambda (cs) (append (if show-toolbar? (list toolbar) '())
-                             (list (if show-start-screen? start-panel tabs))
-                             (if show-find? (list find-bar) '()) (list status-bar)))))
+                             (list body)
+                             (if show-find? (list find-bar) '()) (list status-bar))))
+  ;; #273: the middle row is `body`, a horizontal panel: the Library sidebar (when there is one
+  ;; and it is shown) beside the document area (the tabs, or the start screen).
+  (send body change-children
+        (lambda (cs) (append (if (and sidebar show-sidebar?) (list sidebar) '())
+                             (list (if show-start-screen? start-panel tabs))))))
+
+;; ---- Library sidebar (#273 lib-sidebar) -------------------------------------
+;; Built by rackmac/library/sidebar.rkt through `register-sidebar!` (a builder, like the start
+;; screen's): frame.rkt only places it left of the document area and shows or hides it. The
+;; builder returns the panel and whether it starts shown (the persisted setting lives there).
+(define body #f)
+(define (main-body) body)
+(define sidebar #f)
+(define (main-sidebar) sidebar)
+(define sidebar-builder #f)
+(define (register-sidebar! builder) (set! sidebar-builder builder))
+(define show-sidebar? #f)
+(define (sidebar-shown?) (and sidebar show-sidebar?))
+(define (set-sidebar-shown! on?)
+  (set! show-sidebar? (and on? #t))
+  (when frame (layout-rows!)))
 (define menu-bar #f)
 (define tabs #f)
 (define canvas #f)
@@ -187,7 +209,8 @@
   (set! toolbar (new toolbar-panel% [parent frame] [mode-getter (lambda () (send (current-buffer) get-mode))]))
   ;; Browser-style document tabs: close boxes, drag to reorder, and a "+" button, drawn the
   ;; same way on macOS and Windows ('flat-portable).
-  (set! tabs (new document-tabs% [parent frame] [choices '("untitled")]
+  (set! body (new horizontal-panel% [parent frame] [spacing 0] [border 0]))
+  (set! tabs (new document-tabs% [parent body] [choices '("untitled")]
                   [style tab-strip-style]
                   [callback (lambda (tp e)
                               (unless syncing?
@@ -198,8 +221,12 @@
                     [horizontal-inset editor-inset-x] [vertical-inset editor-inset-y]))
   (set! find-bar (new find-bar% [parent frame] [on-close (lambda () (hide-find-bar!))]))
   (send frame change-children (lambda (cs) (remq find-bar cs)))   ; hidden until Find
-  (set! start-panel (if start-screen-builder (start-screen-builder frame)
-                        (new trivial-start-panel% [parent frame])))    ; no start-screen module loaded
+  (set! start-panel (if start-screen-builder (start-screen-builder body)
+                        (new trivial-start-panel% [parent body])))     ; no start-screen module loaded
+  (when sidebar-builder
+    (define-values (panel shown?) (sidebar-builder body))
+    (set! sidebar panel)
+    (set! show-sidebar? (and shown? #t)))
   (build-status-bar!)
 
   (add-hook! 'buffers-changed refresh-tabs!)

@@ -30,8 +30,9 @@
   (for ([b (all-buffers)] #:unless (messages-buffer? b)) (kill-buffer! b))
   (check-true (start-screen-shown?))
   (check-true (no-document-open?))
-  (check-not-false (memq (panel) (send (main-frame) get-children)))
-  (check-false (memq (main-tabs) (send (main-frame) get-children))))
+  ;; the document area is the window's middle row, `main-body` (beside the sidebar, #273)
+  (check-not-false (memq (panel) (send (main-body) get-children)))
+  (check-false (memq (main-tabs) (send (main-body) get-children))))
 
 (test-case "it is native controls: at least one button% and one list-box%"
   (check-true (>= (length (find-by-class button%)) 3) "New Note, Add Folder, Open, Get Started")
@@ -42,7 +43,7 @@
   (check-true (start-screen-shown?))
   (run-command 'new-note)
   (check-false (start-screen-shown?))
-  (check-not-false (memq (main-tabs) (send (main-frame) get-children))))
+  (check-not-false (memq (main-tabs) (send (main-body) get-children))))
 
 (test-case "closing the last document brings it back"
   (kill-buffer! (current-buffer))
