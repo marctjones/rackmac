@@ -9,7 +9,8 @@
 ;; --- Tokens -----------------------------------------------------------------------------------
 
 ;; The closed set of markup-token roles (design §1.2). Exported as a list so tests can check
-;; coverage as new phases add tokens; mdlib-blocks only emits the block-level subset.
+;; coverage; the extension roles (table-*, wiki-*, tag-hash, front-matter-fence, task-marker,
+;; strike-delim) appear only with their extensions on.
 (define token-roles
   '(heading-marker setext-underline quote-marker bullet ordered-marker task-marker
     fence fence-info code-indent
@@ -41,7 +42,7 @@
 (struct html-block block (kind lines) #:transparent)                      ; leaf
 (struct block-quote block (children) #:transparent)                      ; container
 (struct list-block block (ordered? start-number delimiter tight? children) #:transparent) ; container
-;; task: #f, 'open, 'done, or 'cancelled (extension; unset until mdlib-ext).
+;; task: #f, 'open, 'done, or 'cancelled (the tasks extension: `[ ]`, `[x]`/`[X]`, `[-]`).
 (struct list-item block (marker-end content-indent task children) #:transparent) ; container
 (struct link-ref-def block (label dest title) #:transparent)             ; leaf, kept in the tree
 
@@ -58,7 +59,8 @@
 ;; Spans and tokens as in design §1.2. link/image `kind`: 'inline 'full 'collapsed 'shortcut
 ;; 'autolink; `label` is the reference label as written (full/collapsed/shortcut) or #f; `dest`
 ;; and `title` are decoded (escapes, entities; `title` #f when absent), percent-encoding is left
-;; to the renderer. wiki-link, tag, date-ref, state-keyword and strike are mdlib-ext's.
+;; to the renderer; kind 'literal is a GFM autolink literal. wiki-link, tag, date-ref,
+;; state-keyword and strike come from the extensions (design §2.3).
 
 (struct inline (start end tokens) #:transparent)
 (struct text inline (value) #:transparent)
