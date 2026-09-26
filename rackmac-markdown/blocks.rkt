@@ -531,7 +531,11 @@
        [rest-blank?
         (close-block! leaf)
         (open-new-blocks! (parent-of doc leaf) source offset column content-end #f)]
-       [(try-setext source offset column content-end)
+       ;; A setext underline needs paragraph text left after the leading reference
+       ;; definitions are taken out (spec examples 215-216); otherwise the line is ordinary.
+       [(and (try-setext source offset column content-end)
+             (not (only-link-ref-defs? source (leaf-lines leaf)))
+             (try-setext source offset column content-end))
         => (lambda (level)
              (set-mblk-kind-heading! leaf level)
              (touch-path! full-path content-end)
@@ -762,10 +766,13 @@
      (cond
        [(mdata-ref b 'setext-level)
         => (lambda (level)
+             (define-values (remaining refdefs) (strip-link-ref-defs source (leaf-lines b) refmap))
              (define-values (segs content)
-               (build-segments+content source (trim-trailing-line-ws source (leaf-lines b))))
-             (list (heading (mblk-start b) (mblk-end b) '() level #t #f segs
-                            (leaf-cell 'heading segs content refmap))))]
+               (build-segments+content source (trim-trailing-line-ws source remaining)))
+             (append refdefs
+                     (list (heading (if (null? refdefs) (mblk-start b) (first (car remaining)))
+                                    (mblk-end b) '() level #t #f segs
+                                    (leaf-cell 'heading segs content refmap)))))]
        [else
         (define-values (remaining refdefs) (strip-link-ref-defs source (leaf-lines b) refmap))
         (define para
@@ -828,6 +835,12 @@
              (loop (list-tail lines consumed-lines) (cons node defs))]
             [else (values lines (reverse defs))])] ; invalid (empty) label: keep as paragraph text
          [#f (values lines (reverse defs))])])))
+
+;; #t when a paragraph's lines are nothing but reference definitions (a scratch refmap is
+;; used: registration happens at finalization, in document order).
+(define (only-link-ref-defs? source lines)
+  (define-values (remaining defs) (strip-link-ref-defs source lines (make-hash)))
+  (null? remaining))
 
 (define (non-empty-normalized? s) (> (string-length s) 0))
 
