@@ -7,7 +7,8 @@
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/file racket/class racket/path racket/list racket/gui/base
          "../rackmac/recovery.rkt" "../rackmac/editor.rkt" "../rackmac/hook.rkt"
-         "../rackmac/settings.rkt" "../rackmac/platform.rkt" "../rackmac/commands.rkt")
+         "../rackmac/settings.rkt" "../rackmac/platform.rkt" "../rackmac/commands.rkt"
+         "../rackmac/command.rkt")
 
 (define dir (make-temporary-file "rackmac-recovery~a" 'directory))
 (void (putenv "RACKMAC_HOME" (path->string dir)))
@@ -172,6 +173,50 @@
   (parameterize ([confirm-save-changes (lambda (doc) 'discard)])
     (check-true (confirm-quit?)))
   (check-false (snapshot-for id) "no recovery offer next launch for text the user discarded"))
+
+;; Quit asks about each unsaved document in turn; `answers` maps a document to its answer and
+;; everything else (leftovers from earlier tests) to Don't Save.
+(define (quit-answering answers)
+  (parameterize ([confirm-save-changes (lambda (doc) (cond [(assq doc answers) => cdr] [else 'discard]))])
+    (confirm-quit?)))
+
+(test-case "quit: Don't Save on one document then Cancel on another keeps the first one's snapshot"
+  (for ([order (in-list '(discard-first cancel-first))])
+    (define keep (new-buffer! "untitled"))
+    (send keep insert "discard me, then change my mind")
+    (snapshot-buffer! keep)
+    (define other (new-buffer! "untitled"))
+    (send other insert "the one whose question gets Cancel")
+    (snapshot-buffer! other)
+    (define-values (first second) (if (eq? order 'discard-first) (values keep other) (values other keep)))
+    ;; Put the two documents at the front of the quit's order, in `order`.
+    (set-tab-order! (append (list first second) (remq first (remq second (visible-buffers)))))
+    (define asked '())
+    (parameterize ([confirm-save-changes
+                    (lambda (doc) (set! asked (cons doc asked))
+                      (cond [(eq? doc keep) 'discard] [(eq? doc other) 'cancel] [else 'discard]))])
+      (check-false (confirm-quit?) (format "~a: the quit was cancelled" order)))
+    (check-not-false (memq first asked))
+    (check-true (send keep is-modified?) "the document is still open and modified")
+    (check-not-false (snapshot-for (buffer-recovery-id keep))
+                     (format "~a: its snapshot survives the cancelled quit" order))
+    (check-not-false (snapshot-for (buffer-recovery-id other)))
+    ;; Now quit for real, answering Don't Save everywhere: only then do the snapshots go.
+    (check-true (quit-answering '()))
+    (check-false (snapshot-for (buffer-recovery-id keep)))
+    (check-false (snapshot-for (buffer-recovery-id other)))
+    (for ([b (list keep other)]) (send b set-modified #f) (kill-buffer! b))))
+
+(test-case "close tab: Don't Save still discards the snapshot at once"
+  (define b (new-buffer! "untitled"))
+  (send b insert "close me")
+  (snapshot-buffer! b)
+  (define id (buffer-recovery-id b))
+  (parameterize ([confirm-save-changes (lambda (doc) 'discard)])
+    (set-current-buffer! b)
+    (run-command 'close-tab))
+  (check-false (memq b (all-buffers)) "the tab closed")
+  (check-false (snapshot-for id)))
 
 (test-case "a document closed while modified without a Don't Save answer keeps its snapshot (safe default)"
   (define b (new-buffer! "untitled"))
