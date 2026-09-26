@@ -162,7 +162,7 @@ everything, including commands without a shortcut.
 
 | Menu | Command | macOS | Windows |
 |---|---|---|---|
-| File | New Document | ⌘N, ⌘T | Ctrl+N, Ctrl+T |
+| File | New Note | ⌘N, ⌘T | Ctrl+N, Ctrl+T |
 | File | Open… | ⌘O | Ctrl+O |
 | File | Quick Open… | ⇧⌘O | Ctrl+Shift+O |
 | File | Save | ⌘S | Ctrl+S |

@@ -5,6 +5,9 @@
          "command.rkt" "editor.rkt" "frame.rkt" "eval.rkt" "theme.rkt" "hook.rkt"
          "library/recents.rkt"
          "library/open-recent.rkt"
+         "library/folders.rkt"
+         "library/new-note.rkt"
+         "library/start-screen.rkt"
          "appearance.rkt"
          "office.rkt"
          "recovery.rkt"
@@ -31,6 +34,7 @@
   (for ([a (in-list args)]) (set-current-buffer! (open-file! a)))
   (define f (make-main-frame))
   (recover-on-launch!)               ; #77: offer back anything a previous crash left behind
+  (maybe-skip-start-screen!)         ; #277: honors "skip the start screen" if nothing opened above
   (load-init!)
   (send f show #t)
   (focus-editor!)                    ; focus set while the window was hidden does not stick

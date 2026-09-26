@@ -43,6 +43,7 @@
                            #:keys [keys '()]
                            #:keys/mac [keys/mac '()]
                            #:keys/windows [keys/windows '()]
+                           #:key-keymap [key-keymap #f]   ; bind #:keys here instead of globally
                            #:aliases [aliases '()]
                            #:help [help ""]
                            #:icon [icon #f]
@@ -62,9 +63,13 @@
                   (lambda ()
                     (if old (hash-set! registry name old) (hash-remove! registry name))
                     (run-hook 'command-registered name)))
+  ;; The declared keys are always recorded for display (cheat sheet, README, the palette's
+  ;; shortcut column) even when #:key-keymap sends the real binding somewhere other than
+  ;; global-keymap (run-code-only, #288: Run Selection/Document are only live in a code
+  ;; Language's keymap, but still documented as ⌘Return everywhere else).
   (hash-set! key-specs name (list keys keys/mac keys/windows))
   (for ([k (in-list (append keys (if (mac?) keys/mac keys/windows)))])
-    (keymap-bind! global-keymap k name))
+    (keymap-bind! (or key-keymap global-keymap) k name))
   (run-hook 'command-registered name))
 
 ;; Key strings are checked when the module is compiled, so a typo is a syntax error at
@@ -88,6 +93,7 @@
              (~optional (~seq #:keys keys:expr))
              (~optional (~seq #:keys/mac keys/mac:expr))
              (~optional (~seq #:keys/windows keys/win:expr))
+             (~optional (~seq #:key-keymap key-keymap:expr))
              (~optional (~seq #:menu menu:expr))
              (~optional (~seq #:menu-order order:expr))
              (~optional (~seq #:aliases aliases:expr))
@@ -113,6 +119,7 @@
                             #:keys (~? 'keys '())
                             #:keys/mac (~? 'keys/mac '())
                             #:keys/windows (~? 'keys/win '())
+                            #:key-keymap (~? key-keymap #f)
                             #:aliases (~? 'aliases '())
                             #:help (~? help "")
                             #:icon (~? icon #f)

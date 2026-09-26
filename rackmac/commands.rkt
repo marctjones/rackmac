@@ -8,10 +8,17 @@
          "fileio.rkt" "ui/palette.rkt" "settings.rkt" "appearance.rkt")
 (provide save-buffer! confirm-quit? palette-items palette-matches command-description
          confirm-discard-changes confirm-save-changes
-         builtin-command-names reveal-argv launch!)
+         builtin-command-names reveal-argv launch! quick-open-fallback!)
 
 (define (t) (current-buffer))
 (define (ext?) (extending-selection?))
+
+;; run-code-only (#288): a code Language is one whose chain includes prog-mode, the mirror of
+;; status-defaults.rkt's `prose-mode?` (text-mode). Run Selection/Run Document, Toggle Comment
+;; and Indent/Outdent Lines are for code only; a note's Tab and Enter serve lists instead
+;; (md-lists-enter, a later issue) and ⌘Return does nothing (Run Selection/Document are not
+;; even bound outside a code Language's own keymap -- see #:key-keymap code-keymap below).
+(define (code-language? [b (t)]) (and (memq 'prog-mode (map mode-name (mode-chain (send b get-mode)))) #t))
 
 (define-syntax-rule (edit-group b body ...)
   (let ([buf b])
@@ -88,12 +95,15 @@
   (when ok? (for ([b (in-list (reverse discarded))]) (run-hook 'changes-discarded b)))
   ok?)
 
+;; #276 lib-new-note: Cmd+N now makes a note (rackmac/library/new-note.rkt); this keeps its
+;; old behavior (an empty, mode-less tab, useful for a quick Racket or Python script) reachable
+;; under its old symbol, so nothing that calls it by name breaks, moved to Tools and renamed.
 (define-command (new-document)
-  #:icon "new"
-  #:aliases ("new document" "new file" "new tab")
-  #:help "Start a new empty document in a new tab."
-  #:title "New Document" #:menu "File" #:menu-order 10 #:keys ("Mod-n" "Mod-t")
-  #:doc "Create an empty document."
+  #:icon "language"
+  #:aliases ("new document" "new file" "new tab" "new code file" "new script")
+  #:help "Start a new empty code file in a new tab."
+  #:title "New Code File…" #:menu "Tools" #:menu-order 21 #:category "Tools"
+  #:doc "Create an empty document with no Library folder or file yet -- for a quick script. Notes use New Note instead."
   (set-current-buffer! (new-buffer! "untitled")))
 
 (define-command (open-file)
@@ -119,12 +129,12 @@
 
 (define skipped-dirs '(".git" "node_modules" "compiled" ".svn" ".hg" "__pycache__"))
 
-(define-command (quick-open)
-  #:icon "search"
-  #:aliases ("find file in project" "fuzzy open" "go to file")
-  #:help "Type part of a file name to open it from the current project."
-  #:title "Quick Open…" #:menu "File" #:menu-order 12 #:keys ("Mod-Shift-o")
-  #:doc "Fuzzy-find a file under the project root (the enclosing git repo, or the file's folder)."
+;; The project-root search: the default when there is no Library, and the fallback
+;; rackmac/library/folders.rkt uses (its own `quick-open` redefinition, #290 lib-quick-open)
+;; before any Library folder has been added. Exported so that module can reuse it instead of
+;; requiring commands.rkt to know about the Library -- see the collision rule in
+;; docs/DEVELOPMENT.md ("new features put their commands in their own module").
+(define (quick-open-fallback!)
   (define root (project-root))
   (cond
     [(member (path->string (simplify-path root)) (list "/" (path->string (find-system-path 'home-dir))))
@@ -139,6 +149,14 @@
          (path->string (find-relative-path root p))))
      (define choice (pick (format "Quick Open — ~a" root) (for/list ([f files]) (list f "" f))))
      (when choice (set-current-buffer! (open-file! (build-path root choice))))]))
+
+(define-command (quick-open)
+  #:icon "search"
+  #:aliases ("find file in project" "fuzzy open" "go to file")
+  #:help "Type part of a file name to open it from the current project."
+  #:title "Quick Open…" #:menu "File" #:menu-order 12 #:keys ("Mod-Shift-o")
+  #:doc "Fuzzy-find a file under the project root (the enclosing git repo, or the file's folder)."
+  (quick-open-fallback!))
 
 (define-command (save)
   #:when (lambda () (or (send (t) is-modified?) (not (send (t) get-path))))
@@ -520,6 +538,7 @@ TEMPLATE
 ;; Lines --------------------------------------------------------------------
 
 (define-command (toggle-comment)
+  #:when code-language?
   #:icon "comment"
   #:aliases ("uncomment")
   #:help "Turn the selected lines into comments, or back into code."
@@ -645,6 +664,7 @@ TEMPLATE
         (send b insert (indent-string b) (send b paragraph-start-position p))))))
 
 (define-command (indent-lines)
+  #:when code-language?
   #:icon "indent"
   #:aliases ("indent region")
   #:help "Indent the selected lines."
@@ -652,6 +672,7 @@ TEMPLATE
   (indent-selected-lines!))
 
 (define-command (outdent-lines)
+  #:when code-language?
   #:icon "outdent"
   #:aliases ("unindent" "dedent")
   #:help "Remove one level of indent from the selected lines."
@@ -859,10 +880,12 @@ TEMPLATE
   (line-text b (send b position-paragraph (send b get-start-position))))
 
 (define-command (run-selection)
+  #:when code-language?
   #:icon "run"
   #:aliases ("evaluate selection" "evaluate" "run code")
   #:help "Run the selected Racket code, or the current line."
-  #:title "Run Selection" #:menu "Tools" #:menu-order 10 #:keys ("Mod-Enter")
+  #:title "Run Selection" #:menu "Tools" #:menu-order 10
+  #:keys ("Mod-Enter") #:key-keymap code-keymap
   #:doc "Evaluate the selected Racket code (or the current line) in the running editor."
   (define b (t))
   (define code (let ([s (selection-string b)]) (if (string=? s "") (current-line-text b) s)))
@@ -870,10 +893,12 @@ TEMPLATE
   (message "~a" (if (string=? r "") "(no output)" r)))
 
 (define-command (run-document)
+  #:when code-language?
   #:icon "run-all"
   #:aliases ("evaluate document" "run file")
   #:help "Run the whole document as Racket code."
-  #:title "Run Document" #:menu "Tools" #:menu-order 11 #:keys ("Mod-Shift-Enter")
+  #:title "Run Document" #:menu "Tools" #:menu-order 11
+  #:keys ("Mod-Shift-Enter") #:key-keymap code-keymap
   (define r (eval-string (buffer-string)))
   (message "~a" (if (string=? r "") "Evaluated document" r)))
 

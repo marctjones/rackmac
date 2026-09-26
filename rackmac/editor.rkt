@@ -4,6 +4,7 @@
 (require racket/class racket/list racket/string racket/path
          "buffer.rkt" "hook.rkt" "mode.rkt" "modes.rkt")
 (provide current-buffer set-current-buffer! all-buffers visible-buffers messages-buffer?
+         no-document-open? placeholder-buffer?
          reopen-closed-tab! closed-tab-paths reload-buffer! set-tab-order!
          new-buffer! open-file! kill-buffer! find-buffer-by-path unique-name
          message log-message messages-buffer show-messages!
@@ -35,12 +36,20 @@
   (run-hook 'buffers-changed)
   b)
 
+;; #277 start-view: nothing is auto-created and shown any more when the last document closes
+;; (that used to be a Scratch Pad, which made every empty window a Racket document -- #288).
+;; `current-buffer` still always returns *something*, so every `(t)`-style caller keeps
+;; working, but the fallback is a hidden, unnamed placeholder; the frame shows the start
+;; screen instead of this placeholder whenever there is no real document (no-document-open?).
+(define placeholders (make-weak-hasheq))       ; buffer -> #t: never a real document
+(define (placeholder-buffer? b) (hash-ref placeholders b #f))
+(define (no-document-open?) (null? (visible-buffers)))
+
 (define (current-buffer)
   (unless current
     (set! current (or (let ([vs (visible-buffers)]) (and (pair? vs) (car vs)))
-                      (let ([b (new-buffer! "Scratch Pad" #:mode 'racket-mode)])
-                        (send b insert ";; Scratch Pad: a place to try Racket code.\n;; Select some code and press Mod-Enter to run it.\n\n")
-                        (send b set-modified #f)
+                      (let ([b (new-buffer! "untitled" #:shown? #f)])
+                        (hash-set! placeholders b #t)
                         b))))
   current)
 
@@ -112,7 +121,7 @@
      (set! buffers (remq b buffers))
      (when (eq? b current)
        (set! current (and (pair? rest) (list-ref rest (min i (sub1 (length rest))))))
-       (set-current-buffer! (current-buffer)))])       ; makes a Scratch Pad if none are left
+       (set-current-buffer! (current-buffer)))])       ; falls back to the hidden placeholder if none are left
   (run-hook 'buffers-changed))
 
 (define (unsaved-buffers)
