@@ -58,11 +58,14 @@
             [parsed #:mutable]))
 (define states (make-weak-hasheq))
 
-(define (prose-mode? name) (and (memq 'text-mode (map mode-name (mode-chain name))) #t))
-(define (spell-checkable? b) (and (prose-mode? (send b get-mode)) (not (send b large?))))
+;; Prose Languages only, and never the Activity log (a Plain Text document of messages).
+(define (prose-doc? b)
+  (and (memq 'text-mode (map mode-name (mode-chain (send b get-mode))))
+       (not (messages-buffer? b))))
+(define (spell-checkable? b) (and (prose-doc? b) (not (send b large?))))
 
 (define (state-of b)
-  (hash-ref! states b (lambda () (sp (prose-mode? (send b get-mode)) '() '() (hash) #f))))
+  (hash-ref! states b (lambda () (sp (prose-doc? b) '() '() (hash) #f))))
 
 (define (spell-misspellings b)
   (define st (hash-ref states b #f))
@@ -84,7 +87,7 @@
   (define st (state-of b))
   (set-sp-ranges! st '())
   (set-sp-parsed! st #f)
-  (set-sp-checkable?! st (prose-mode? (send b get-mode)))
+  (set-sp-checkable?! st (prose-doc? b))
   (set-sp-dirty! st (if (sp-checkable? st) (list (cons 0 (send b last-position))) '()))
   (invalidate-all! b)
   (schedule!))
@@ -93,7 +96,8 @@
 ;; it move, and the ones it touched (including a word typed onto) are dropped until rechecked.
 (define (on-edit! b s old-end new-len)
   (define st (state-of b))
-  (when (sp-checkable? st)
+  ;; (the Activity log is made as a plain document and only then known as the log)
+  (when (and (sp-checkable? st) (not (messages-buffer? b)))
     (define delta (- new-len (- old-end s)))
     (define (shift r) (cons (+ (car r) delta) (+ (cdr r) delta)))
     (set-sp-ranges! st (for/list ([r (in-list (sp-ranges st))]
@@ -207,13 +211,13 @@
 ;; Check everything still marked in `b` now (tests, Check Document Now).
 (define (spell-flush! b)
   (define st (state-of b))
-  (if (and (sp-checkable? st) (not (send b large?)))
+  (if (and (sp-checkable? st) (spell-checkable? b))
       (void (work! b st #f))
       (set-sp-dirty! st '())))
 
 (define (spell-check-document! b)
   (define st (state-of b))
-  (set-sp-checkable?! st (prose-mode? (send b get-mode)))
+  (set-sp-checkable?! st (prose-doc? b))
   (set-sp-dirty! st (if (sp-checkable? st) (list (cons 0 (send b last-position))) '()))
   (set-sp-ranges! st '())
   (spell-flush! b))
@@ -232,7 +236,7 @@
       (for/or ([b (in-list (all-buffers))])
         (define st (hash-ref states b #f))
         (and st (pair? (sp-dirty st))
-             (cond [(or (not (sp-checkable? st)) (send b large?)) (set-sp-dirty! st '()) #f]
+             (cond [(not (and (sp-checkable? st) (spell-checkable? b))) (set-sp-dirty! st '()) #f]
                    [else (not (work! b st slice-ms))]))))
     (when more? (schedule! 1))))
 

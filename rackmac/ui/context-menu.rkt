@@ -5,7 +5,7 @@
 ;; `popup-menu-at!` pops it up in a window. Used both for the editor's right-click menu
 ;; (from the context-item registry) and the tab strip's fixed menu.
 (require racket/class racket/gui/base
-         "../command.rkt" "../context-menu.rkt" "../platform.rkt")
+         "../command.rkt" "../context-menu.rkt" "../platform.rkt" "../hook.rkt")
 (provide build-popup-menu popup-menu-at! editor-menu-groups context-click-event?)
 
 ;; A right-click, or (macOS only) a Ctrl-click, per docs/UI-DESIGN.md section 4's "Context
@@ -26,7 +26,10 @@
           [(pair? entry)                    ; (label . thunk) from a provider; #f thunk: disabled
            (define thunk (cdr entry))
            (define item (new menu-item% [label (car entry)] [parent menu]
-                             [callback (lambda (i e) (when thunk (thunk)))]))
+                             [callback (lambda (i e)
+                                         (when thunk
+                                           (with-handlers ([exn:fail? (lambda (x) (report-error! 'context-menu x))])
+                                             (thunk))))]))
            (send item enable (and thunk #t))]
           [else
            (define c (find-command entry))

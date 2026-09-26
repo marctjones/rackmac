@@ -6,12 +6,17 @@
 ;; checker; the last uses macOS's NSSpellChecker and is skipped elsewhere.
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/gui/base racket/list racket/string racket/file
-         "../rackmac/spell.rkt" "../rackmac/spell-mac.rkt"
+         "../rackmac/spell.rkt" racket/lazy-require
          "../rackmac/editor.rkt" "../rackmac/command.rkt" "../rackmac/commands.rkt"
          "../rackmac/hook.rkt" "../rackmac/settings.rkt" "../rackmac/platform.rkt"
          "../rackmac/frame.rkt" "../rackmac/md-view.rkt" "../rackmac/context-defaults.rkt" "../rackmac/ui/context-menu.rkt"
          "../rackmac/ui/tokens.rkt" "../rackmac/theme.rkt"
          "ui-harness.rkt" "../rackmac-markdown/tests/notes-gen.rkt")
+
+;; Loaded only when the macOS test runs: spell-mac.rkt cannot be instantiated elsewhere.
+(lazy-require ["../rackmac/spell-mac.rkt"
+               (mac-spell-available? mac-misspellings mac-guesses mac-learn-word! mac-unlearn-word!
+                mac-has-learned-word?)])
 
 (define home (make-temporary-file "rackmac-spell~a" 'directory))
 (void (putenv "RACKMAC_HOME" (path->string home)))   ; the setting persists here, not in the real file
@@ -156,6 +161,12 @@
   (define masked (check-text-mask "a 😀 b https://x.y c" 0 #f))
   (check-equal? (string-length masked) (string-length "a 😀 b https://x.y c"))
   (check-equal? masked "a   b             c" "emoji (UTF-16 surrogates to the system checker) and URLs blanked"))
+
+(test-case "the Activity log is never checked"
+  (log-message "Loading wrng.rkt failed")
+  (spell-flush! (messages-buffer))
+  (check-false (spell-checkable? (messages-buffer)))
+  (check-equal? (spell-misspellings (messages-buffer)) '()))
 
 (test-case "code Languages are not checked"
   (define b (doc "(define wrng 1) ; wrng\n" 'racket-mode "code.rkt"))
