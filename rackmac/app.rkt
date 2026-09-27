@@ -28,6 +28,7 @@
          "md-toolbar.rkt"
          "outline-structure.rkt"         ; #299: Promote/Demote heading, Move Section Up/Down
          "templates.rkt"                 ; #353: File > New from Template, Tools > Edit Templates
+         "selection-tools.rkt"           ; #125-#129: Change Case, Sort Lines, Swap, Wrap, Trim
          "smoke.rkt"                     ; #286: RACKMAC_SMOKE=1 checks startup and exits, window unshown
          )
 (provide main)
