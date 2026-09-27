@@ -53,12 +53,13 @@ Reassign if an agent's first report is weak.
 
 ## In flight
 
-- `../rackmac-app` / `app` (Sonnet): E15.M1 Library basics #272, #276, #277, #288, #290.
-- `../rackmac-app2` / `app2` (Opus): E14.M1 #269 view toggle, #338 links, #334 copy source.
-- `../rackmac-mdlib` / `mdlib` (Opus): #323 mdlib-edits, #320 mdlib-ext.
-- Merged, waiting on green CI to tag `v0.3.0-alpha.3`: E3.M1 autosave (#74–#78 + Fable's 9 fixes) and E4.M1
-  (Settings dialog #291, Tools menu #289). Also merged: #266/#268 formatted view, #333 checked commands, #339, #352.
-- E21 Assistant (LLM support) designed by Fable: docs/ASSISTANT-DESIGN.md; filed as epic #395, milestones
-  E21.M1–M5, issues #355–#394 with `model:` labels; owner decisions in #396 (release placement pending — filed
-  under release:v0.6 alongside Workspace, not shifted).
-- CI timing: tests that wait on timers scale by 5x when CI=true (recovery-test, pathological-test).
+- Tags so far: v0.3.0-alpha.1 (E1.M3), alpha.2 (E2.M0), alpha.3 (E3.M1, E4.M1), alpha.4 (MDLIB), alpha.5 (E18.M1).
+- Merged and pushed, awaiting CI then close + tag: Library sidebar #273, formatting #335/#336 fixes, app bundle #286
+  (E15.M1 and E14.M1 can close once decisions #331/#332 are taken off the milestones as "built per recommendation").
+- `../rackmac-app` / `app` (Sonnet 5): UI polish from the live screenshot (4 of 6 committed; paper start screen and the
+  duplicate Recent list remain).
+- `../rackmac-app2` / `app2` (Sonnet 5): #293 checkboxes (#292 doc-text committed).
+- **Opus 5.5 hit its weekly usage limit (resets 6 pm America/New_York)**; lanes switched to Sonnet 5 until then.
+- A shared-Mac quiet period (excise release) is in effect: agents edit only, no raco runs, until "quiet period ended".
+- Owner declined computer-use control of Rackmac; live checks are read-only window captures unless the owner drives.
+- #400: the CI "runs without Racket installed" step is non-blocking until diagnosed.
