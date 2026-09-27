@@ -263,8 +263,11 @@
           (send dc draw-rectangle marker-width y (max 1 (- w marker-width)) rh)))
       (when (send r is-folder?)
         (define p (icon-dc-path (if (send r is-open?) "chevron-down" "chevron-right") chevron-size))
-        (send dc set-pen (token 'bench-text) 1 'transparent)
-        (send dc set-brush (token 'bench-text) 'solid)
+        ;; bench-text at rest; accent while the pointer is on the row (brand: hover turns nav
+        ;; chevrons moss)
+        (define c (if (eq? r hover) (token 'accent) (token 'bench-text)))
+        (send dc set-pen c 1 'transparent)
+        (send dc set-brush c 'solid)
         (send dc set-smoothing 'smoothed)
         (send dc draw-path p (+ chevron-left (* (bench-slot-depth s) indent))
               (+ y row-pad (/ (- lh chevron-size) 2)) 'winding)

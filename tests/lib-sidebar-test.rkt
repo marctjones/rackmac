@@ -346,6 +346,28 @@
   (check-equal? (bitmap-pixel-hex (at #t) 120 y) (token-hex 'accent) "ringed while the list has the keyboard")
   (check-not-equal? (bitmap-pixel-hex (at #f) 120 y) (token-hex 'accent) "not otherwise"))
 
+(test-case "disclosure chevrons are the Workbench icons in bench-text, accent on hover"
+  (define fl (folders))
+  (define row (row-for fl "Clients"))
+  (define s (slot-for fl row))
+  (define-values (x y w h) (apply values (bench-slot-rect s)))
+  (define cx (- (bench-slot-text-x s) 20))   ; the 16 px chevron sits 4 px before the label
+  (define (chevron-colors hover)
+    ;; the chevron's box only, at 2x so its 1 px strokes cover whole device pixels
+    (define crop (render-bitmap 16 (inexact->exact (floor h)) #:scale 2.0
+                                (lambda (dc) (send dc set-origin (- cx) (- y))
+                                  (draw-bench-list dc 240 200 (send fl get-items) #:hover hover))))
+    (bitmap-colors crop))
+  (for ([a appearances])
+    (with-appearance a
+      (lambda ()
+        (define rest (chevron-colors #f))
+        (check-not-false (hash-ref rest (token-hex 'bench-text a) #f) (format "~a: bench-text at rest" a))
+        (check-false (hash-ref rest (token-hex 'accent a) #f))
+        (define hovered (chevron-colors row))
+        (check-not-false (hash-ref hovered (token-hex 'accent a) #f) (format "~a: accent on hover" a))
+        (check-false (hash-ref hovered (token-hex 'bench-text a) #f) "the label is outside the chevron's box")))))
+
 ;; ---- one bench surface: no scrollbar gutter, no boxed lists (first live look, 2026-09-26) ----
 ;; The live window showed a light strip down the right of each list (hierlist kept a vertical
 ;; scrollbar) and a box around each. The lists are canvases with neither: a gutter or a border
