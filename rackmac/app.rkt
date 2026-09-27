@@ -10,6 +10,7 @@
          "library/new-note.rkt"
          "library/start-screen.rkt"
          "library/sidebar.rkt"           ; #273: the Library sidebar and View > Show Library
+         "library/watch.rkt"             ; #303: external changes to Library folders, live
          "appearance.rkt"
          "office.rkt"
          "recovery.rkt"
@@ -35,6 +36,7 @@
   (enable-markdown-view-memory!)     ; #269: each note's view, remembered in recents.rktd
   (enable-autosave-recovery!)        ; #75: the autosave timer, off until a real run asks for it
   (enable-spell-checking!)           ; #351: the system spell checker; tests use a fake one
+  (enable-library-watching!)         ; #303: a watcher thread per Library folder, following the setting
   ;; Cmd+Q on macOS and Finder "Open With" arrive through these handlers.
   (application-quit-handler (lambda () (run-command/safe 'quit)))
   (application-file-handler (lambda (p) (set-current-buffer! (open-file! p))))
