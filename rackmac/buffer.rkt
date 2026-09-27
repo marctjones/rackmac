@@ -27,7 +27,8 @@
     (init [name "untitled"] [path #f])
     (field [buf-name name] [buf-path path] [major 'text-mode] [minors '()]
            [locals (make-hasheq)] [shown? #t] [highlight-timer #f]
-           [click-pos -1] [click-time 0] [click-count 0])
+           [click-pos -1] [click-time 0] [click-count 0]
+           [decorating? #f] [last-caret 0] [replaying? #f] [deferred '()])
     (super-new)
     (send this set-style-list editor-style-list)
     (send this set-max-undo-history 'forever)
@@ -92,6 +93,88 @@
     ;; work in editor positions, each position of a foreign snip is U+FFFC instead.
     (define/public (document-text [start 0] [end 'eof] #:keep-positions? [keep? #f])
       (text-source this start end #:keep-positions? keep?))
+
+    ;; ---- decoration snips (#293, docs/UI-DESIGN.md §5.3) -------------------
+    ;; A view swaps source characters for a source snip of the same count (a checkbox for
+    ;; `[ ]`) and back. `call-as-decoration` runs such a swap outside undo and the modified
+    ;; flag, and without the edit notifications (restyle, spell check, 'text-changed): the
+    ;; document's text is the same before and after. During Undo or Redo it waits until the
+    ;; replay is done: text% records every change made during one, even a noundomode one, onto
+    ;; the *other* stack regardless (`undomode?`/`redomode?` outrank noundomode in `add-undo-rec`).
+    (define/public (call-as-decoration thunk)
+      (if replaying?
+          (set! deferred (append deferred (list thunk)))
+          (decorate! thunk)))
+    ;; Undo and Redo each wrap the primitive's own replay in one more (undoable) edit sequence of
+    ;; our own. The primitive's `undomode?`/`redomode?` flag is still set when ITS OWN edit
+    ;; sequence ends, so a restyle released right there (our `restyle-flush` local, called from
+    ;; `after-edit-sequence`) would leak a record from `with-styling` straight past its noundomode
+    ;; guard (verified against gui-lib's wxme/{text,editor}.rkt: `add-undo-rec` checks `undomode?`
+    ;; before `s-noundomode`). Ours is the outer sequence, so its end -- and the restyle and any
+    ;; deferred decoration it releases -- lands only once the primitive has cleared its own flag.
+    (define/override (undo) (replay! (lambda () (super undo))))
+    (define/override (redo) (replay! (lambda () (super redo))))
+    (define (replay! thunk)
+      (set! replaying? #t)
+      (send this begin-edit-sequence)
+      (dynamic-wind void thunk
+                    (lambda () (send this end-edit-sequence) (set! replaying? #f)))
+      (let ([ds deferred]) (set! deferred '()) (for-each (lambda (d) (decorate! d)) ds)))
+    (define (decorate! thunk)
+      (define was-modified? (send this is-modified?))
+      (define s (send this get-start-position))
+      (define e (send this get-end-position))
+      (define outer decorating?)
+      (set! decorating? #t)
+      (send this begin-edit-sequence #f #f)
+      (dynamic-wind void thunk
+                    (lambda ()
+                      (send this end-edit-sequence)
+                      (set! decorating? outer)
+                      (send this set-position s e #f #f)
+                      (unless (eq? was-modified? (send this is-modified?)) (send this set-modified was-modified?)))))
+    ;; The source snip covering `pos` from inside (start < pos < end), as (values snip start), or #f.
+    (define/public (source-snip-around pos)
+      (define b (box 0))
+      (define snip (and (< 0 pos (send this last-position)) (send this find-snip pos 'before-or-none b)))
+      (if (and snip (source-snip? snip) (< (unbox b) pos (+ (unbox b) (send snip get-count))))
+          (values snip (unbox b))
+          (values #f #f)))
+    ;; The atomic caret: text% already steps over a source snip with the arrow keys, Backspace
+    ;; and clicks (its grapheme count is 1), so only positions set any other way (word motion,
+    ;; find, a command) can land inside one; they are moved to its edge here, a selection
+    ;; widened to cover it. So no edit can split a snip and delete part of its source.
+    (define (snap-to-snips!)
+      (define s (send this get-start-position))
+      (define e (send this get-end-position))
+      (define-values (ss sp) (source-snip-around s))
+      (define-values (es ep) (source-snip-around e))
+      (define (snip-end snip p) (+ p (send snip get-count)))
+      (cond
+        [(and (= s e) ss)           ; a caret: to the edge on the side it was not coming from
+         (define p (if (<= last-caret sp) (snip-end ss sp) sp))
+         (send this set-position p p #f #f)]
+        [(or ss es)
+         (send this set-position (if ss sp s) (if es (snip-end es ep) e) #f #f)]
+        [else (set! last-caret s)]))
+    ;; Forward Delete at a source snip's edge removes the whole snip (text% deletes one position).
+    (define/override (on-default-char ev)
+      (define s (send this get-start-position))
+      (define snip (and (eqv? (send ev get-key-code) #\rubout) (= s (send this get-end-position))
+                        (send this find-snip s 'after-or-none)))
+      (if (and snip (source-snip? snip) (= s (send this get-snip-position snip)))
+          (send this delete s (+ s (send snip get-count)))
+          (super on-default-char ev)))
+    ;; A plain click on a clickable source snip (a checkbox) runs it; the caret stays put.
+    (define/public (snip-click-at! x y)
+      (define pos (send this find-position x y))
+      (for/or ([snip (list (send this find-snip pos 'after-or-none) (send this find-snip pos 'before-or-none))])
+        (and snip (is-a? snip clickable-snip<%>)
+             (let ([l (box 0.0)] [t (box 0.0)] [r (box 0.0)] [bt (box 0.0)])
+               (send this get-snip-location snip l t #f)
+               (send this get-snip-location snip r bt #t)
+               (and (<= (unbox l) x (unbox r)) (<= (unbox t) y (unbox bt))))
+             (begin (send snip click this) #t))))
 
     ;; ---- files -----------------------------------------------------------
     (define/public (load-path! p)
@@ -207,6 +290,10 @@
       (cond
         [(and (send ev button-down? 'left) (command-click? ev) (link-click-at! (event-position ev)))
          (void)]                             ; followed a link; the caret stays where it was
+        [(and (send ev button-down? 'left) (not (command-click? ev)) (not (send ev get-shift-down))
+              (let-values ([(ex ey) (send this dc-location-to-editor-location (send ev get-x) (send ev get-y))])
+                (snip-click-at! ex ey)))
+         (void)]                             ; toggled a checkbox
         [(send ev button-down? 'left)
          (define pos (event-position ev))
          (super on-event ev)                 ; the normal single click first (caret, drag-select)
@@ -278,9 +365,11 @@
       (if f (f this s old-end new-len) (schedule-highlight!))
       (run-hook 'text-edited this s old-end new-len))
     (define/augment (after-insert s l)
-      (note-edit! s s l) (run-hook 'text-changed this) (inner (void) after-insert s l))
+      (unless decorating? (note-edit! s s l) (run-hook 'text-changed this))
+      (inner (void) after-insert s l))
     (define/augment (after-delete s l)
-      (note-edit! s (+ s l) 0) (run-hook 'text-changed this) (inner (void) after-delete s l))
+      (unless decorating? (note-edit! s (+ s l) 0) (run-hook 'text-changed this))
+      (inner (void) after-delete s l))
     (define/augment (after-edit-sequence)
       (define f (local-ref 'restyle-flush #f))
       (when f (f this))
@@ -309,7 +398,12 @@
       (unless before? (run-hook 'paint-document this dc left top right bottom dx dy)))
 
     (define/augment (after-set-position)
+      (unless decorating? (snap-to-snips!))
       (run-hook 'status-changed) (inner (void) after-set-position))
+    ;; A decoration swap never marks the document modified. (Setting the flag and clearing it
+    ;; again afterwards would not do: clearing it drops text%'s undo records that restore the
+    ;; unmodified state, which breaks Redo after undoing back to the saved text.)
     (define/override (set-modified m)
-      (super set-modified m)
-      (run-hook 'buffer-modified-changed this))))
+      (unless decorating?
+        (super set-modified m)
+        (run-hook 'buffer-modified-changed this)))))

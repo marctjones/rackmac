@@ -11,11 +11,13 @@
 ;; where each position of a foreign snip becomes U+FFFC (OBJECT REPLACEMENT CHARACTER), so
 ;; offsets match the editor's and no "." is ever matched, spelled or parsed.
 (require racket/class racket/snip racket/string)
-(provide source-snip<%> source-snip? text-source object-replacement remove-object-replacements)
+(provide source-snip<%> source-snip? clickable-snip<%> text-source object-replacement remove-object-replacements)
 
 ;; A snip whose get-text is the source markup it draws in place of.
 (define source-snip<%> (interface ()))
 (define (source-snip? s) (is-a? s source-snip<%>))
+;; A source snip that does something when clicked (a checkbox toggles): `(click editor)`.
+(define clickable-snip<%> (interface (source-snip<%>) click))
 
 (define object-replacement (integer->char #xFFFC))
 
