@@ -2,14 +2,13 @@
 ;; The Library sidebar (#273 lib-sidebar; docs/UI-DESIGN.md S2.1): the filter row, Recent and
 ;; Folders beside the tabs, View > Show Library (⌥⌘S, Apple Notes' Show Folders), and the
 ;; right-click actions from the context registry's `library` group. The painted widgets live
-;; in rackmac/ui/sidebar.rkt (option (a) of #331: the bench, with editor-based lists); this
+;; in rackmac/ui/sidebar.rkt (option (a) of #331: the bench, with painted lists); this
 ;; module fills them from the Library (folders.rkt) and the recent-files store (recents.rkt),
 ;; and registers the panel with rackmac/frame.rkt, which only places it and shows or hides it.
 ;;
 ;; Refresh (v0.3): a rescan when the window is activated, after our own saves and after our
 ;; own file actions; `filesystem-change-evt` watching is lib-watch (v0.4).
 (require racket/class racket/gui/base racket/list racket/path racket/file racket/string
-         mrlib/hierlist
          "folders.rkt" "recents.rkt" "open-recent.rkt"
          "../command.rkt" "../commands.rkt" "../editor.rkt" "../frame.rkt" "../hook.rkt"
          "../settings.rkt" "../platform.rkt" "../input.rkt" "../context-menu.rkt" "../owner.rkt"
@@ -284,7 +283,7 @@
                             [on-activate (lambda () (run-command/safe 'quick-open))]))
     (define recent-header (new section-header% [parent column] [label "Recent"]
                                [on-toggle (lambda () (toggle-section! 'recent))]))
-    (define recent-list (new bench-list% [parent column] [style bench-list-fixed-style]
+    (define recent-list (new bench-list% [parent column] [fit-to-rows? #t]
                              [on-activate (lambda (i how) (activate! i how))]
                              [on-context (lambda (i x y) (context! recent-list i x y))]
                              [on-selected (lambda (i) (note-target! i))]))
@@ -418,7 +417,7 @@
            (hash-set! folder-items (path-key r) item))
          (for ([k (in-list reopen)])
            (define i (hash-ref folder-items k #f))
-           (when (and i (is-a? i hierarchical-list-compound-item<%>)) (send i open)))])
+           (when (and i (send i is-folder?)) (send i open)))])
       ;; keep the selection on the same path if it is still there
       (define again (and keep-selected (hash-ref folder-items (path-key (cadr keep-selected)) #f)))
       (if again (send folders-list select-quietly! again) (follow-current!)))

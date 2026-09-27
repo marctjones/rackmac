@@ -50,6 +50,14 @@
   (for* ([app '(light dark)] [r '(bench-heading bench-text)])
     (check-true (>= (ratio r 'bench app) 4.5) (format "~a: ~a on bench" app r))))
 
+(test-case "the selected sidebar row's fill keeps its text readable and its accent marker visible"
+  (check-equal? (token-hex 'bench-hover 'light) (token-hex 'bench-hover 'dark))
+  (for ([app '(light dark)])
+    (check-not-equal? (token-hex 'bench-hover app) (token-hex 'bench app) "a step off the bench")
+    (for ([r '(bench-heading bench-text)])
+      (check-true (>= (ratio r 'bench-hover app) 4.5) (format "~a: ~a on bench-hover" app r)))
+    (check-true (>= (ratio 'accent 'bench-hover app) 3.0) (format "~a: the accent marker beside it" app))))
+
 (test-case "switching appearance changes the editor colors"
   (define before (current-theme-name))
   (set-theme! 'light)

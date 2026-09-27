@@ -78,7 +78,7 @@ _Changed 2026-09-25: two additions in the right column (sidebar tree, editor sni
 
 | Native `racket/gui` (OS look, OS accessibility) | Painted by Rackmac (`racket/draw`) |
 |---|---|
-| title bar, menu bar, `button%` (toolbar, dialogs), `text-field%`, `check-box%`, `choice%`, `list-box%` (Recent, Tags, Outline, Backlinks, results), `tab-panel%`, `message%`, `dialog%`, `popup-menu%` (Heading▾, Export▾, context menus), file and message dialogs | editor surface (`editor-canvas%` on `text%`): background, text, selection, caret, current line, find matches, prose and syntax styles; **editor snips** (checkbox, fold, image preview); gutter; status bar (`canvas%`); toolbar icons (vectors rendered to `bitmap%` labels); the Folders tree (`mrlib/hierlist`, editor-based, standard distribution); pane splitters (E9) |
+| title bar, menu bar, `button%` (toolbar, dialogs), `text-field%`, `check-box%`, `choice%`, `list-box%` (Recent, Tags, Outline, Backlinks, results), `tab-panel%`, `message%`, `dialog%`, `popup-menu%` (Heading▾, Export▾, context menus), file and message dialogs | editor surface (`editor-canvas%` on `text%`): background, text, selection, caret, current line, find matches, prose and syntax styles; **editor snips** (checkbox, fold, image preview); gutter; status bar (`canvas%`); toolbar icons (vectors rendered to `bitmap%` labels); the Library sidebar's lists (Recent, Folders: a painted `canvas%`, §2.1); pane splitters (E9) |
 
 ### 1.2 Color tokens (`rackmac/ui/tokens.rkt`)
 
@@ -107,6 +107,7 @@ takes (the light value is the token's light value, the dark value its dark value
 | `comment` / `string` / `constant` / `keyword` | #686860 / #6A6030 / #505048 / #3A5C3A | #909088 / #D8C890 / #A0A090 / #A0C0A0 | `ink-quiet` (italic) / `ochre-ink` / `ink-muted` / `moss-ink` | syntax coloring in code Languages |
 | `heading` / `face-error` | #1C1C1C / #7A3526 | #E0E0D8 / #E0A090 | `ink` (bold) / `rust-ink` | note headings; lexer errors |
 | `bench` / `bench-heading` / `bench-text` / `bench-rule` | #1C1C1C / #E0E0D8 / #A0A090 / #505048 | #141413 / same / same / same | `bench-*` | the Library sidebar (§2.1): the workbench does not change when the lights go down |
+| `bench-hover` | #242422 | #242422 | ours (`paper-sunk` dark) | the fill of the selected sidebar row; the system has no bench equivalent of its "sunk fill" for a selection |
 
 As built (`rackmac/ui/tokens.rkt`): the match colors are ours (the system's `ochre-tint` is too faint to find text
 by), picked so that `text` on them stays above 4.5:1; dark `match-current` was darkened from the first choice when
@@ -233,7 +234,7 @@ _Changed 2026-09-25 (new)._
   1. `text-field%` **Filter** (matches titles and paths; Enter opens the first hit; ⇧⌘O Quick Open is the same
      search as a picker).
   2. **Recent** (`list-box%`, last 10, from `recents.rktd`).
-  3. **Folders** (`mrlib/hierlist` `hierarchical-list%`: one root per Library folder, subfolders collapsible,
+  3. **Folders** (a painted tree: one root per Library folder, subfolders collapsible,
      files `.md .markdown .txt .rkt .py .json .yaml .csv`; other files hidden by default, a setting shows all;
      modified open documents get the "•" prefix as tabs do).
   4. **Tags** (v0.4; `list-box%` of `#tags` and front-matter tags with counts; selecting filters Recent and Folders).
@@ -255,21 +256,33 @@ _Changed 2026-09-25 (new)._
 - **Keyboard:** Tab into the filter, Tab again to the tree; arrows move, Right/Left expand/collapse, Enter opens,
   Space previews nothing (no preview pane in this iteration).
 
-_As built (#273, 2026-09-26, working assumption #331 (a)):_ `rackmac/library/sidebar.rkt` (data, commands,
-refresh) and `rackmac/ui/sidebar.rkt` (painted widgets). Recent and Folders are both `hierarchical-list%` on the
-bench (Folders filled lazily as folders open); the filter row, section headers and the right-edge rule are small
-`canvas%`es, since panels cannot be colored and any gap would show the OS background. Limits of hierlist, for the
-owner: the selected-row fill is the OS highlight color (fixed inside `mrlib/hierlist`), so a focused selection
-is filled in it, with its text in whichever of `bench-heading`/`bench` reads better; unfocused it is a 1 px outline;
-the 2 px `accent` marker is a snip at the start of the row, not at the sidebar's edge; the disclosure triangles are
-hierlist's own bitmaps. The empty state's **Add Folder…** is a row, not a native button (a button would sit on an
-OS-colored strip). Keyboard: showing the Library (⌥⌘S) puts focus on the filter row; Tab: filter → Recent →
-Folders → document; Escape returns to the document; Return opens (a folder opens or closes); ⌘ shortcuts work
-from inside it. A click opens a file; the selection follows the current document. The width is a setting
-(`library-width`), not yet draggable (pane splitters are E9). Windows has no Show Library shortcut yet.
-The lists have no canvas border and no standing scrollbar (the first live look showed a light gutter down each
-list and a box around it): Folders shows the native scrollbar only while it overflows, and Recent is sized to its
-rows and never shows one, so the sidebar reads as one bench divided by `bench-rule` lines.
+_As built (#273, 2026-09-26, working assumption #331 (a); lists repainted 2026-09-27):_
+`rackmac/library/sidebar.rkt` (data, commands, refresh) and `rackmac/ui/sidebar.rkt` (painted widgets). Recent
+and Folders are each one `canvas%` (`bench-list%`) that paints its rows from a pure layout function
+(`layout-bench-rows`, `draw-bench-list`), the start screen's pattern (§2.8); Folders is filled lazily as folders
+open. The first build used `mrlib/hierlist` and was replaced because none of this was reachable through its API:
+its selected-row fill was the OS highlight and its outline and disclosure arrows were blue, and its reported
+height disagreed with its layout, so Recent cut its last row in half. Now: the selected row is `bench-heading`
+text on a `bench-hover` fill with a 2 px `accent` marker at the sidebar's left edge; while the list has the
+keyboard, a 1 px `accent` ring as well (focus is a change of shape). Disclosure chevrons are the Workbench
+`chevron-right` / `chevron-down` drawn as vectors in `bench-text`, `accent` while the pointer is on the row (the
+design system's rest color for nav chevrons is `bench-rule`; `bench-text` was chosen here for contrast). Long
+names end in "…". Recent is exactly as tall as its rows (up to 10), from the same layout that paints them, and
+never scrolls; Folders scrolls with the wheel, keeps the selection in view and shows a thin `bench-rule` thumb
+only while it overflows. There is no native scrollbar or canvas border (the first live look showed a light gutter
+and a box around each list), so the sidebar reads as one bench divided by `bench-rule` lines. The filter row,
+section headers and the right-edge rule are small `canvas%`es, since panels cannot be colored. The empty state's
+**Add Folder…** is a row, not a native button (a button would sit on an OS-colored strip). Keyboard: showing the
+Library (⌥⌘S) puts focus on the filter row; Tab: filter → Recent → Folders → document; Escape returns to the
+document; Up/Down move without opening; Right opens a folder and goes into it; Left closes an open folder or goes
+to the enclosing one; Return opens (a folder opens or closes); ⌘ shortcuts work from inside it. A click opens a
+file, a double-click opens or closes a folder, a click on a chevron opens or closes without selecting, and a
+right-click selects the row and shows the `library` menu. The selection follows the current document. The width is
+a setting (`library-width`), not yet draggable (pane splitters are E9). Windows has no Show Library shortcut yet.
+**Accessibility (#399):** not verified with VoiceOver. As far as racket/gui's Cocoa backend goes, neither a
+`canvas%` nor hierlist's `editor-canvas%` publishes an accessibility tree, so the rows were not exposed before
+either; keyboard access is unchanged and tested. The layout function already yields each row's label, kind
+(folder, open or closed), depth and rectangle, which is what an NSAccessibility bridge needs.
 
 ### 2.2 The document area for notes (Markdown, WYSIWYM)
 
@@ -641,7 +654,8 @@ marked **verify** could not be run in this session and are the first things the 
    the `pdf-dc%`; margins via the `ps-setup%` (**verify** margin handling and page breaks across a styled note).
 7. **Word count, find, undo, zoom** keep working because the document text is unchanged by rendering.
 8. **The tree widget.** `mrlib/hierlist`'s `hierarchical-list%` is in the standard distribution: collapsible items,
-   keyboard navigation, custom item snips for icons; no new dependency.
+   keyboard navigation, custom item snips for icons; no new dependency. _As built:_ replaced by a painted
+   `canvas%` list (§2.1), since hierlist's selection and arrows are fixed to the OS's blue.
 
 **Limits, and what the design does about each**
 
