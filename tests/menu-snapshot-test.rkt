@@ -60,7 +60,8 @@
      "Toggle Full Screen" ("Editor Theme" "Use System Setting" "Light" "Dark") "Show Toolbar" "Show Library"
      "Show Markdown Source" "---" "Show Activity Log" "---" "Command Palette…" "Set Language…")
     ("Tools" "Run Selection" "Run Document" "---" "Scratch Pad" "Edit Templates" "New Code File…" "---"
-     ("Extensions" "Customize with Code" "Reload Extensions" "List Extensions"))
+     ("Extensions" "Customize with Code" "Reload Extensions" "List Extensions")
+     "---" "Start Recording" "Stop Recording")                     ; #121
     ("Help" "What Does This Key Do?" "Keyboard Shortcuts" "Explain a Command…" "Start Screen"
      "Shortcuts as Text" "---" "About Rackmac")))
 
@@ -81,7 +82,8 @@
      "Toggle Full Screen" ("Editor Theme" "Use System Setting" "Light" "Dark") "Show Toolbar" "Show Library"
      "Show Markdown Source" "---" "Show Activity Log" "---" "Command Palette…" "Set Language…")
     ("Tools" "Run Selection" "Run Document" "---" "Scratch Pad" "Edit Templates" "New Code File…" "---"
-     ("Extensions" "Customize with Code" "Reload Extensions" "List Extensions"))
+     ("Extensions" "Customize with Code" "Reload Extensions" "List Extensions")
+     "---" "Start Recording" "Stop Recording")                     ; #121
     ("Help" "What Does This Key Do?" "Keyboard Shortcuts" "Explain a Command…" "Start Screen"
      "Shortcuts as Text" "---" "About Rackmac")))
 

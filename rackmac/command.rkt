@@ -8,7 +8,8 @@
          find-command all-commands run-command run-command/safe
          default-title command-shortcut extending-selection?
          command-enabled? command-checked? command-search-text command-search-fields command-category-label recent-commands
-         default-key-strings command-menu-label)
+         default-key-strings command-menu-label
+         set-command-recorder!)
 
 ;; title is the name users see; name is the stable symbol used by keymaps and scripts.
 ;; aliases are extra search terms (plain words people might type); help is one plain sentence;
@@ -140,11 +141,27 @@
     (set! recent (take-up-to (cons name (remq name recent)) 8))))
 (define (take-up-to l n) (if (> (length l) n) (take l n) l))
 
+;; #121 Record Actions: the one place every command passes through, so the recorder
+;; (record-actions.rkt) watches here. `command-recorder` is #f unless a recording is on, so
+;; the idle cost is one variable read; nothing is allocated and no parameter is consulted.
+;; While recording it is (name -> (or/c #f (-> any))): given a command about to run at the
+;; top level, it returns #f (not recorded) or a thunk that commits the step. The step is
+;; committed only if the command returns normally, and the commands a recorded command runs
+;; itself (Markdown Enter running Newline, say) are not recorded again, since replaying the
+;; outer one repeats them. A command the recorder declines (the palette) does not hide its
+;; inner calls, which is how the command picked in the palette is the one recorded.
+(define command-recorder #f)
+(define (set-command-recorder! r) (set! command-recorder r))
+(define inside-recorded-command? (make-parameter #f))
+
 (define (run-command name)
   (define c (find-command name))
   (unless c (error 'run-command "unknown command: ~a" name))
   (run-hook 'before-command name)
-  ((command-proc c))
+  (define commit (and command-recorder (not (inside-recorded-command?)) (command-recorder name)))
+  (cond [commit (parameterize ([inside-recorded-command? #t]) ((command-proc c)))
+                (commit)]
+        [else ((command-proc c))])
   (note-recent! name)
   (run-hook 'after-command name))
 
