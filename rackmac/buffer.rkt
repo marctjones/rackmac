@@ -220,7 +220,8 @@
       (when (< s e)
         (define text (document-text s e))
         (define before (and extend? (send the-clipboard get-clipboard-string time)))
-        (send the-clipboard set-clipboard-string (if before (string-append before text) text) time)))
+        (send the-clipboard set-clipboard-string (if before (string-append before text) text) time)
+        (run-hook 'text-copied this text)))         ; #118: rackmac/clipboard-history.rkt records it
 
     ;; ---- input -----------------------------------------------------------
     (define/override (on-char ev)

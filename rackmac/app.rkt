@@ -14,6 +14,7 @@
          "appearance.rkt"
          "office.rkt"
          "recovery.rkt"
+         "clipboard-history.rkt"          ; #118: records every Copy/Cut, off until enabled below
          "ui/settings-dialog.rkt"
          "tools-menu.rkt"
          "insert-date.rkt"
@@ -36,6 +37,7 @@
   (enable-recent-tracking!)          ; #274: recents.rktd, off until a real run asks for it
   (enable-markdown-view-memory!)     ; #269: each note's view, remembered in recents.rktd
   (enable-autosave-recovery!)        ; #75: the autosave timer, off until a real run asks for it
+  (enable-clipboard-history!)        ; #118: off until a real run asks for it
   (enable-spell-checking!)           ; #351: the system spell checker; tests use a fake one
   (enable-library-watching!)         ; #303: a watcher thread per Library folder, following the setting
   ;; Cmd+Q on macOS and Finder "Open With" arrive through these handlers.
