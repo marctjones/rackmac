@@ -5,7 +5,7 @@
 ;; display's backing scale so they are crisp on Retina and 200% Windows displays.
 ;; docs/UI-DESIGN.md section 1.5.
 (require racket/class racket/draw racket/math racket/list racket/runtime-path)
-(provide icon-bitmap letter-tile-bitmap icon-names icon-name? icon-source path->dc-path)
+(provide icon-bitmap letter-tile-bitmap icon-names icon-name? icon-source path->dc-path icon-dc-path)
 
 (define-runtime-path data-path "workbench-icons.rktd")
 
@@ -85,6 +85,18 @@
   p)
 
 (define dc-paths (make-hash))       ; name -> dc-path%, built once
+
+;; Icon `name` as a dc-path% scaled to `size` logical pixels, for surfaces that draw the icon
+;; straight onto their own dc (the Library sidebar's disclosure chevrons): vector, so it is
+;; crisp at any backing scale, in whatever brush the caller sets. Shared: do not mutate it.
+(define scaled-paths (make-hash))
+(define (icon-dc-path name size)
+  (define entry (hash-ref icons name (lambda () (raise-argument-error 'icon-dc-path "a known icon name" name))))
+  (hash-ref! scaled-paths (cons name size)
+             (lambda ()
+               (define p (path->dc-path (cdr entry)))
+               (send p scale (/ size 24) (/ size 24))
+               p)))
 
 ;; ---- bitmaps ------------------------------------------------------------
 

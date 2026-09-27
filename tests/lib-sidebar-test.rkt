@@ -5,7 +5,6 @@
 ;; on activate and after saves, and bench colors checked headless in both appearances.
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
 (require rackunit racket/class racket/gui/base racket/file racket/list racket/path racket/string
-         mrlib/hierlist
          "ui-harness.rkt"
          "../rackmac/library/folders.rkt" "../rackmac/library/new-note.rkt"
          "../rackmac/library/start-screen.rkt" "../rackmac/library/recents.rkt"
@@ -61,8 +60,9 @@
 (test-case "the sidebar sits left of the document area, shown by default"
   (check-true (sidebar-shown?))
   (check-eq? (car (send (main-body) get-children)) (panel))
-  (check-true (is-a? (folders) hierarchical-list%) "Folders is an editor-based hierlist (#331 a)")
-  (check-true (is-a? (recent) hierarchical-list%) "and so is Recent"))
+  (check-true (is-a? (folders) bench-list%) "Folders is a painted list on the bench (#331 a)")
+  (check-true (is-a? (recent) bench-list%) "and so is Recent")
+  (check-false (is-a? (folders) editor-canvas%) "painted, not mrlib/hierlist: its selection and arrows are the OS's blue"))
 
 (test-case "Show Library toggles it, and the hidden state persists"
   (run-command 'toggle-library)
@@ -288,9 +288,7 @@
   (for ([a appearances])
     (check-true (>= (contrast-ratio (token-hex 'bench-text a) (token-hex 'bench a)) 4.5) (format "~a bench-text" a))
     (check-true (>= (contrast-ratio (token-hex 'bench-heading a) (token-hex 'bench a)) 4.5) (format "~a bench-heading" a))
-    (check-true (>= (contrast-ratio (token-hex 'accent a) (token-hex 'bench a)) 3.0) (format "~a accent marker" a)))
-  (check-true (>= (contrast-ratio (color->hex (selected-row-text-color #t)) highlight-hex) 4.5)
-              "a focused selection's text reads on the OS highlight hierlist fills it with"))
+    (check-true (>= (contrast-ratio (token-hex 'accent a) (token-hex 'bench a)) 3.0) (format "~a accent marker" a))))
 
 (test-case "the filter row and section headers paint the bench with readable text"
   (for* ([a appearances] [s scales] [focused? '(#f #t)])
@@ -308,6 +306,8 @@
         (check-equal? (bitmap-pixel-hex hb 100 0) (token-hex 'bench-rule a) "the rule above the section")
         (check-true (>= (ink-contrast hb (token-hex 'bench a)) 4.5))))))
 
+(define (slot-for lst row) (findf (lambda (s) (eq? (bench-slot-row s) row)) (send lst current-slots 240)))
+
 (test-case "the Folders list itself draws on the bench: no white boxes, readable rows, a marker on the selection"
   (for ([a appearances])
     (with-appearance a
@@ -315,23 +315,36 @@
         (send (panel) refresh-colors!)
         (define fl (folders))
         (send fl select-quietly! (row-for fl "Agenda.md"))
-        (define ed (send fl get-editor))
-        (define bm (render-bitmap 240 200 (lambda (dc) (send ed print-to-dc dc 1)) #:background (token 'bench)))
+        (define bm (render-bitmap 240 200 (lambda (dc) (send fl paint-to-dc dc 240 200 #:focused? #f))))
         (write-tour-png! (format "sidebar-folders-~a" a) bm)
         (define colors (bitmap-colors bm))
-        (check-false (hash-ref colors "#FFFFFF" #f) "nested rows are transparent, not white")
+        (check-false (hash-ref colors "#FFFFFF" #f) "no white boxes")
         (check-equal? (dominant-color bm) (token-hex 'bench a))
         (check-true (>= (ink-contrast bm (token-hex 'bench a)) 4.5))
-        (check-true (get-field on? (bench-row-marker (send fl get-selected))) "the selected row's marker is on")
-        (check-not-false (hash-ref colors (token-hex 'accent a) #f) "and it is painted in the accent")))))
+        (define-values (x y w h) (apply values (bench-slot-rect (slot-for fl (send fl get-selected)))))
+        (for ([px '(0 1)])
+          (check-equal? (bitmap-pixel-hex bm px (+ y (/ h 2))) (token-hex 'accent a)
+                        "the selected row has the 2 px accent marker at the sidebar's left edge"))
+        (check-equal? (bitmap-pixel-hex bm 3 (+ y (/ h 2))) (bitmap-pixel-hex bm 3 (- y 4))
+                      "only 2 px of it")
+        (define other (slot-for fl (row-for fl "data.csv")))
+        (check-equal? (bitmap-pixel-hex bm 0 (+ (cadr (bench-slot-rect other)) 4)) (token-hex 'bench a)
+                      "no marker on other rows")))))
+
+(test-case "keyboard focus on a list shows as an accent ring on the selected row, not only a color"
+  (define fl (folders))
+  (send fl select-quietly! (row-for fl "Agenda.md"))
+  (define-values (x y w h) (apply values (bench-slot-rect (slot-for fl (send fl get-selected)))))
+  (define (at focused?) (render-bitmap 240 200 (lambda (dc) (send fl paint-to-dc dc 240 200 #:focused? focused?))))
+  (check-equal? (bitmap-pixel-hex (at #t) 120 y) (token-hex 'accent) "ringed while the list has the keyboard")
+  (check-not-equal? (bitmap-pixel-hex (at #f) 120 y) (token-hex 'accent) "not otherwise"))
 
 ;; ---- one bench surface: no scrollbar gutter, no boxed lists (first live look, 2026-09-26) ----
-;; The live window showed a light strip down the right of each list (hierlist keeps a vertical
-;; scrollbar by default) and a box around each. The canvas style is checked through the hidden
-;; window's own geometry: a gutter or a border makes the client area narrower than the canvas.
+;; The live window showed a light strip down the right of each list (hierlist kept a vertical
+;; scrollbar) and a box around each. The lists are canvases with neither: a gutter or a border
+;; would make the client area narrower than the canvas.
 
-(test-case "the lists have no scrollbar gutter or border while their rows fit"
-  (check-equal? bench-list-style '(no-hscroll auto-vscroll no-border))
+(test-case "the lists have no scrollbar gutter or border"
   (send f reflow-container)
   (for ([lst (list (recent) (folders))])
     (define-values (w h) (send lst get-size))
@@ -340,26 +353,54 @@
     (check-equal? cw w (format "~a: the whole width is list, no gutter down the right" (if (eq? lst (recent)) "Recent" "Folders")))
     (check-equal? ch h "no border box")))
 
+(test-case "a list taller than its space scrolls with the wheel and keeps the selection in view"
+  (define fr (new frame% [label "t"] [width 240] [height 120]))       ; never shown
+  (define lst (new bench-list% [parent fr]))
+  (for ([k 30]) (add-bench-row! lst (format "Note ~a.md" k) (list 'file k)))
+  (send fr reflow-container)
+  (define-values (cw ch) (send lst get-client-size))
+  (check-true (> (send lst content-height) ch 1) "(the rows overflow)")
+  (send lst on-char (new key-event% [key-code 'end]))
+  (check-equal? (bench-row-label (send lst get-selected)) "Note 29.md")
+  (check-true (> (send lst get-scroll) 0) "scrolled down to the last row")
+  (define s (findf (lambda (s) (eq? (bench-slot-row s) (send lst get-selected))) (send lst current-slots)))
+  (check-true (<= (+ (cadr (bench-slot-rect s)) (cadddr (bench-slot-rect s))) (+ (send lst get-scroll) ch)) "in view")
+  (define before (send lst get-scroll))
+  (send lst on-char (new key-event% [key-code 'wheel-up]))
+  (check-true (< (send lst get-scroll) before) "the wheel scrolls")
+  (send lst on-char (new key-event% [key-code 'home]))
+  (check-= (send lst get-scroll) 0 0 "back at the top")
+  (define bm (render-bitmap 240 ch (lambda (dc) (send lst paint-to-dc dc 240 ch #:focused? #f))))
+  (check-equal? (bitmap-pixel-hex bm 237 2) (token-hex 'bench-rule) "a thin bench-rule thumb, not a native scrollbar"))
+
 ;; The sidebar as it reads top to bottom (filter row, Recent, Folders), rendered headless: every
 ;; pixel column is bench, rule or ink, never white or the OS panel grey.
-(define (render-sidebar w h)
+(define (render-sidebar w h #:scale [scale 1.0])
+  (define rh (send (recent) min-height))
   (render-bitmap
    w h
    (lambda (dc)
      (define y 0)
      (define (at! height draw)
        (send dc set-origin 0 y)
+       (send dc set-clipping-rect 0 0 w (max 1 height))
        (draw)
+       (send dc set-clipping-region #f)
        (set! y (+ y height)))
      (at! 36 (lambda () (draw-filter-row dc w 36 #:shortcut "⇧⌘O")))
      (at! 26 (lambda () (draw-section-header dc w 26 "Recent" #:rule? #f)))
-     (at! (send (recent) min-height) (lambda () (send (send (recent) get-editor) print-to-dc dc 1)))
+     (at! rh (lambda () (send (recent) paint-to-dc dc w rh #:focused? #f)))
      (at! 26 (lambda () (draw-section-header dc w 26 "Folders")))
-     (at! 0 (lambda () (send (send (folders) get-editor) print-to-dc dc 1)))
+     (define fh (- h y))
+     (at! fh (lambda () (send (folders) paint-to-dc dc w fh #:focused? #f)))
      (send dc set-origin 0 0))
-   #:background (token 'bench)))
+   #:scale scale))
 
 (test-case "the whole sidebar is one bench: no white column, sections split by bench-rule lines"
+  ;; as a person would look at it: a subfolder open, the current note selected
+  (define fl (folders))
+  (send (row-for fl "Clients") open)
+  (send fl select-quietly! (row-for fl "Agenda.md"))
   (for ([a appearances])
     (with-appearance a
       (lambda ()
@@ -367,11 +408,43 @@
         (define bm (render-sidebar 240 420))
         (write-tour-png! (format "sidebar-~a" a) bm)
         (check-false (hash-ref (bitmap-colors bm) "#FFFFFF" #f) "no white anywhere")
-        (for ([x (in-list '(1 120 230 238))])
-          (check-equal? (bitmap-pixel-hex bm x 410) (token-hex 'bench a)
+        (for ([x (in-list '(1 120 230))])
+          (check-equal? (bitmap-pixel-hex bm x 418) (token-hex 'bench a)
                         (format "~a: column ~a is bench to the bottom" a x)))
         (check-equal? (bitmap-pixel-hex bm 238 (+ 36 26 (send (recent) min-height)))
-                      (token-hex 'bench-rule a) "a bench-rule line, full width, between Recent and Folders")))))
+                      (token-hex 'bench-rule a) "a bench-rule line, full width, between Recent and Folders"))))
+  (send (row-for fl "Clients") close))
+
+;; ---- Recent is as tall as its rows (the first build cut its last row in half) -------------
+
+(test-case "Recent fits every row, up to the ten it shows, and never cuts one off"
+  (define more (build-path dir "More"))
+  (make-directory* more)
+  (for ([k (in-range 12)])
+    (define p (build-path more (format "Recent ~a.md" k)))
+    (display-to-file "x" p #:exists 'replace)
+    (open-file! p))
+  (send (panel) refresh-recent!)
+  (send f reflow-container)
+  (define rl (recent))
+  (define slots (send rl current-slots))
+  (check-equal? (length slots) 10 "the sidebar's cap")
+  (define-values (cw ch) (send rl get-client-size))
+  (check-true (>= ch (send rl content-height)) "the list got the height its rows need")
+  (for ([s (in-list slots)])
+    (define-values (x y w h) (apply values (bench-slot-rect s)))
+    (check-true (<= (+ y h) ch) (format "~a is not clipped" (bench-row-label (bench-slot-row s)))))
+  (check-= (send rl content-height) (send rl min-height) 1 "sized from the layout that paints it")
+  (send rl on-char (new key-event% [key-code 'wheel-down]))
+  (check-equal? (send rl get-scroll) 0 "and it never scrolls")
+  ;; rendered: the last row's text is whole, with bench below it
+  (define rh (send rl min-height))
+  (define bm (render-bitmap 240 rh (lambda (dc) (send rl paint-to-dc dc 240 rh #:focused? #f))))
+  (for ([x (in-range 0 240 7)])
+    (check-equal? (bitmap-pixel-hex bm x (- rh 1)) (token-hex 'bench) "the bottom edge is bench, no text cut by it"))
+  (close-all!)
+  (clear-recent-files!)
+  (send (panel) refresh-recent!))
 
 ;; ---- one Recent at a time (first live look: the sidebar and the start screen both showed it) ----
 
