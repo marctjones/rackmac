@@ -26,7 +26,10 @@
          draw-filter-row draw-section-header
          layout-bench-rows draw-bench-list (struct-out bench-slot)
          add-bench-row! set-bench-row-label! bench-row-label bench-row-data
-         row-font header-font row-text-color marker-width)
+         row-font header-font row-text-color marker-width
+         ;; shared with rackmac/ui/outline.rkt (#298), a painted list of its own (headings are
+         ;; depth-indented, never foldable, so it does not fit bench-list%'s folder model)
+         text-width line-height truncate-to wrap-to double-click-ms wheel-step)
 
 ;; ---- fonts and colors ---------------------------------------------------------------------
 

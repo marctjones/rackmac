@@ -5,15 +5,18 @@
 ;; in rackmac/ui/sidebar.rkt (option (a) of #331: the bench, with painted lists); this
 ;; module fills them from the Library (folders.rkt) and the recent-files store (recents.rkt),
 ;; and registers the panel with rackmac/frame.rkt, which only places it and shows or hides it.
+;; Below Folders, in the sidebar's lower half (§2.1, §2.5), the Outline (#298) shows the current
+;; document's headings; its data comes from rackmac/library/outline.rkt and its painted list from
+;; rackmac/ui/outline.rkt (headings are never foldable, so it is not another bench-list%).
 ;;
 ;; Refresh: a rescan when the window is activated, after our own saves and after our own file
 ;; actions, and on 'library-changed from rackmac/library/watch.rkt (#303) when something
 ;; outside Rackmac adds, renames or removes a file or folder.
 (require racket/class racket/gui/base racket/list racket/path racket/file racket/string
-         "folders.rkt" "recents.rkt" "open-recent.rkt"
+         "folders.rkt" "recents.rkt" "open-recent.rkt" "outline.rkt"
          "../command.rkt" "../commands.rkt" "../editor.rkt" "../frame.rkt" "../hook.rkt"
          "../settings.rkt" "../platform.rkt" "../input.rkt" "../context-menu.rkt" "../owner.rkt"
-         "../ui/sidebar.rkt" "../ui/context-menu.rkt")
+         "../ui/sidebar.rkt" "../ui/outline.rkt" "../ui/context-menu.rkt")
 (provide sidebar-panel% library-tree-extensions folder-children library-row-label
          library-context-groups library-target set-library-target!
          ask-library-name confirm-delete-permanently? move-to-trash-runner trash-argv
@@ -33,7 +36,7 @@
 
 (define-setting library-collapsed-sections
   #:contract (lambda (v) (and (list? v) (andmap symbol? v))) #:default '()
-  #:doc "Library sections you have collapsed (recent, folders)."
+  #:doc "Library sections you have collapsed (recent, folders, outline)."
   #:category "Library")
 
 (define-setting library-show-all-files
@@ -298,10 +301,18 @@
                               [on-opened (lambda (i) (folder-opened! i))]
                               [on-closed (lambda (i) (folder-closed! i))]
                               [on-selected (lambda (i) (note-target! i))]))
+    ;; Outline (#298): the current document's headings, below Folders (docs/UI-DESIGN.md §2.1's
+    ;; lower half, shared with the future Backlinks panel). A flat, depth-indented list --
+    ;; headings are never foldable, so this is ui/outline.rkt's own list, not another bench-list%.
+    (define outline-header (new section-header% [parent column] [label "Outline"]
+                                [on-toggle (lambda () (toggle-section! 'outline))]))
+    (define outline-list (new outline-list% [parent column]
+                              [on-activate (lambda (r how) (outline-activate! r))]))
 
     (define/public (get-filter-row) filter-row)
     (define/public (get-recent-list) recent-list)
     (define/public (get-folders-list) folders-list)
+    (define/public (get-outline-list) outline-list)
 
     ;; ---- sections: collapse by clicking the header; the state persists ----
     (define (collapsed? s) (memq s (setting-ref 'library-collapsed-sections)))
@@ -312,11 +323,14 @@
     (define (layout-sections!)
       (send recent-header set-collapsed! (and (collapsed? 'recent) #t))
       (send folders-header set-collapsed! (and (collapsed? 'folders) #t))
+      (send outline-header set-collapsed! (and (collapsed? 'outline) #t))
       (send column change-children
             (lambda (cs) (append (list filter-row recent-header)
                                  (if (collapsed? 'recent) '() (list recent-list))
                                  (list folders-header)
-                                 (if (collapsed? 'folders) '() (list folders-list))))))
+                                 (if (collapsed? 'folders) '() (list folders-list))
+                                 (list outline-header)
+                                 (if (collapsed? 'outline) '() (list outline-list))))))
 
     ;; ---- activation ----
     ;; A mouse activation runs after the list has finished handling the click: opening a file
@@ -343,6 +357,26 @@
     (define (note-target! i)
       (define d (and i (bench-row-data i)))
       (set-library-target! (and d (memq (car d) '(file folder root)) d)))
+
+    ;; ---- Outline (#298): the current document's headings ----
+    ;; A click or Enter moves the caret there and scrolls it into view; the sidebar keeps the
+    ;; keyboard (rackmac/library/outline.rkt's jump-to-heading!), like Find (ui/find-bar.rkt).
+    (define (outline-activate! r)
+      (define h (outline-row-data r))
+      (when h (jump-to-heading! (current-buffer) h)))
+
+    (define/public (refresh-outline!)
+      (send outline-list set-rows! (outline-rows-for (current-buffer))))
+
+    ;; The Outline's selection follows the caret's section (docs/UI-DESIGN.md §2.5), the same
+    ;; idea as Recent/Folders following the open document.
+    (define/public (follow-caret!)
+      (define b (current-buffer))
+      (define h (heading-at-caret b (send b get-start-position)))
+      ;; `equal?`, not `eq?`: heading-at-caret re-walks the document, so its heading is a fresh
+      ;; (transparent, structurally equal) doc-heading, not the one the outline's rows hold.
+      (define row (and h (findf (lambda (r) (equal? (outline-row-data r) h)) (send outline-list all-rows))))
+      (when row (send outline-list select-quietly! row)))
 
     ;; Right-click: the row under the pointer is selected (by the list) and becomes the target.
     (define (context! lst i x y)
@@ -450,12 +484,13 @@
       (when (and f (not (eq? f (send folders-list get-selected))))
         (send folders-list select-quietly! f)))
 
-    (define/public (refresh-all!) (refresh-folders!) (refresh-recent!))
+    (define/public (refresh-all!) (refresh-folders!) (refresh-recent!) (refresh-outline!))
 
     (define/public (refresh-colors!)
-      (for ([c (list filter-row recent-header folders-header)]) (send c refresh))
+      (for ([c (list filter-row recent-header folders-header outline-header)]) (send c refresh))
       (send recent-list refresh-colors!)
       (send folders-list refresh-colors!)
+      (send outline-list refresh-colors!)
       (refresh))
     (inherit refresh)
 
@@ -467,7 +502,8 @@
     (define/public (focus-order)
       (append (list filter-row)
               (if (collapsed? 'recent) '() (list recent-list))
-              (if (collapsed? 'folders) '() (list folders-list))))
+              (if (collapsed? 'folders) '() (list folders-list))
+              (if (collapsed? 'outline) '() (list outline-list))))
     (define/public (next-focus from shift?)
       (define order (focus-order))
       (define idx (index-of order from))
@@ -488,7 +524,8 @@
          (move-focus! (next-focus receiver (send e get-shift-down)))
          #t]
         [(eq? code 'escape) (move-focus! 'document) #t]
-        [(and (is-a? receiver bench-list%) (memq code '(#\return #\newline numpad-enter)))
+        [(and (or (is-a? receiver bench-list%) (is-a? receiver outline-list%))
+              (memq code '(#\return #\newline numpad-enter)))
          (send receiver activate-selected!)
          #t]
         [(and mod? (not (memq code '(up down left right home end release))))
@@ -527,6 +564,12 @@
    (add-hook! 'buffers-changed (lambda () (send panel refresh-modified!)))
    (add-hook! 'buffer-modified-changed (lambda (b) (send panel refresh-modified!)))
    (add-hook! 'current-buffer-changed (lambda (b) (send panel follow-current!)))
+   ;; The Outline (#298): rebuilds after every restyle -- the whole document (open, Language
+   ;; change) or just the edited region (md-restyle-region) -- and when the current document
+   ;; changes; its selection follows the caret on every move.
+   (add-hook! 'document-restyled (lambda (b s e) (when (eq? b (current-buffer)) (send panel refresh-outline!))))
+   (add-hook! 'current-buffer-changed (lambda (b) (send panel refresh-outline!)))
+   (add-hook! 'status-changed (lambda () (send panel follow-caret!)))
    (add-hook! 'setting-changed (lambda (name)
                                  (when (memq name '(library-folders library-show-all-files))
                                    (send panel refresh-all!))))

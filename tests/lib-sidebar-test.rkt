@@ -38,6 +38,7 @@
 (define (panel) (main-sidebar))
 (define (folders) (send (panel) get-folders-list))
 (define (recent) (send (panel) get-recent-list))
+(define (outline) (send (panel) get-outline-list))
 (define (labels lst) (map bench-row-label (send lst all-rows)))
 (define (row-for lst label)
   (findf (lambda (i) (equal? (bench-row-label i) label)) (send lst all-rows)))
@@ -132,12 +133,14 @@
   (send (panel) on-subwindow-char fl (new key-event% [key-code #\return]))   ; Return on a folder closes it
   (check-false (member "Engagement.md" (labels fl))))
 
-(test-case "Tab goes filter row -> Recent -> Folders -> document; Shift+Tab goes back"
+(test-case "Tab goes filter row -> Recent -> Folders -> Outline -> document; Shift+Tab goes back"
   (define p (panel))
   (define fr (send p get-filter-row))
   (check-eq? (send p next-focus fr #f) (recent))
   (check-eq? (send p next-focus (recent) #f) (folders))
-  (check-eq? (send p next-focus (folders) #f) 'document)
+  (check-eq? (send p next-focus (folders) #f) (outline))
+  (check-eq? (send p next-focus (outline) #f) 'document)
+  (check-eq? (send p next-focus (outline) #t) (folders))
   (check-eq? (send p next-focus (folders) #t) (recent))
   (check-eq? (send p next-focus fr #t) 'document)
   (check-true (send p on-subwindow-char fr (new key-event% [key-code #\tab])) "the panel handles Tab itself")
@@ -146,7 +149,11 @@
   (check-eq? (send p next-focus fr #f) (folders))
   (check-equal? (setting-ref 'library-collapsed-sections) '(recent))
   (send p toggle-section! 'recent)
-  (check-eq? (send p next-focus fr #f) (recent)))
+  (check-eq? (send p next-focus fr #f) (recent))
+  (send p toggle-section! 'outline)
+  (check-eq? (send p next-focus (folders) #f) 'document)
+  (check-equal? (setting-ref 'library-collapsed-sections) '(outline))
+  (send p toggle-section! 'outline))
 
 (test-case "the filter row is a painted row that opens Quick Open on Return, Space or a click"
   (check-true (is-a? (send (panel) get-filter-row) filter-row%))
