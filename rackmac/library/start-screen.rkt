@@ -1,12 +1,12 @@
 #lang racket/base
 ;; The start screen (#277 start-view): what shows in the document area when nothing is open --
-;; native controls (message%, button%, list-box%), not a document, so there is never a
+;; a painted surface (rackmac/ui/start-screen.rkt), not a document, so there is never a
 ;; Scratch Pad to greet a new person (that fallback moved out of rackmac/editor.rkt; #288
 ;; makes sure ⌘Return in a note still does nothing). Registers itself with rackmac/frame.rkt,
 ;; which decides *when* to show it; this module only builds it and supplies its commands.
-(require racket/class racket/gui/base racket/draw racket/list racket/file racket/path
-         "folders.rkt" "recents.rkt" "../command.rkt" "../editor.rkt" "../frame.rkt"
-         "../hook.rkt" "../settings.rkt" "../platform.rkt" "../input.rkt")
+(require racket/class racket/gui/base racket/list racket/file racket/path
+         "folders.rkt" "recents.rkt" "open-recent.rkt" "../command.rkt" "../editor.rkt" "../frame.rkt"
+         "../hook.rkt" "../settings.rkt" "../platform.rkt" "../input.rkt" "../ui/start-screen.rkt")
 
 (provide maybe-skip-start-screen! start-screen-subtitle)
 
@@ -26,7 +26,8 @@
     (define hit (findf (lambda (e) (file-exists? (recent-entry-path e))) (recent-entries)))
     (when hit (set-current-buffer! (open-file! (recent-entry-path hit))))))
 
-;; The Recent list here matches the sidebar's own Recent section (docs/UI-DESIGN.md S2.1/S2.8):
+;; The Recent list here matches the sidebar's own Recent section (docs/UI-DESIGN.md S2.1/S2.8)
+;; and shows only while the sidebar is hidden (see "the screen" below):
 ;; the last 10, and only ones still on disk (a moved or deleted file would otherwise open to an
 ;; error the moment someone double-clicks it).
 (define recent-shown-count 10)
@@ -75,74 +76,59 @@ TEXT
   #:title "Start Screen" #:menu "Help" #:menu-order 13
   (show-start-screen!))
 
-;; ---- the panel --------------------------------------------------------------------------
+;; ---- the screen -------------------------------------------------------------------------
+;; A painted canvas on the paper ground (rackmac/ui/start-screen.rkt): native controls would sit
+;; on the OS panel color and read as a dialog (the first live look, 2026-09-26).
+;;
+;; Recent shows here only while the Library sidebar is hidden. With the sidebar showing, its
+;; own Recent section is the one list of recent notes, beside this screen; two copies of the
+;; same list side by side read as a mistake. With the sidebar hidden, this screen is the only
+;; way back to a recent note without a menu, so the list comes back.
 
-(define (open-recent-row! items i)
-  (when (< i (length items))
-    (set-current-buffer! (open-file! (recent-entry-path (list-ref items i))))))
+(define (start-actions)
+  (list (cons 'new-note "New Note") (cons 'add-library-folder "Add Folder…") (cons 'open-file "Open…")))
 
-(define start-screen-panel%
-  (class vertical-panel%
-    (super-new [alignment '(center top)])
-    (define title-font (make-font #:size 22 #:weight 'bold))
-    (new message% [parent this] [label "Rackmac"] [font title-font])
-    (new message% [parent this] [label start-screen-subtitle])
-    (new pane% [parent this] [min-height 16] [stretchable-height #f])   ; breathing room
-    (define buttons (new horizontal-panel% [parent this] [alignment '(center center)] [stretchable-height #f]))
-    (define new-note-button
-      (new button% [parent buttons] [label "New Note"]
-           [callback (lambda (b e) (run-command/safe 'new-note))]))
-    (new button% [parent buttons] [label "Add Folder…"]
-         [callback (lambda (b e) (run-command/safe 'add-library-folder))])
-    (new button% [parent buttons] [label "Open…"]
-         [callback (lambda (b e) (run-command/safe 'open-file))])
-    (new pane% [parent this] [min-height 16] [stretchable-height #f])
-    (new message% [parent this] [label "Recent"])
-    (define recent-items '())
-    (define recent-list
-      (new list-box% [parent this] [label #f] [choices '()] [style '(single)]
-           [min-width 460] [min-height 140]
-           [callback (lambda (lb e)
-                       (when (eq? (send e get-event-type) 'list-box-dclick)
-                         (open-recent-row! recent-items (send lb get-selection))))]))
-    (new pane% [parent this] [min-height 16] [stretchable-height #f])
-    (new button% [parent this] [label "Get Started"]
-         [callback (lambda (b e) (run-command/safe 'open-getting-started))])
+(define (current-start-model)
+  (define items (existing-recents))
+  (start-model "Rackmac" start-screen-subtitle (start-actions)
+               (and (not (sidebar-shown?))
+                    (for/list ([e (in-list items)])
+                      (list (entry-label e items) (folder-label (recent-entry-path e)) (recent-entry-path e))))
+               (cons 'open-getting-started "Get Started")
+               "a short note that shows what Rackmac does"))
 
-    ;; list-box% has no Return callback of its own (RM-039's `pick` hits the same thing) --
-    ;; caught here at the panel so Enter on a highlighted Recent row opens it, same as a
-    ;; double-click (docs/UI-DESIGN.md S2.8: "keyboard reachable").
-    ;;
-    ;; Every other shortcut (⌘N, ⌘O, ⇧⌘O, ⌘,...) normally dispatches through the focused editor
-    ;; canvas (frame.rkt's header comment); with the canvas detached while this screen shows,
-    ;; a Mod-combination reaching any control here is sent through the same dispatcher instead,
-    ;; against the placeholder document's (global) keymap, so shortcuts keep working with
-    ;; nothing open rather than needing a click first.
-    (define/override (on-subwindow-char receiver ev)
-      (cond
-        [(and (eq? receiver recent-list) (memq (send ev get-key-code) '(#\return #\newline numpad-enter)))
-         (open-recent-row! recent-items (send recent-list get-selection))
-         #t]
-        [(if (mac?) (send ev get-meta-down) (send ev get-control-down))
-         (or (dispatch-key-event (current-buffer) ev) (super on-subwindow-char receiver ev))]
-        [else (super on-subwindow-char receiver ev)]))
+;; The folder a recent note is in, by name ("Notes", "Acme"): enough to tell two apart.
+(define (folder-label p)
+  (define-values (dir file must-dir?) (split-path (simplify-path (path->complete-path p))))
+  (define-values (up name d?) (if (path? dir) (split-path dir) (values #f #f #f)))
+  (if (path? name) (path->string name) ""))
 
-    (define/public (refresh-recent!)
-      (set! recent-items (existing-recents))
-      (send recent-list clear)
-      (cond
-        [(null? recent-items)
-         (send recent-list append "Notes you open appear here.")
-         (send recent-list enable #f)]
-        [else
-         (send recent-list enable #t)
-         (for ([e (in-list recent-items)]) (send recent-list append (recent-entry-name e)))]))
+(define (activate-item! it)
+  (case (sv-item-kind it)
+    [(recent)
+     (define p (sv-item-data it))
+     (if (file-exists? p)
+         (set-current-buffer! (open-file! p))
+         (message "~a is no longer there." (sv-item-label it)))]
+    [else (run-command/safe (sv-item-id it))]))
 
-    (define/public (focus-default!) (send new-note-button focus))))
+;; Every shortcut (⌘N, ⌘O, ⇧⌘O, ⌘,...) normally dispatches through the focused editor canvas
+;; (frame.rkt's header comment); with that canvas detached while this screen shows, a ⌘
+;; combination here goes through the same dispatcher, against the placeholder document's
+;; (global) keymap, so shortcuts work with nothing open rather than needing a click first.
+(define (shortcut! ev) (dispatch-key-event (current-buffer) ev))
+
+(define start-screen%
+  (class start-view%
+    (super-new [model-getter current-start-model] [on-activate activate-item!] [on-shortcut shortcut!])
+    (inherit refresh focus-first!)
+    ;; frame.rkt's contract: where the keyboard goes while this screen shows (New Note)
+    (define/public (focus-default!) (focus-first!))
+    (define/public (refresh-recent!) (refresh))))
 
 (register-start-screen!
  (lambda (parent)
-   (define panel (new start-screen-panel% [parent parent]))
-   (send panel refresh-recent!)
-   (add-hook! 'buffers-changed (lambda () (send panel refresh-recent!)))
-   panel))
+   (define view (new start-screen% [parent parent]))
+   (add-hook! 'buffers-changed (lambda () (send view refresh-recent!)))
+   (add-hook! 'theme-changed (lambda () (send view refresh-colors!)))
+   view))

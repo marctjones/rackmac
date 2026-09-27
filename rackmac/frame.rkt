@@ -77,9 +77,9 @@
   (class vertical-panel% (super-new) (define/public (focus-default!) (send this focus))))
 
 ;; ---- start screen (#277 start-view) ---------------------------------------
-;; A native-controls panel that takes the tabs/canvas's spot when there is no document open,
-;; built by rackmac/library/start-screen.rkt (which owns New Note/Add Folder/Recent/Get
-;; Started -- frame.rkt only decides when to show it). `register-start-screen!` is called once,
+;; A painted surface that takes the tabs/canvas's spot when there is no document open, built by
+;; rackmac/library/start-screen.rkt (which owns New Note/Add Folder/Recent/Get Started --
+;; frame.rkt only decides when to show it). `register-start-screen!` is called once,
 ;; like register-submenu!, but a builder rather than a registry: there is exactly one start
 ;; screen. A test that never requires that module gets an empty placeholder instead, so
 ;; existing frame tests are unaffected.
