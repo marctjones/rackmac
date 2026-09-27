@@ -136,19 +136,28 @@
   (run-command 'mark-done)
   (check-equal? (send b get-text) "# TODO\nBody\n"))
 
-;; This is the regression that motivates rehighlighting on the setting-changed hook at all: a
-;; note stays open and colored while the setting changes underneath it (no edit, no reopen).
+;; This is the regression that motivates rehighlighting on the setting-changed hook at all: an
+;; already-open note is *reparsed* against the new list, not just recolored, so a word that was
+;; not a keyword before becomes one (or stops being one) with no edit and no reopen. Coloring a
+;; word already recognized as a keyword always reads the live setting directly and would pass
+;; here even with the parser left stale (heading-keyword-style-role calls setting-ref, not the
+;; rackmac-markdown parameter) -- the parser's *recognition* is the part that depends on
+;; `sync-heading-keywords!` running before the rehighlight, so this test uses a word that is not
+;; in the starting list at all, and would stay plain text if the parser reparsed too early.
 ;; hook.rkt runs same-priority 'setting-changed hooks most-recently-added first, so this only
 ;; passes if md-format.rkt's rehighlight hook resyncs the rackmac-markdown parameter itself
-;; before rehighlighting, rather than trusting md-heading-state.rkt's own hook to have gone first.
-(test-case "an already-open note recolors immediately when the setting changes, no edit or reopen"
-  (define b (note "# TODO Ship it\n"))
-  (check-true (> (color-count (render-buffer b) (token-hex 'error)) 0) "TODO is the first word: error")
+;; before rehighlighting, rather than trusting md-heading-state.rkt's own hook to have gone first
+;; (confirmed by temporarily removing that resync call: this test then fails, 0 pixels of error).
+(test-case "an already-open note is reparsed against the new list immediately, no edit or reopen"
+  (define b (note "# STARTED Ship it\n"))
+  (check-equal? (color-count (render-buffer b) (token-hex 'error)) 0
+                "STARTED is not a keyword under the default list: no color")
   (with-keywords "STARTED TODO"
     (lambda ()
-      (check-true (> (color-count (render-buffer b) (token-hex 'success)) 0)
-                  "TODO is now the last word: success, purely from the setting change")))
-  (check-true (> (color-count (render-buffer b) (token-hex 'error)) 0) "back to error once the list is restored"))
+      (check-true (> (color-count (render-buffer b) (token-hex 'error)) 0)
+                  "STARTED is now the first word: the parser recognizes it and colors it error,\n purely from the setting change")))
+  (check-equal? (color-count (render-buffer b) (token-hex 'error)) 0
+                "plain text again once the list is restored"))
 
 ;; ---- export/save: the word round-trips unchanged -------------------------------------------
 

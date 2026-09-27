@@ -57,9 +57,12 @@
 
 ;; `node` is a style run's node (rackmac-markdown/runs.rkt: "a `keyword` run's node is the
 ;; state-keyword whose value it shows"); md-style.rkt substitutes this role for the plain
-;; `keyword` one it gets from style-runs, so `apply-role` there can color it. A word the current
-;; list no longer has (the setting changed under an already-open note) falls back to bold only,
-;; like task-done/task-cancelled never claim a role they cannot justify.
+;; `keyword` one it gets from style-runs, so `apply-role` there can color it. This always reads
+;; the live setting (`heading-state-keyword-list`, not the rackmac-markdown parameter), so it is
+;; never stale itself; the `(not i)` fallback below only guards a `node` that was recognized under
+;; a keyword list rackmac-markdown has since moved past (the same race `cycle-heading-keyword-edits`
+;; guards, and just as unreachable once `sync-heading-keywords!` runs before every rehighlight) --
+;; bold with no color, rather than a role this run cannot justify.
 (define (heading-keyword-style-role node)
   (define kw (and (state-keyword? node) (state-keyword-keyword node)))
   (define ks (heading-state-keyword-list))
