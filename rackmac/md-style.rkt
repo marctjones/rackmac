@@ -17,7 +17,8 @@
 ;; join update (racket/snip/private/style.rkt, s-update) stores the transparent-text flag on the
 ;; shift style instead of the join, so every joined style painted a white text background.
 (require racket/class racket/gui/base racket/list
-         "markdown-lib.rkt" "theme.rkt" "hook.rkt" (rename-in "ui/tokens.rkt" [token color-token]))
+         "markdown-lib.rkt" "theme.rkt" "hook.rkt" "md-heading-state.rkt"
+         (rename-in "ui/tokens.rkt" [token color-token]))
 (provide render-markdown! markdown-edit! markdown-flush!
          markdown-parser-document markdown-style-for reset-paragraph-margins!
          note-style-names indent-step hang-indent)
@@ -42,7 +43,13 @@
      (with #:size (vector-ref heading-sizes n) #:bold #t #:fg 'heading)]
     ;; markup is de-emphasized, never hidden; never underlined, even inside a link
     [(markup) (struct-copy fx (with #:size 0.8 #:fg 'text-2) [underline 'off])]
-    [(strong keyword) (with #:bold #t)]
+    [(strong) (with #:bold #t)]
+    ;; a heading keyword (#294, md-heading-state.rkt): bold in the state's color, or bold alone
+    ;; for a word the configured list no longer recognizes
+    [(keyword-open) (with #:bold #t #:fg 'error)]
+    [(keyword-waiting) (with #:bold #t #:fg 'warning)]
+    [(keyword-done) (with #:bold #t #:fg 'success)]
+    [(keyword) (with #:bold #t)]
     [(emph) (with #:italic #t)]
     ;; code: the mono face a little smaller than the serif around it (a multiplier, since
     ;; size-add cannot be negative), on the sunk paper
@@ -222,6 +229,17 @@
   ;; only when styling changed it: buffer% announces every set-modified
   (unless (eq? was-modified? (send b is-modified?)) (send b set-modified was-modified?)))
 
+;; A keyword run's plain `keyword` role (style-runs' whole vocabulary, shared with the HTML
+;; exporter) becomes a state-specific one here, from the run's node -- the state-keyword whose
+;; word it draws (runs.rkt) -- so `apply-role` can color it without rackmac-markdown knowing
+;; about this app's settings (#294, md-heading-state.rkt).
+(define (resolved-roles r)
+  (define roles (run-roles r))
+  (if (memq 'keyword roles)
+      (for/list ([role (in-list roles)])
+        (if (eq? role 'keyword) (heading-keyword-style-role (run-node r)) role))
+      roles))
+
 ;; One change-style per stretch of runs that resolve to the same style. After a reset to the
 ;; base style, runs without roles need nothing.
 (define (apply-runs! b runs base-name #:skip-base? [skip-base? #f])
@@ -234,7 +252,7 @@
       [(null? rs) (flush!)]
       [else
        (define r (car rs))
-       (define st (markdown-style-for base-name (run-roles r)))
+       (define st (markdown-style-for base-name (resolved-roles r)))
        (if (and (eq? st cur) (= (run-start r) to))
            (loop (cdr rs) cur from (run-end r))
            (begin (flush!) (loop (cdr rs) st (run-start r) (run-end r))))])))
