@@ -6,7 +6,8 @@
 (require rackunit racket/class racket/gui/base racket/string racket/list racket/file
          "../rackmac/commands.rkt" "../rackmac/editor.rkt" "../rackmac/frame.rkt"
          "../rackmac/command.rkt" "../rackmac/platform.rkt" "../rackmac/ui/layout.rkt"
-         "../rackmac/library/folders.rkt" "../rackmac/library/new-note.rkt" "../rackmac/settings.rkt")
+         "../rackmac/library/folders.rkt" "../rackmac/library/new-note.rkt" "../rackmac/settings.rkt"
+         "../rackmac/find-highlight.rkt")
 
 ;; #276: the "+" button and New Document's toolbar/menu slot now make a note, which needs a
 ;; Library folder to put it in.
@@ -192,6 +193,66 @@
   (replace-all!)                             ; used to crash: substring past the now-empty buffer
   (check-equal? (send b get-text) "")
   (check-equal? (send (fb) count-text) "No matches")
+  (hide-find-bar!))
+
+;; ---- find bar: highlight all matches (#109) ----------------------------------------------
+
+(test-case "find bar: every match is highlighted, not just the one being stepped to"
+  (define b (doc "cat dog cat dog cat"))
+  (show-find-bar!)
+  (set-find-options! "cat")
+  (check-equal? (find-highlight-ranges b) '((0 . 3) (8 . 11) (16 . 19))
+                "all three, before any Next/Previous")
+  (find! 'forward)
+  (check-equal? (find-highlight-ranges b) '((0 . 3) (8 . 11) (16 . 19))
+                "stepping narrows the selection, not the highlight set")
+  (hide-find-bar!))
+
+(test-case "find bar: an empty query clears the highlights"
+  (define b (doc "cat cat"))
+  (show-find-bar!)
+  (set-find-options! "cat")
+  (check-equal? (find-highlight-ranges b) '((0 . 3) (4 . 7)))
+  (set-find-options! "")
+  (check-equal? (find-highlight-ranges b) '() "no query, nothing to highlight")
+  (hide-find-bar!))
+
+(test-case "find bar: No matches clears the highlights too"
+  (define b (doc "cat cat"))
+  (show-find-bar!)
+  (set-find-options! "cat")
+  (check-equal? (find-highlight-ranges b) '((0 . 3) (4 . 7)))
+  (set-find-options! "zzz")
+  (check-equal? (find-highlight-ranges b) '())
+  (hide-find-bar!))
+
+(test-case "find bar: closing it (Esc, or hide-find-bar!) clears the highlights"
+  (define b (doc "cat cat"))
+  (show-find-bar!)
+  (set-find-options! "cat")
+  (check-equal? (find-highlight-ranges b) '((0 . 3) (4 . 7)))
+  (hide-find-bar!)
+  (check-equal? (find-highlight-ranges b) '() "closed: nothing stays painted"))
+
+(test-case "find bar: switching to another document drops the previous one's highlights"
+  (define a (doc "cat cat"))
+  (show-find-bar!)
+  (set-find-options! "cat")
+  (check-equal? (find-highlight-ranges a) '((0 . 3) (4 . 7)))
+  (define b (doc "cat"))                       ; a new current buffer; the bar itself never saw this
+  (set-find-options! "cat")                    ; the bar's next recompute now targets b
+  (check-equal? (find-highlight-ranges a) '() "a's stale wash is dropped, not left painted forever")
+  (check-equal? (find-highlight-ranges b) '((0 . 3)))
+  (hide-find-bar!))
+
+(test-case "find bar: editing the document while it's open refreshes the highlights and count"
+  (define b (doc "cat cat"))
+  (show-find-bar!)
+  (set-find-options! "cat")
+  (check-equal? (send (fb) count-text) "2 matches")
+  (send b insert " cat" (send b last-position))   ; "cat cat" -> "cat cat cat", not through the bar
+  (check-equal? (find-highlight-ranges b) '((0 . 3) (4 . 7) (8 . 11)) "ranges recomputed, not shifted")
+  (check-equal? (send (fb) count-text) "3 matches")
   (hide-find-bar!))
 
 ;; ---- tabs and layout (UI foundation) ------------------------------------------------
