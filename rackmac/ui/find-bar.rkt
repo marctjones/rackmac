@@ -3,7 +3,7 @@
 ;; and Replace All are delegated to the pure rackmac/search.rkt so this module only wires
 ;; widgets to buffer positions. docs/UI-DESIGN.md section 2, section 7.4.
 (require racket/class racket/gui/base
-         "../search.rkt" "../editor.rkt" "../theme.rkt" "icons.rkt" "layout.rkt" "tokens.rkt" "status-bar.rkt")
+         "../search.rkt" "../editor.rkt" "../doc-text.rkt" "../theme.rkt" "icons.rkt" "layout.rkt" "tokens.rkt" "status-bar.rkt")
 (provide find-bar%)
 
 ;; A text-field% that intercepts Enter/Shift+Enter (step) and Esc (close) before the editor
@@ -196,7 +196,9 @@
           [(zero? (replace-result-count result)) (message "No matches")]
           [else
            (send b begin-edit-sequence)
-           (send b insert (replace-result-text result) offset (+ offset (string-length text)))
+           ;; the search text is position-aligned (buffer-string); a non-text snip's placeholder
+           ;; (doc-text.rkt) must not be written back as a character
+           (send b insert (remove-object-replacements (replace-result-text result)) offset (+ offset (string-length text)))
            (send b end-edit-sequence)
            ;; The scoped region just changed length; track its new span so a later search
            ;; (or another Replace All) still covers exactly the replaced text, not whatever

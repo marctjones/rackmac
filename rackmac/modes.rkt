@@ -1,6 +1,6 @@
 #lang racket/base
 ;; Built-in modes. Every one uses the same public define-mode that user code gets.
-(require "mode.rkt" "keymap.rkt" "highlight.rkt" "md-style.rkt" "md-view.rkt" "md-links.rkt" "ui/layout.rkt")
+(require "mode.rkt" "keymap.rkt" "highlight.rkt" "md-style.rkt" "md-view.rkt" "md-links.rkt" "md-checkbox.rkt" "ui/layout.rkt")
 (provide code-keymap)
 
 (define-mode text-mode

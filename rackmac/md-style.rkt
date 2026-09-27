@@ -133,7 +133,7 @@
   (define p (make-parser #:extensions all-extensions))
   (set-state-parser! st p)
   (set-state-pending! st #f)
-  (define doc (parser-parse! p (send b get-text)))
+  (define doc (parser-parse! p (send b document-text #:keep-positions? #t)))
   (with-styling b
     (lambda ()
       (define base-name (send b default-style-name))
@@ -176,7 +176,7 @@
     (define p (state-parser st))
     (define old (document-text (parser-document p)))
     (define-values (s oe ne) (values (vector-ref pend 0) (vector-ref pend 1) (vector-ref pend 2)))
-    (define inserted (send b get-text s ne))
+    (define inserted (send b document-text s ne #:keep-positions? #t))
     (define text (string-append (substring old 0 s) inserted (substring old oe)))
     (cond
       [(not (= (string-length text) (send b last-position))) (render-markdown! b)]

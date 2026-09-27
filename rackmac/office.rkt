@@ -91,7 +91,7 @@
   (define b (current-buffer))
   (define out ((ask-export-path) (default-name b #".docx") (docs-dir-of b)))
   (when out
-    (define-values (ok? err) (export-docx! (send b get-text) out))
+    (define-values (ok? err) (export-docx! (send b document-text) out))
     (cond [ok? (message "Exported to ~a" (path->string out)) ((reveal-after-export) out)]
           [else (message "Word export failed: ~a" err)])))
 

@@ -35,7 +35,7 @@
     [else                                          ; Source view: the line alone
      (define para (send b position-paragraph pos))
      (define start (send b paragraph-start-position para))
-     (define line (send b get-text start (send b paragraph-end-position para)))
+     (define line (send b document-text start (send b paragraph-end-position para) #:keep-positions? #t))
      (link-target-at (parse-document line #:extensions all-extensions) (- pos start))]))
 
 ;; Where a target points, for a note at `note-path` (#f when untitled):

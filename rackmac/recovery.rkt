@@ -141,7 +141,7 @@
   (define p (send b get-path))
   (write-snapshot!
    (snapshot id (and p (path->string p)) (send b get-name) (send b get-mode)
-             (send b get-start-position) (current-seconds) (send b get-text)
+             (send b get-start-position) (current-seconds) (send b document-text)
              (and p (file-seconds p)) (getpid)))
   (hash-set! ids b id))
 

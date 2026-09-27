@@ -24,7 +24,7 @@
   (define gen (hash-ref generations b 0))
   (define cached (hash-ref cache b #f))
   (cond [(and cached (= (car cached) gen)) (cdr cached)]
-        [else (define n (count-words (send b get-text)))
+        [else (define n (count-words (send b document-text)))
               (hash-set! cache b (cons gen n))
               n]))
 

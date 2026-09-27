@@ -15,7 +15,7 @@
 (provide current-md-document apply-md-edits! selection-range)
 
 (define (current-md-document b)
-  (define text (send b get-text))
+  (define text (send b document-text #:keep-positions? #t))
   (define cached (markdown-parser-document b))
   (if (and cached (string=? (document-text cached) text))
       cached

@@ -7,7 +7,7 @@
 ;; only apply to prose documents (`#:when markdown-document?`), which is also what shows the
 ;; Format menu (frame.rkt hides an otherwise-empty top menu; see rebuild-menus!).
 (require racket/class
-         "command.rkt" "editor.rkt" "md-doc.rkt" "md-view-commands.rkt"
+         "command.rkt" "editor.rkt" "md-doc.rkt" "md-view-commands.rkt" "md-checkbox.rkt"
          "../rackmac-markdown/main.rkt")
 
 ;; ---- inline: bold, italic, inline code, strikethrough -----------------------------------------
@@ -94,7 +94,7 @@
       [l (define r (link-edit-range l))
          (send b set-position (car r) (cdr r))]
       [else
-       (define label (send b get-text s e))
+       (define label (send b document-text s e))
        (apply-md-edits! b (list (edit s e (string-append "[" label "](" ")"))))
        (define caret (+ s (string-length label) 3))     ; after "[label](" -- inside the empty URL
        (send b set-position caret caret)])))
@@ -193,7 +193,6 @@
   (define b (current-buffer))
   (when (markdown-document? b)
     (define pos (send b get-start-position))
-    (define edits (toggle-task-edits (current-md-document b) pos))
+    (define edits (toggle-task-at! b pos))              ; the checkbox click's path too (#293)
     (define np (map-position edits pos 'after))
-    (apply-md-edits! b edits)
     (send b set-position np np)))

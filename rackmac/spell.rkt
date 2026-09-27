@@ -159,7 +159,7 @@
           (= (string-length (document-text d)) (send b last-position)))
      d]
     [else
-     (define text (send b get-text))
+     (define text (send b document-text #:keep-positions? #t))
      (cond
        [(and (sp-parsed st) (string=? (car (sp-parsed st)) text)) (cdr (sp-parsed st))]
        [else (define d2 (parse-document text #:extensions all-extensions))
@@ -168,7 +168,7 @@
 
 ;; Check [s, e) (whole paragraphs) and replace the misspellings stored for it.
 (define (check-region! b st s e doc)
-  (define text (send b get-text s e))
+  (define text (send b document-text s e #:keep-positions? #t))
   (define found ((spell-checker-misspellings (current-spell-checker)) (check-text-mask text s doc)))
   (define ignored (sp-ignored st))
   (define new
@@ -292,7 +292,7 @@
   (and st (typing-check?)
        (for/first ([r (in-list (sp-ranges st))] #:when (and (<= (car r) s) (<= e (cdr r)))) r)))
 
-(define (range-text b r) (send b get-text (car r) (cdr r)))
+(define (range-text b r) (send b document-text (car r) (cdr r)))
 
 ;; Replace a misspelling with `word`: one undo step, the replacement selected like a typed word.
 (define (replace-misspelling! b r word)

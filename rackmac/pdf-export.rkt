@@ -165,7 +165,7 @@
 
 ;; A buffer's text, as its Language shows it.
 (define (export-document-pdf! b out #:paper [paper (export-paper)])
-  (export-pdf! (send b get-text) (send b get-mode) out #:paper paper))
+  (export-pdf! (send b document-text) (send b get-mode) out #:paper paper))
 
 ;; ---- the command ----------------------------------------------------------------------------
 

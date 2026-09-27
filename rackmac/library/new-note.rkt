@@ -46,7 +46,7 @@
 ;; enough to catch "the first heading" a person just typed, without scanning a whole large note.
 (define (first-heading-title b)
   (define end (min (send b last-position) 4000))
-  (define text (send b get-text 0 end))
+  (define text (send b document-text 0 end))
   (for/or ([line (in-list (string-split text "\n"))] [_ (in-range 40)])
     (define m (regexp-match #px"^#{1,6}[ \t]+(.+?)[ \t]*$" line))
     (and m (let ([t (string-trim (cadr m))]) (and (not (string=? t "")) t)))))
