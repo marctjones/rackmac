@@ -316,3 +316,19 @@
   (check-eq? (before-command-of
               (lambda () (with-dialog escape! (lambda () (send sb on-char (new key-event% [key-code #\return]))))))
              'goto-line))
+
+;; ---- nothing open (first live look, 2026-09-26: "0 words · Plain Text · 100%") ----------------
+
+(test-case "with the start screen showing, the status bar has no document segments"
+  (check-equal? (map seg-view-name (compute-segments "" #:document? #f)) '(message)
+                "the pure model: only the message area")
+  (for ([b (all-buffers)] #:unless (messages-buffer? b)) (kill-buffer! b))
+  (check-true (start-screen-shown?))
+  (check-equal? (map seg-view-name (model)) '(message) "no words, Language or zoom for the start screen")
+  (run-hook 'echo "New Note (⌘N)")
+  (check-equal? (seg-text 'message) "New Note (⌘N)" "the message area still shows toolbar hints")
+  (run-hook 'echo "")
+  (doc "two words" 'text-mode)
+  (check-false (start-screen-shown?))
+  (check-equal? (seg-text 'words) "2 words" "a document brings them back")
+  (check-not-false (seg-text 'zoom)))

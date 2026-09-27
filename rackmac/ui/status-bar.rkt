@@ -29,9 +29,11 @@
 
 ;; Build the (message . segments) list `layout-segments`/`render-status` take, from the
 ;; registry and the current message text. Segments whose thunk errors or returns #f drop out.
-(define (compute-segments message)
+;; With #:document? #f (the start screen: nothing open) there are no segments at all -- words,
+;; Language and zoom describe a document, and the start screen is not one.
+(define (compute-segments message #:document? [document? #t])
   (cons (seg-view 'message message #f #f 0)
-        (for*/list ([s (in-list (status-segments))]
+        (for*/list ([s (in-list (if document? (status-segments) '()))]
                     [text (in-value (segment-text s))]
                     #:when text)
           (seg-view (status-segment-name s) text (status-segment-command s)
@@ -140,6 +142,8 @@
 
 (define status-bar%
   (class canvas%
+    ;; #f while no document is showing (frame.rkt: the start screen is up)
+    (init-field [document-getter (lambda () #t)])
     (super-new [style '()] [stretchable-width #t] [stretchable-height #f] [min-height status-bar-height])
     (inherit get-dc get-width get-height refresh)
 
@@ -148,7 +152,7 @@
     (define focused #f)
 
     (define/public (set-message! s) (set! message s))
-    (define/public (current-model) (compute-segments message))
+    (define/public (current-model) (compute-segments message #:document? (and (document-getter) #t)))
 
     (define (measuring-dc)
       (define dc (get-dc))

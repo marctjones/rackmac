@@ -195,7 +195,7 @@ palette, dialogs, context menus and notifications are as built or as planned bef
 frame% (native title: "• Weekly notes.md — Rackmac")
 ├─ menu-bar%                           native, generated from #:menu: File Edit Format View Tools Help
 └─ vertical-panel% border 0 spacing 0
-   ├─ toolbar   horizontal-panel%      button% per toolbar item; Format group only for prose Languages
+   ├─ toolbar   horizontal-panel%      button% per toolbar item; Format group only for prose Languages; start screen: New Note, Open, palette only
    ├─ horizontal-panel% border 0 spacing 0
    │  ├─ sidebar  vertical-panel% 240  Library: filter, Recent, Folders (hierarchical-list%), Tags, Outline, Backlinks
    │  └─ tabs     tab-panel%           '(no-border flat-portable can-reorder can-close new-button)
@@ -267,6 +267,9 @@ OS-colored strip). Keyboard: showing the Library (⌥⌘S) puts focus on the fil
 Folders → document; Escape returns to the document; Return opens (a folder opens or closes); ⌘ shortcuts work
 from inside it. A click opens a file; the selection follows the current document. The width is a setting
 (`library-width`), not yet draggable (pane splitters are E9). Windows has no Show Library shortcut yet.
+The lists have no canvas border and no standing scrollbar (the first live look showed a light gutter down each
+list and a box around it): Folders shows the native scrollbar only while it overflows, and Recent is sized to its
+rows and never shows one, so the sidebar reads as one bench divided by `bench-rule` lines.
 
 ### 2.2 The document area for notes (Markdown, WYSIWYM)
 
@@ -486,11 +489,25 @@ _Changed 2026-09-25 (revised from "editor" and "gutter")._ A document whose Lang
 ### 2.8 Start screen
 
 _Changed 2026-09-25 (revised)._ A `vertical-panel%` in the editor slot when nothing is open (and reopenable from
-Help): title "Rackmac", subtitle "Notes and documents you can trust to plain files", three large `button%`s **New
+Help): title "Rackmac", subtitle "Notes in plain Markdown files, in folders you choose.", three large `button%`s **New
 Note**, **Add Folder…**, **Open…**, a `list-box%` **Recent** (double-click opens), and a text button **Get Started**
 that opens the bundled `Getting started.md` (a real note with checkboxes: "Make this line bold", "Add a folder",
 "Export this note to Word"). No Scratch Pad on the start screen; Tools > Scratch Pad exists for Racket users. A
 setting skips the screen and opens the last note instead.
+
+_As built (2026-09-26, after the first live look):_ one painted `canvas%` (`rackmac/ui/start-screen.rkt`, drawn by a
+pure function so tests render it headless), not native controls: racket/gui panels cannot be colored, so the
+buttons and list sat on the grey OS panel color with a white `list-box%` and read as a dialog. Now it is on the paper
+(`surface`) like a document: title and subtitle centered, the three actions as 1 px `stroke` boxes, Recent as ruled
+rows (name in `text`, folder in `text-2`), and **Get Started** as an underlined `accent` link. Keyboard: New Note
+has the focus first; Tab/Shift+Tab and the arrows move through the items and wrap; Return or Space activates; the
+focus is a 2 px `accent` outline (or a row's left marker), a change of shape and not only of color; ⌘ shortcuts
+work as from a document. **Recent shows here only while the Library sidebar is hidden**: with the sidebar showing,
+its Recent section is the one list (two copies side by side read as a mistake); with it hidden, this screen is the
+only way back to a recent note without a menu. (The other option, "Recent notes" cards, was not taken: cards are a
+layer, and the brand wants lines.) The toolbar shows only New Note, Open and the Command Palette, and the status
+bar no document segments, while this screen shows. For the owner: VoiceOver does not see painted items as
+buttons (the same E10 accessibility work as the sidebar, #331).
 
 ### 2.9 As built or as planned before
 
@@ -757,30 +774,29 @@ _Changed 2026-09-25._
 
 ### 7.3 Start screen (nothing open)
 
-_Changed 2026-09-25._
+_Changed 2026-09-26 (painted on paper; short toolbar; no status segments)._
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ ● ● ●                                Rackmac                                                   │
 ├────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ [＋] [▭] [💾]  [↶] [↷]  [✂] [⧉] [📋]  [🔍]                                    [🔍 Search commands…] │
+│ [＋] [▭]                                                                       [🔍 Search commands…] │
 ├──────────────────────┬─────────────────────────────────────────────────────────────────────────┤
-│ [ filter…          ] │                                                                         │
-│ RECENT               │                         Rackmac                                         │  title 22 bold
-│  Weekly notes        │          Notes and documents you can trust to plain files              │  subtitle 15
+│ [ filter…          ] │                                                                         │  paper (surface), painted
+│ Recent               │                         Rackmac                                         │  title 22 bold
+│  Weekly notes        │          Notes in plain Markdown files, in folders you choose.         │  subtitle, text-2
 │  Acme SPA — turn 4   │                                                                         │
-│ FOLDERS              │        [   New Note   ]   [  Add Folder…  ]   [    Open…    ]           │  three button%s
-│  ▾ Notes             │                                                                         │
-│  ▸ OneDrive - Firm ☁ │        Recent                                                           │
-│                      │        ┌───────────────────────────────────────────────────────┐        │  list-box%, double-click opens
-│                      │        │ Weekly notes.md               Notes           today   │        │
-│                      │        │ Acme SPA — turn 4.md          Matters/Acme    Mon     │        │
-│                      │        │ Call with J. Roe.md           Matters/Roe     Fri     │        │
-│                      │        └───────────────────────────────────────────────────────┘        │
-│                      │        Get Started  ·  a short note that shows what Rackmac does        │  opens Getting started.md
+│ Folders              │        ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │  three 1 px stroke boxes
+│  ▾ Notes             │        │   New Note   │  │ Add Folder…  │  │    Open…     │             │
+│  ▸ OneDrive - Firm ☁ │        └──────────────┘  └──────────────┘  └──────────────┘             │
+│                      │                                                                         │
+│                      │                Get Started  ·  a short note that shows what Rackmac does │  accent link
+│                      │                                                                         │
 ├──────────────────────┴─────────────────────────────────────────────────────────────────────────┤
-│                                                                                  Markdown  100% │
+│                                                                                                 │  no segments
 └────────────────────────────────────────────────────────────────────────────────────────────────┘
+   With the sidebar hidden, a ruled Recent list (name, folder) sits between the boxes and Get Started;
+   empty, it says "Notes you open appear here."
    Empty Library: the sidebar shows "No folders yet. Add the folder where you keep your notes (OneDrive and
    SharePoint folders work)." with an Add Folder… button; the Recent list says "Notes you open appear here."
 ```

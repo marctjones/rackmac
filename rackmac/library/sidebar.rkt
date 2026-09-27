@@ -270,11 +270,6 @@
 
 ;; ---- the panel ----------------------------------------------------------------------------
 
-(define (row-height)
-  (define dc (new bitmap-dc% [bitmap (make-bitmap 1 1)]))
-  (define-values (w h d a) (send dc get-text-extent "Xg" row-font))
-  (+ (inexact->exact (ceiling h)) 6))
-
 (define recent-shown-count 10)
 
 (define sidebar-panel%
@@ -289,7 +284,7 @@
                             [on-activate (lambda () (run-command/safe 'quick-open))]))
     (define recent-header (new section-header% [parent column] [label "Recent"]
                                [on-toggle (lambda () (toggle-section! 'recent))]))
-    (define recent-list (new bench-list% [parent column]
+    (define recent-list (new bench-list% [parent column] [style bench-list-fixed-style]
                              [on-activate (lambda (i how) (activate! i how))]
                              [on-context (lambda (i x y) (context! recent-list i x y))]
                              [on-selected (lambda (i) (note-target! i))]))
@@ -366,7 +361,7 @@
            (define label (entry-label e es))
            (add-bench-row! recent-list (string-append (if (modified-path? (recent-entry-path e)) "• " "") label)
                            (list 'file (recent-entry-path e))))])
-      (send recent-list min-height (+ 8 (* (row-height) (max 1 (length es)))))
+      (send recent-list fit-height!)
       (follow-current!))
 
     ;; ---- Folders (lazily filled: a folder's rows are made when it is first opened) ----

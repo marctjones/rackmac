@@ -51,7 +51,9 @@
 (define (sidebar-shown?) (and sidebar show-sidebar?))
 (define (set-sidebar-shown! on?)
   (set! show-sidebar? (and on? #t))
-  (when frame (layout-rows!)))
+  (when frame
+    (layout-rows!)
+    (send start-panel refresh)))   ; the start screen lists Recent only while the sidebar is hidden
 (define menu-bar #f)
 (define tabs #f)
 (define canvas #f)
@@ -77,9 +79,9 @@
   (class vertical-panel% (super-new) (define/public (focus-default!) (send this focus))))
 
 ;; ---- start screen (#277 start-view) ---------------------------------------
-;; A native-controls panel that takes the tabs/canvas's spot when there is no document open,
-;; built by rackmac/library/start-screen.rkt (which owns New Note/Add Folder/Recent/Get
-;; Started -- frame.rkt only decides when to show it). `register-start-screen!` is called once,
+;; A painted surface that takes the tabs/canvas's spot when there is no document open, built by
+;; rackmac/library/start-screen.rkt (which owns New Note/Add Folder/Recent/Get Started --
+;; frame.rkt only decides when to show it). `register-start-screen!` is called once,
 ;; like register-submenu!, but a builder rather than a registry: there is exactly one start
 ;; screen. A test that never requires that module gets an empty placeholder instead, so
 ;; existing frame tests are unaffected.
@@ -104,6 +106,7 @@
     (set! forced-start-screen? #t)
     (set! show-start-screen? #t)
     (layout-rows!)
+    (start-screen-chrome!)
     (run-hook 'focus-editor)))
 
 ;; Recomputes visibility from the current flags; called on 'buffers-changed (so the screen
@@ -115,7 +118,15 @@
   (when frame
     (set! show-start-screen? (or forced-start-screen? (no-document-open?)))
     (layout-rows!)
+    (start-screen-chrome!)
     (run-hook 'focus-editor)))
+
+;; The toolbar and status bar follow the start screen: with it showing there is no document to
+;; act on, so the toolbar leaves off document tools and the status bar its document segments
+;; (both read `show-start-screen?` through the getters make-main-frame gives them).
+(define (start-screen-chrome!)
+  (when toolbar (send toolbar ensure-mode!))
+  (when status-bar (send status-bar refresh)))
 
 ;; ---- window --------------------------------------------------------------
 
@@ -206,7 +217,8 @@
   (set! frame (new main-frame% [label "Rackmac"] [width 1100] [height 760]))
   (set-ui-parent! frame)
   (set! menu-bar (new menu-bar% [parent frame]))
-  (set! toolbar (new toolbar-panel% [parent frame] [mode-getter (lambda () (send (current-buffer) get-mode))]))
+  (set! toolbar (new toolbar-panel% [parent frame] [mode-getter (lambda () (send (current-buffer) get-mode))]
+                     [document-getter (lambda () (not show-start-screen?))]))
   ;; Browser-style document tabs: close boxes, drag to reorder, and a "+" button, drawn the
   ;; same way on macOS and Windows ('flat-portable).
   (set! body (new horizontal-panel% [parent frame] [spacing 0] [border 0]))
@@ -304,7 +316,7 @@
 ;; tested on a bitmap-dc%); this just makes one and wires the hooks above.
 
 (define (build-status-bar!)
-  (set! status-bar (new status-bar% [parent frame])))
+  (set! status-bar (new status-bar% [parent frame] [document-getter (lambda () (not show-start-screen?))])))
 
 ;; ---- menus (generated from command metadata) -----------------------------
 
