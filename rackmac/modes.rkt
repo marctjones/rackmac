@@ -29,15 +29,21 @@
   #:doc "Racket source: syntax coloring and ; comments.")
 
 
-;; Enter/Tab/Shift-Tab in a list (#337, md-lists.rkt) are bound ahead of the global keymap's
-;; plain "Enter"/"Tab"/"Shift-Tab" commands, by NAME: a keymap only ever stores command symbols
-;; (keymap.rkt), so this module never has to require md-lists.rkt (which would cycle back
-;; through editor.rkt -- see md-view.rkt's note on why it avoids the same thing).
+;; Enter/Tab/Shift-Tab in a list (#337, md-lists.rkt), and Promote/Demote heading and Move Section
+;; Up/Down on a heading line (#299, outline-structure.rkt), are bound ahead of the global keymap's
+;; plain "Enter"/"Tab"/"Shift-Tab", "Outdent/Indent Lines" and "Move Line Up/Down" commands, by
+;; NAME: a keymap only ever stores command symbols (keymap.rkt), so this module never has to
+;; require md-lists.rkt or outline-structure.rkt (which would cycle back through editor.rkt --
+;; see md-view.rkt's note on why it avoids the same thing).
 (define markdown-keymap
   (make-keymap/pairs 'markdown-mode
                      (list (cons "Enter" 'markdown-enter)
                            (cons "Tab" 'markdown-indent)
-                           (cons "Shift-Tab" 'markdown-outdent))))
+                           (cons "Shift-Tab" 'markdown-outdent)
+                           (cons "Mod-[" 'promote-heading)
+                           (cons "Mod-]" 'demote-heading)
+                           (cons "Alt-Up" 'move-section-up)
+                           (cons "Alt-Down" 'move-section-down))))
 
 ;; Two views of one document (md-view.rkt, #269): Formatted, styled from the Markdown parser and
 ;; restyled per edit (md-style.rkt); Markdown Source, the regex coloring on the mono style.
