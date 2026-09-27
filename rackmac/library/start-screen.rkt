@@ -85,8 +85,16 @@ TEXT
 ;; same list side by side read as a mistake. With the sidebar hidden, this screen is the only
 ;; way back to a recent note without a menu, so the list comes back.
 
+;; New from Template (#353) is a fourth action rather than a list of every template on the
+;; screen itself: the screen's actions are equal boxes in one row (rackmac/ui/start-screen.rkt),
+;; with no way to show an unknown-length list of them, so this opens the same template picker
+;; the palette uses (rackmac/templates.rkt's new-from-template command). Labeled "From
+;; Template…" here, shorter than the command's own "New from Template…" title, so it fits the
+;; box: with four equal actions in the 520px column, each is ~121px wide at normal-control-font,
+;; and "New from Template…" alone measures wider than that and would spill past the box.
 (define (start-actions)
-  (list (cons 'new-note "New Note") (cons 'add-library-folder "Add Folder…") (cons 'open-file "Open…")))
+  (list (cons 'new-note "New Note") (cons 'add-library-folder "Add Folder…") (cons 'open-file "Open…")
+        (cons 'new-from-template "From Template…")))
 
 (define (current-start-model)
   (define items (existing-recents))

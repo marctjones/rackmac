@@ -6,10 +6,17 @@
 ;; are the thing to update, deliberately, alongside it. They differ by the Format menu, which
 ;; only prose documents show (md-format.rkt's #:when; frame.rkt hides an empty top menu).
 (require "no-front.rkt")   ; first: GUI tests must never take keyboard focus
-(require rackunit racket/class racket/gui/base racket/string
+(require rackunit racket/class racket/gui/base racket/string racket/file
          "../rackmac/commands.rkt" "../rackmac/editor.rkt" "../rackmac/frame.rkt"
          "../rackmac/command.rkt"
          "../rackmac/app.rkt")   ; every feature module, so their menu items are in the snapshot
+
+;; File > New from Template (#353) rescans its Templates folder every time it opens, and seeds
+;; a fresh default location with three examples -- and snapshotting every submenu below opens
+;; this one too. Without redirecting the config dir, that scan/seed would land on the real
+;; ~/.config/rackmac/Templates on whoever runs this test, same reason lib-new-note-test.rkt and
+;; friends redirect RACKMAC_HOME before touching anything that reads or writes it.
+(void (putenv "RACKMAC_HOME" (path->string (make-temporary-file "rackmac-menusnap~a" 'directory))))
 
 (define f (make-main-frame))                ; hidden: show is never called
 
@@ -35,7 +42,7 @@
 
 ;; A prose (Markdown) document: every menu, the Format menu included.
 (define golden-prose
-  '(("File" "New Note" "Open…" "Quick Open…" ("Open Recent" "Files you open appear here.")
+  '(("File" "New Note" ("New from Template" "Call note" "Meeting note" "Memo") "Open…" "Quick Open…" ("Open Recent" "Files you open appear here.")
      "Add Folder…" "Import Word Document…" "Remove Folder…" "---"
      "Save" "Save As…" "Close Tab" "Reopen Closed Tab" "Reload from Disk" "Print…" "Save All"
      "Export to Word…" "Export as PDF…" "---"
@@ -52,14 +59,14 @@
     ("View" "Zoom In" "Zoom Out" "Actual Size" "---" "Toggle Word Wrap" "Toggle Dark/Light Theme"
      "Toggle Full Screen" ("Editor Theme" "Use System Setting" "Light" "Dark") "Show Toolbar" "Show Library"
      "Show Markdown Source" "---" "Show Activity Log" "---" "Command Palette…" "Set Language…")
-    ("Tools" "Run Selection" "Run Document" "---" "Scratch Pad" "New Code File…" "---"
+    ("Tools" "Run Selection" "Run Document" "---" "Scratch Pad" "Edit Templates" "New Code File…" "---"
      ("Extensions" "Customize with Code" "Reload Extensions" "List Extensions"))
     ("Help" "What Does This Key Do?" "Keyboard Shortcuts" "Explain a Command…" "Start Screen"
      "Shortcuts as Text" "---" "About Rackmac")))
 
 ;; A code document: the same menus without Format.
 (define golden-code
-  '(("File" "New Note" "Open…" "Quick Open…" ("Open Recent" "Files you open appear here.")
+  '(("File" "New Note" ("New from Template" "Call note" "Meeting note" "Memo") "Open…" "Quick Open…" ("Open Recent" "Files you open appear here.")
      "Add Folder…" "Import Word Document…" "Remove Folder…" "---"
      "Save" "Save As…" "Close Tab" "Reopen Closed Tab" "Reload from Disk" "Print…" "Save All"
      "Export to Word…" "Export as PDF…" "---"
@@ -73,7 +80,7 @@
     ("View" "Zoom In" "Zoom Out" "Actual Size" "---" "Toggle Word Wrap" "Toggle Dark/Light Theme"
      "Toggle Full Screen" ("Editor Theme" "Use System Setting" "Light" "Dark") "Show Toolbar" "Show Library"
      "Show Markdown Source" "---" "Show Activity Log" "---" "Command Palette…" "Set Language…")
-    ("Tools" "Run Selection" "Run Document" "---" "Scratch Pad" "New Code File…" "---"
+    ("Tools" "Run Selection" "Run Document" "---" "Scratch Pad" "Edit Templates" "New Code File…" "---"
      ("Extensions" "Customize with Code" "Reload Extensions" "List Extensions"))
     ("Help" "What Does This Key Do?" "Keyboard Shortcuts" "Explain a Command…" "Start Screen"
      "Shortcuts as Text" "---" "About Rackmac")))
