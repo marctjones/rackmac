@@ -36,11 +36,11 @@
   (check-not-false (memq (panel) (send (main-body) get-children)))
   (check-false (memq (main-tabs) (send (main-body) get-children))))
 
-(test-case "it is one painted surface: title, subtitle, the three actions, Recent, Get Started"
+(test-case "it is one painted surface: title, subtitle, the four actions, Recent, Get Started"
   (check-true (is-a? (panel) canvas%) "painted, so it can sit on paper (a panel takes the OS color)")
   (check-equal? (item-labels 'title) '("Rackmac"))
   (check-equal? (item-labels 'subtitle) (list start-screen-subtitle))
-  (check-equal? (item-labels 'action) '("New Note" "Add Folder…" "Open…"))
+  (check-equal? (item-labels 'action) '("New Note" "Add Folder…" "Open…" "From Template…"))  ; #353
   (check-equal? (item-labels 'link) '("Get Started"))
   (check-not-false (memq 'heading (kinds)) "Recent shows: this window has no sidebar"))
 
@@ -89,6 +89,8 @@
   (check-equal? (send (panel) focused-id) 'add-library-folder)
   (send (panel) on-char (key 'right))
   (check-equal? (send (panel) focused-id) 'open-file)
+  (send (panel) on-char (key #\tab))
+  (check-equal? (send (panel) focused-id) 'new-from-template)   ; #353, the fourth action
   (send (panel) on-char (key #\tab))
   (check-equal? (send (panel) focused-id) 'open-getting-started "the empty Recent line is not a stop")
   (send (panel) on-char (key #\tab))

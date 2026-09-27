@@ -25,6 +25,7 @@
          "md-format.rkt"
          "md-lists.rkt"
          "md-toolbar.rkt"
+         "templates.rkt"                 ; #353: File > New from Template, Tools > Edit Templates
          "smoke.rkt"                     ; #286: RACKMAC_SMOKE=1 checks startup and exits, window unshown
          )
 (provide main)

@@ -17,6 +17,7 @@
 ;; order modules are instantiated in, so commands.rkt's `builtin-command-names` snapshot would
 ;; take in the feature commands too.
 (define-runtime-path library-sidebar "../rackmac/library/sidebar.rkt")
+(define-runtime-path feature-templates "../rackmac/templates.rkt")     ; #353
 
 (define golden-names
   '(about close-tab close-other-tabs close-tabs-to-right command-palette copy copy-tab-path
@@ -46,10 +47,12 @@
     markdown-enter markdown-indent markdown-outdent                                             ; #337
     heading-menu export-menu                                                                    ; #336
     toggle-library new-note-here new-library-folder rename-library-item                ; #273
-    trash-library-item reveal-library-item copy-library-path))
+    trash-library-item reveal-library-item copy-library-path
+    new-from-template edit-templates))                                                  ; #353
 
 (test-case "feature command names are stable, with help and aliases"
   (dynamic-require library-sidebar #f)
+  (dynamic-require feature-templates #f)
   (for ([n feature-command-names])
     (define c (find-command n))
     (check-not-false c (format "~a still resolves" n))
