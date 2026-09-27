@@ -391,11 +391,15 @@
       (inner (void) on-display-size))
 
     ;; Decorations drawn over the text (spelling underlines, #351): 'paint-document listeners
-    ;; draw after the text, in editor coordinates offset by dx/dy. Painting changes no style,
-    ;; no text and no undo.
+    ;; draw after the text. Decorations drawn under it (find bar match highlights, #109):
+    ;; 'paint-document-background listeners draw before the text, so a solid wash still leaves
+    ;; the glyphs on top of it. Both get editor coordinates offset by dx/dy; painting changes
+    ;; no style, no text and no undo either way.
     (define/override (on-paint before? dc left top right bottom dx dy draw-caret)
       (super on-paint before? dc left top right bottom dx dy draw-caret)
-      (unless before? (run-hook 'paint-document this dc left top right bottom dx dy)))
+      (if before?
+          (run-hook 'paint-document-background this dc left top right bottom dx dy)
+          (run-hook 'paint-document this dc left top right bottom dx dy)))
 
     (define/augment (after-set-position)
       (unless decorating? (snap-to-snips!))

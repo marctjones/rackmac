@@ -424,6 +424,7 @@
   (layout-rows!))
 
 (define (hide-find-bar!)
+  (when find-bar (send find-bar hide!))   ; clears the highlight-all wash (#109)
   (set! show-find? #f)
   (layout-rows!)
   (run-hook 'focus-editor))

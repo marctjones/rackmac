@@ -3,7 +3,8 @@
 ;; and Replace All are delegated to the pure rackmac/search.rkt so this module only wires
 ;; widgets to buffer positions. docs/UI-DESIGN.md section 2, section 7.4.
 (require racket/class racket/gui/base
-         "../search.rkt" "../editor.rkt" "../doc-text.rkt" "../theme.rkt" "icons.rkt" "layout.rkt" "tokens.rkt" "status-bar.rkt")
+         "../search.rkt" "../editor.rkt" "../doc-text.rkt" "../theme.rkt" "../find-highlight.rkt" "../hook.rkt"
+         "icons.rkt" "layout.rkt" "tokens.rkt" "status-bar.rkt")
 (provide find-bar%)
 
 ;; A text-field% that intercepts Enter/Shift+Enter (step) and Esc (close) before the editor
@@ -52,6 +53,9 @@
     (define current-count-text "")   ; plain text, mirrors the count bitmap, for tests
     (define repl-shown? #f)
     (define adv-shown? #f)
+    ;; Whichever buffer's matches are currently painted (find-highlight.rkt, #109), so hide!
+    ;; can clear the right one even if the current buffer has changed since.
+    (define highlighted-buffer #f)
 
     ;; ---- icon helper (as ui/toolbar-panel.rkt) -----------------------------------------
     (define (fb-icon name)
@@ -122,6 +126,15 @@
       (define result (find-matches text (send find-field get-value) #:case? case? #:word? word? #:regex? regex?))
       (set! matches (if (find-error? result) result
                         (for/list ([m (in-list result)]) (cons (+ (car m) offset) (+ (cdr m) offset)))))
+      ;; Highlight-all (#109): every match gets painted, not just the one being stepped to; an
+      ;; empty query or no matches (find-matches -> '()) clears it, same as an invalid pattern.
+      ;; A different current buffer (a tab switch since the last recompute) drops its own wash
+      ;; first, or it would stay painted, stale, until the bar happened to touch it again.
+      (define b (current-buffer))
+      (when (and highlighted-buffer (not (eq? highlighted-buffer b)))
+        (clear-find-highlights! highlighted-buffer))
+      (set! highlighted-buffer b)
+      (set-find-highlights! highlighted-buffer (if (find-error? matches) '() matches))
       result)
 
     ;; ---- the count area -------------------------------------------------------------------
@@ -160,6 +173,15 @@
 
     (define (live-search!) (step! 'forward (send (current-buffer) get-start-position) #f))
     (define (options-changed!) (live-search!))
+
+    ;; Ranges are positions into the text as it was at the last recompute; an edit to the
+    ;; highlighted document (typing in it, not in the find field, while the bar stays open)
+    ;; makes them stale, so recompute rather than try to shift them (#109; this also keeps the
+    ;; live count current, which nothing did before). Ignores an edit to any other buffer.
+    (add-hook! 'text-edited
+               (lambda (b s old-end new-len)
+                 (when (and (eq? b highlighted-buffer) (eq? b (current-buffer)))
+                   (show-live-count! (recompute-matches!)))))
 
     ;; ---- public API (frame.rkt delegates find!/replace-*!/set-find-options! here) -------
     (define/public (find! dir #:from-start? [from-start? #f])
@@ -227,6 +249,12 @@
       (send find-field focus)
       (send (send find-field get-editor) select-all)
       (show-live-count! (recompute-matches!)))
+
+    ;; Clears the match-all highlights (#109): called when the bar closes, so nothing is left
+    ;; painted once there is no query to show a count for either.
+    (define/public (hide!)
+      (when highlighted-buffer (clear-find-highlights! highlighted-buffer))
+      (set! highlighted-buffer #f))
 
     ;; ---- accessors for tests (docs/DEVELOPMENT.md: assert through state, not the GUI) ---
     (define/public (get-find-field) find-field)
