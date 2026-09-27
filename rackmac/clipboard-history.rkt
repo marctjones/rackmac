@@ -1,9 +1,8 @@
 #lang racket/base
-;; Clipboard history (#118, docs/REPLAN.md E7.M1 "Kill ring" -- called clipboard history
-;; everywhere in this codebase, per docs/DEVELOPMENT.md's rule against Emacs vocabulary in the
-;; default product): every Copy and Cut, across all open documents, is recorded here so #119's
-;; Cmd+Shift+V picker has more than the single system clipboard slot to offer, and #120 can add
-;; a setting to persist it. Memory-only for now -- nothing here touches disk.
+;; Clipboard history (#118, E7.M1.S1 in docs/roadmap.rktd): every Copy and Cut, across all open
+;; documents, is recorded here so #119's Cmd+Shift+V picker has more than the single system
+;; clipboard slot to offer, and #120 can add a setting to persist it. Memory-only for now --
+;; nothing here touches disk.
 ;;
 ;; Capture point: buffer.rkt's `copy` override (the one place both Copy and Cut end up, since
 ;; text%'s built-in `cut` calls that overridden `copy` before deleting the selection) runs the

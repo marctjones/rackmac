@@ -51,6 +51,7 @@
 (test-case "empty and non-string text are never recorded"
   (clear-clipboard-history!)
   (record-clipboard-text! "")
+  (record-clipboard-text! 42)
   (check-equal? (clipboard-history-count) 0))
 
 (test-case "clear empties the store"
