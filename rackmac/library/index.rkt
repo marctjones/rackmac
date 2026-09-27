@@ -84,7 +84,9 @@
 ;; It is only a cache of the notes. On open it must pass `PRAGMA quick_check` and carry this
 ;; module's `library-index-schema-version`; if it is unreadable, corrupt, or from another
 ;; version, it (and its -wal/-shm/-journal files) is deleted and rebuilt from the notes. A SQL
-;; error while running does the same. If even a fresh file cannot be made, the index lives in
+;; error while writing does the same, once: if the job right after that rebuild fails too, the
+;; index closes for the session (queries answer empty) instead of rebuilding in a loop. Errors
+;; on the read side are not detected: a query that fails answers empty. If even a fresh file cannot be made, the index lives in
 ;; memory for this session and the error goes to Activity.
 ;;
 ;; Lifecycle mirrors watch.rkt: core plumbing tied to settings, not an extension, so no
@@ -262,7 +264,9 @@
 (define statements
   '((delete-fts . "DELETE FROM fts WHERE rowid IN (SELECT id FROM files WHERE path = ?)")
     (delete-file . "DELETE FROM files WHERE path = ?")
-    (insert-file . "INSERT INTO files (path, name, stem, title, mtime, size) VALUES (?, ?, ?, ?, ?, ?) RETURNING id")
+    ;; not RETURNING: that needs SQLite 3.35, newer than some macOS releases' system library
+    (insert-file . "INSERT INTO files (path, name, stem, title, mtime, size) VALUES (?, ?, ?, ?, ?, ?)")
+    (last-id . "SELECT last_insert_rowid()")
     (insert-heading . "INSERT INTO headings VALUES (?, ?, ?, ?, ?)")
     (insert-tag . "INSERT INTO tags VALUES (?, ?, ?, ?)")
     (insert-link . "INSERT INTO links VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
@@ -303,8 +307,8 @@
       (cond [(and text (markdown-path? key))
              (extract-note-facts text (string->path key) name #:heading-keywords keywords)]
             [else (plain-note-facts name)]))
-    (define id (query-value (library-index-writer idx) (stmt idx 'insert-file)
-                            key name stem (note-facts-title facts) (car st) (cdr st)))
+    (w-exec idx 'insert-file key name stem (note-facts-title facts) (car st) (cdr st))
+    (define id (query-value (library-index-writer idx) (stmt idx 'last-id)))
     (for ([h (in-list (note-facts-headings facts))])
       (w-exec idx 'insert-heading id (heading-fact-level h) (heading-fact-text h) (heading-fact-pos h) (heading-fact-line h)))
     (for ([t (in-list (note-facts-tags facts))])
@@ -352,8 +356,8 @@
     [else #f]))
 
 ;; Brings the index in line with `folders` on disk (see header). Returns the paths written and the
-;; paths removed. `stop?` is polled between files, so a stopping worker never waits for a whole
-;; build; work done so far stays committed (by batch).
+;; paths removed. `stop?` is polled before each file, so a stopping worker never waits for a
+;; whole build: the batch in progress rolls back, earlier batches stay committed.
 (define (library-index-reconcile! idx folders #:heading-keywords [keywords (heading-state-keyword-list)]
                                   #:force? [force? #f] #:stop? [stop? (lambda () #f)])
   (define disk (make-hash))
@@ -370,11 +374,11 @@
   (define w (library-index-writer idx))
   (let/ec stop
     (for ([batch (in-list (chunk removed batch-size))])
-      (when (stop?) (stop (void)))
-      (call-with-transaction w (lambda () (for ([k (in-list batch)]) (remove-row! idx k)))))
+      (call-with-transaction w (lambda () (for ([k (in-list batch)]) (when (stop?) (stop (void))) (remove-row! idx k)))))
     (for ([batch (in-list (chunk changed batch-size))])
-      (when (stop?) (stop (void)))
-      (call-with-transaction w (lambda () (for ([k (in-list batch)]) (write-file-rows! idx k keywords (hash-ref disk k))))))
+      (call-with-transaction w (lambda () (for ([k (in-list batch)])
+                                            (when (stop?) (stop (void)))
+                                            (write-file-rows! idx k keywords (hash-ref disk k))))))
     (set-library-index-built?! idx #t))
   (values changed removed))
 
@@ -582,19 +586,34 @@
      (when (library-index-remove-file! idx (cadr msg)) (announce! (list (cadr msg))))]
     [(sync) (semaphore-post (cadr msg))]))
 
+;; A SQL error means a damaged database: start over from the notes. If the very next job fails
+;; too, starting over did not help (the same statement fails every time), so the index gives up
+;; for this session -- closed, queries answer empty -- rather than rebuilding in a loop.
 (define (worker-loop idx)
-  (let loop ()
+  (let loop ([just-reset? #f])
     (define msg (thread-receive))
-    (unless (eq? msg 'stop)
-      (with-handlers ([exn:fail:sql?
-                       (lambda (e)            ; a damaged database: start over from the notes
-                         (report! e)
-                         (with-handlers ([exn:fail? report!])
-                           (reset-library-index! idx report!)
-                           (thread-send (current-thread) (list 'reconcile (library-folder-paths*) (heading-state-keyword-list*) #f) #f)))]
-                      [exn:fail? report!])
-        (run-job idx msg))
-      (loop))))
+    (cond
+      [(eq? msg 'stop) (void)]
+      [(and (not (library-index-writer idx)) (not (eq? (car msg) 'sync))) (loop just-reset?)]   ; gave up
+      [else
+       (define outcome
+         (with-handlers ([exn:fail:sql?
+                          (lambda (e)
+                            (report! e)
+                            (cond
+                              [just-reset? (close-library-index idx) 'gave-up]
+                              [else
+                               (with-handlers ([exn:fail? report!])
+                                 (reset-library-index! idx report!)
+                                 (thread-send (current-thread)
+                                              (list 'reconcile (library-folder-paths*) (heading-state-keyword-list*) #f) #f))
+                               'reset]))]
+                         [exn:fail? (lambda (e) (report! e) 'ok)])
+           (run-job idx msg)
+           'ok))
+       (loop (cond [(eq? outcome 'reset) #t]
+                   [(eq? (car msg) 'sync) just-reset?]   ; a wait in between proves nothing
+                   [else #f]))])))
 
 ;; The worker's copy of the last settings it was sent (a reset needs them off the GUI thread).
 (define last-folders '())
@@ -604,8 +623,9 @@
 (define (remember-settings! msg)
   (when (eq? (car msg) 'reconcile) (set! last-folders (cadr msg)) (set! last-keywords (caddr msg))))
 
-;; Blocks until the worker has handled everything sent before this call (tests; a command that
-;; wants fresh results). #f on timeout or with no worker.
+;; Blocks until the worker has handled everything sent before this call. For tests: never from
+;; the GUI thread while a build may be running (it would hold the window for that long). #f on
+;; timeout or with no worker.
 (define (library-index-wait! [timeout 30])
   (cond
     [worker (define s (make-semaphore 0))
