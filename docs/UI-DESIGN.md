@@ -279,9 +279,10 @@ to the enclosing one; Return opens (a folder opens or closes); ⌘ shortcuts wor
 file, a double-click opens or closes a folder, a click on a chevron opens or closes without selecting, and a
 right-click selects the row and shows the `library` menu. The selection follows the current document. The width is
 a setting (`library-width`), not yet draggable (pane splitters are E9). Windows has no Show Library shortcut yet.
-**Accessibility (#399):** the painted lists expose no rows to VoiceOver; neither did hierlist's `editor-canvas%`,
-so this is no worse, and keyboard access is unchanged and tested. The layout function already yields each row's
-label, kind (folder, open or closed), depth and rectangle, which is what an NSAccessibility bridge needs.
+**Accessibility (#399):** not verified with VoiceOver. As far as racket/gui's Cocoa backend goes, neither a
+`canvas%` nor hierlist's `editor-canvas%` publishes an accessibility tree, so the rows were not exposed before
+either; keyboard access is unchanged and tested. The layout function already yields each row's label, kind
+(folder, open or closed), depth and rectangle, which is what an NSAccessibility bridge needs.
 
 ### 2.2 The document area for notes (Markdown, WYSIWYM)
 

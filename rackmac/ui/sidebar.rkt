@@ -192,9 +192,13 @@
   (cond
     [(<= (text-width dc s) room) s]
     [else
-     (let loop ([n (sub1 (string-length s))])
-       (define t (string-append (string-trim (substring s 0 (max 0 n)) #:left? #f) "…"))
-       (if (or (<= n 0) (<= (text-width dc t) room)) t (loop (sub1 n))))]))
+     ;; the longest prefix that fits with "…", by bisection
+     (define (cut n) (string-append (string-trim (substring s 0 n) #:left? #f) "…"))
+     (let loop ([lo 0] [hi (string-length s)])      ; cut lo fits (or lo = 0); cut hi does not
+       (if (<= (- hi lo) 1)
+           (cut lo)
+           (let ([mid (quotient (+ lo hi) 2)])
+             (if (<= (text-width dc (cut mid)) room) (loop mid hi) (loop lo mid)))))]))
 
 (define (wrap-to dc s room)
   (let loop ([words (string-split s)] [line ""] [out '()])
@@ -238,11 +242,14 @@
 
 ;; The list's rows on the bench. selected / hover: rows (or #f). focused?: the list has the
 ;; keyboard. scroll: how far the content is scrolled up, in pixels.
+;; layout: (cons slots total) already computed for this width, or #f to compute it here.
 (define (draw-bench-list dc w h roots #:flat? [flat? #f] #:selected [selected #f]
-                         #:focused? [focused? #f] #:hover [hover #f] #:scroll [scroll 0])
+                         #:focused? [focused? #f] #:hover [hover #f] #:scroll [scroll 0]
+                         #:layout [layout #f])
   (send dc set-smoothing 'aligned)
   (fill-rect! dc (token 'bench) 0 0 w h)
-  (define-values (slots total) (layout-bench-rows roots w dc #:flat? flat?))
+  (define-values (slots total)
+    (if layout (values (car layout) (cdr layout)) (layout-bench-rows roots w dc #:flat? flat?)))
   (define lh (line-height dc))
   (send dc set-font row-font)
   (for ([s (in-list slots)])
@@ -310,8 +317,16 @@
     ;; ---- rows ----
     (define/public (get-items) roots)
     (define/public (add-root! r) (set! roots (append roots (list r))))
-    (define/public (rows-changed!) (clamp-scroll!) (refresh))
-    (define/public (set-no-sublists on?) (set! flat? on?) (refresh))
+    ;; The layout is cached per width; any change to the rows only marks it stale, so filling
+    ;; a folder of hundreds of files measures each label once, not once per row added.
+    (define cache #f)               ; (list width slots total), or #f when stale
+    (define (layout-for w)
+      (unless (and cache (equal? (car cache) w))
+        (define-values (slots total) (layout-bench-rows roots w (get-dc) #:flat? flat?))
+        (set! cache (list w slots total)))
+      (values (cadr cache) (caddr cache)))
+    (define/public (rows-changed!) (set! cache #f) (refresh))
+    (define/public (set-no-sublists on?) (set! flat? on?) (rows-changed!))
     (define/public (get-selected) selected)
 
     ;; Every visible row, depth first, including the contents of open folders.
@@ -319,11 +334,11 @@
 
     (define/public (current-slots [w #f])
       (define-values (cw ch) (get-client-size))
-      (define-values (slots total) (layout-bench-rows roots (or w cw) (get-dc) #:flat? flat?))
+      (define-values (slots total) (layout-for (or w cw)))
       slots)
     (define/public (content-height)
       (define-values (cw ch) (get-client-size))
-      (define-values (slots total) (layout-bench-rows roots cw (get-dc) #:flat? flat?))
+      (define-values (slots total) (layout-for cw))
       total)
 
     ;; Makes the list exactly as tall as its rows, from the same layout that paints them.
@@ -335,7 +350,7 @@
       (set! roots '())
       (set! hover #f)
       (set! scroll 0)
-      (refresh))
+      (rows-changed!))
 
     (define/public (row-opened r) (on-opened r) (rows-changed!))
     (define/public (row-closed r)
@@ -389,13 +404,15 @@
 
     ;; ---- painting ----
     (define/public (paint-to-dc dc w h #:focused? [focused? (has-focus?)])
+      (define-values (slots total) (layout-for w))
       (draw-bench-list dc w h roots #:flat? flat? #:selected selected #:focused? focused?
-                       #:hover hover #:scroll scroll))
+                       #:hover hover #:scroll scroll #:layout (cons slots total)))
     (define/override (on-paint)
       (define-values (w h) (get-client-size))
+      (clamp-scroll!)
       (paint-to-dc (get-dc) w h))
     (define/override (on-focus on?) (refresh))
-    (define/override (on-size w h) (clamp-scroll!) (refresh))
+    (define/override (on-size w h) (set! cache #f) (clamp-scroll!) (refresh))
 
     ;; ---- mouse ----
     (define (slot-at y)
