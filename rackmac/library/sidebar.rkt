@@ -6,8 +6,9 @@
 ;; module fills them from the Library (folders.rkt) and the recent-files store (recents.rkt),
 ;; and registers the panel with rackmac/frame.rkt, which only places it and shows or hides it.
 ;;
-;; Refresh (v0.3): a rescan when the window is activated, after our own saves and after our
-;; own file actions; `filesystem-change-evt` watching is lib-watch (v0.4).
+;; Refresh: a rescan when the window is activated, after our own saves and after our own file
+;; actions, and on 'library-changed from rackmac/library/watch.rkt (#303) when something
+;; outside Rackmac adds, renames or removes a file or folder.
 (require racket/class racket/gui/base racket/list racket/path racket/file racket/string
          "folders.rkt" "recents.rkt" "open-recent.rkt"
          "../command.rkt" "../commands.rkt" "../editor.rkt" "../frame.rkt" "../hook.rkt"
