@@ -12,7 +12,8 @@
          "../rackmac/library/sidebar.rkt"
          "../rackmac/ui/sidebar.rkt" "../rackmac/ui/tokens.rkt" "../rackmac/ui/context-menu.rkt"
          "../rackmac/settings.rkt" "../rackmac/store.rkt" "../rackmac/editor.rkt" "../rackmac/frame.rkt"
-         "../rackmac/command.rkt" "../rackmac/keymap.rkt" "../rackmac/hook.rkt")
+         "../rackmac/command.rkt" "../rackmac/keymap.rkt" "../rackmac/hook.rkt"
+         (only-in "../rackmac/ui/start-screen.rkt" sv-item-kind))
 
 (define dir (make-temporary-file "rackmac-sidebar~a" 'directory))
 (void (putenv "RACKMAC_HOME" (path->string dir)))
@@ -371,3 +372,17 @@
                         (format "~a: column ~a is bench to the bottom" a x)))
         (check-equal? (bitmap-pixel-hex bm 238 (+ 36 26 (send (recent) min-height)))
                       (token-hex 'bench-rule a) "a bench-rule line, full width, between Recent and Folders")))))
+
+;; ---- one Recent at a time (first live look: the sidebar and the start screen both showed it) ----
+
+(test-case "the start screen lists Recent only while the sidebar is hidden"
+  (close-all!)
+  (check-true (start-screen-shown?))
+  (define (start-kinds) (map sv-item-kind (send (main-start-panel) current-items 800 600)))
+  (check-true (sidebar-shown?))
+  (check-false (memq 'heading (start-kinds)) "the sidebar's Recent is the one list")
+  (run-command 'toggle-library)
+  (check-false (sidebar-shown?))
+  (check-not-false (memq 'heading (start-kinds)) "with the sidebar hidden, the start screen has it")
+  (run-command 'toggle-library)
+  (check-false (memq 'heading (start-kinds))))

@@ -51,7 +51,9 @@
 (define (sidebar-shown?) (and sidebar show-sidebar?))
 (define (set-sidebar-shown! on?)
   (set! show-sidebar? (and on? #t))
-  (when frame (layout-rows!)))
+  (when frame
+    (layout-rows!)
+    (send start-panel refresh)))   ; the start screen lists Recent only while the sidebar is hidden
 (define menu-bar #f)
 (define tabs #f)
 (define canvas #f)
