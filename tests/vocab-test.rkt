@@ -13,6 +13,7 @@
          "../rackmac/md-view-commands.rkt" "../rackmac/pdf-export.rkt" "../rackmac/spell.rkt"
          "../rackmac/md-format.rkt" "../rackmac/md-lists.rkt" "../rackmac/md-toolbar.rkt"
          "../rackmac/outline-structure.rkt"
+         "../rackmac/record-actions.rkt"
          racket/runtime-path)
 ;; Loaded only once the tests run (below): requiring rackmac/library/*.rkt statically changes the
 ;; order modules are instantiated in, so commands.rkt's `builtin-command-names` snapshot would
@@ -50,7 +51,8 @@
     heading-menu export-menu                                                                    ; #336
     toggle-library new-note-here new-library-folder rename-library-item                ; #273
     trash-library-item reveal-library-item copy-library-path
-    new-from-template edit-templates))                                                  ; #353
+    new-from-template edit-templates                                                    ; #353
+    start-recording stop-recording))                                                    ; #121
 
 (test-case "feature command names are stable, with help and aliases"
   (dynamic-require library-sidebar #f)
