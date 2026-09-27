@@ -34,7 +34,8 @@
                 'heading "#1C1C1C"          ; ink, drawn bold
                 'face-error "#7A3526"       ; rust-ink
                 ;; the workbench (Library sidebar): the same in both appearances by intent
-                'bench "#1C1C1C" 'bench-heading "#E0E0D8" 'bench-text "#A0A090" 'bench-rule "#505048")
+                'bench "#1C1C1C" 'bench-heading "#E0E0D8" 'bench-text "#A0A090" 'bench-rule "#505048"
+                'bench-hover "#242422")    ; ours: the selected sidebar row (paper-sunk, dark)
    'dark  (hash 'surface "#1C1C1C" 'text "#C8C8C0" 'text-2 "#909088" 'text-disabled "#808078"
                 'stroke "#3A3A36" 'line-highlight "#242422" 'selection "#2F4430"
                 'accent "#80A080" 'match "#4A4424" 'match-current "#5A4E20"
@@ -42,7 +43,8 @@
                 'status-bg "#242422"
                 'comment "#909088" 'string "#D8C890" 'constant "#A0A090" 'keyword "#A0C0A0"
                 'heading "#E0E0D8" 'face-error "#E0A090"
-                'bench "#141413" 'bench-heading "#E0E0D8" 'bench-text "#A0A090" 'bench-rule "#505048")))
+                'bench "#141413" 'bench-heading "#E0E0D8" 'bench-text "#A0A090" 'bench-rule "#505048"
+                'bench-hover "#242422")))
 
 (define (roles) (sort (hash-keys (hash-ref palettes 'light)) symbol<?))
 

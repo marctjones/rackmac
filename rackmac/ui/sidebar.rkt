@@ -252,9 +252,10 @@
     (when (and (< y h) (> (+ y rh) 0))
       (define sel? (eq? r selected))
       (when sel?
-        ;; the selection: the 2 px accent marker at the sidebar's edge and the label in
-        ;; bench-heading; with the keyboard in the list, a 1 px accent ring as well (a change
-        ;; of shape, not only of color)
+        ;; the selection (brand: a moss left marker plus a sunk fill): a bench-hover fill, the
+        ;; 2 px accent marker at the sidebar's edge and the label in bench-heading; with the
+        ;; keyboard in the list, a 1 px accent ring as well (a change of shape, not only color)
+        (fill-rect! dc (token 'bench-hover) 0 y w rh)
         (fill-rect! dc (token 'accent) 0 y marker-width rh)
         (when focused?
           (send dc set-pen (token 'accent) 1 'solid)

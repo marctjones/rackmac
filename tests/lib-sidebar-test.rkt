@@ -325,8 +325,15 @@
         (for ([px '(0 1)])
           (check-equal? (bitmap-pixel-hex bm px (+ y (/ h 2))) (token-hex 'accent a)
                         "the selected row has the 2 px accent marker at the sidebar's left edge"))
-        (check-equal? (bitmap-pixel-hex bm 3 (+ y (/ h 2))) (bitmap-pixel-hex bm 3 (- y 4))
-                      "only 2 px of it")
+        (check-not-equal? (bitmap-pixel-hex bm 3 (+ y (/ h 2))) (token-hex 'accent a) "only 2 px of it")
+        (check-equal? (bitmap-pixel-hex bm 200 (+ y 2)) (token-hex 'bench-hover a)
+                      "a subtle bench-hover fill across the selected row")
+        (check-true (>= (ink-contrast (render-bitmap 150 (inexact->exact (floor (- h 2)))
+                                                     (lambda (dc) (send dc set-origin 0 (- 1 y))
+                                                       (send fl paint-to-dc dc 240 200 #:focused? #f)))
+                                      (token-hex 'bench-hover a))
+                        4.5)
+                    "the selected label reads on it")
         (define other (slot-for fl (row-for fl "data.csv")))
         (check-equal? (bitmap-pixel-hex bm 0 (+ (cadr (bench-slot-rect other)) 4)) (token-hex 'bench a)
                       "no marker on other rows")))))
@@ -373,6 +380,14 @@
   (define bm (render-bitmap 240 ch (lambda (dc) (send lst paint-to-dc dc 240 ch #:focused? #f))))
   (check-equal? (bitmap-pixel-hex bm 237 2) (token-hex 'bench-rule) "a thin bench-rule thumb, not a native scrollbar"))
 
+;; Every bench, ink and moss color has as much green as blue; the OS highlight and hierlist's
+;; old arrows are blue. A pixel clearly bluer than it is green is one of those.
+(define (blue-pixels bm)
+  (for/list ([c (in-hash-keys (bitmap-colors bm))]
+             #:when (let ([n (string->number (substring c 1) 16)])
+                      (> (modulo n 256) (+ 8 (modulo (quotient n 256) 256)))))
+    c))
+
 ;; The sidebar as it reads top to bottom (filter row, Recent, Folders), rendered headless: every
 ;; pixel column is bench, rule or ink, never white or the OS panel grey.
 (define (render-sidebar w h #:scale [scale 1.0])
@@ -408,6 +423,7 @@
         (define bm (render-sidebar 240 420))
         (write-tour-png! (format "sidebar-~a" a) bm)
         (check-false (hash-ref (bitmap-colors bm) "#FFFFFF" #f) "no white anywhere")
+        (check-equal? (blue-pixels bm) '() "no blue anywhere: not the OS highlight, not hierlist's arrows")
         (for ([x (in-list '(1 120 230))])
           (check-equal? (bitmap-pixel-hex bm x 418) (token-hex 'bench a)
                         (format "~a: column ~a is bench to the bottom" a x)))
