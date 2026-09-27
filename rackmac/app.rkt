@@ -11,6 +11,7 @@
          "library/start-screen.rkt"
          "library/sidebar.rkt"           ; #273: the Library sidebar and View > Show Library
          "library/watch.rkt"             ; #303: external changes to Library folders, live
+         "library/index.rkt"             ; #302: SQLite index of every Library file, kept current
          "appearance.rkt"
          "office.rkt"
          "recovery.rkt"
@@ -41,6 +42,7 @@
   (enable-clipboard-history!)        ; #118: off until a real run asks for it
   (enable-spell-checking!)           ; #351: the system spell checker; tests use a fake one
   (enable-library-watching!)         ; #303: a watcher thread per Library folder, following the setting
+  (enable-library-index!)            ; #302: opens (or rebuilds) the index, then a startup pass in a thread
   ;; Cmd+Q on macOS and Finder "Open With" arrive through these handlers.
   (application-quit-handler (lambda () (run-command/safe 'quit)))
   (application-file-handler (lambda (p) (set-current-buffer! (open-file! p))))

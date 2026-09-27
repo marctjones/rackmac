@@ -10,7 +10,7 @@
 ;; this document" (a heading picker, promote/demote commands, a table of contents export) can
 ;; require this module instead of re-walking the tree.
 (require racket/list racket/string "markdown-lib.rkt")
-(provide (struct-out doc-heading) document-headings)
+(provide (struct-out doc-heading) document-headings inlines->text)
 
 ;; level: 1-6. start/end: the heading block's span, as offsets into the document text --
 ;; the same numbers `send buffer set-position` and `document-restyled` use. text: the heading's
@@ -49,5 +49,7 @@
     [(image? x) (inlines->text (image-children x))]
     [(wiki-link? x) (or (wiki-link-alias x) (wiki-link-target x))]
     [(tag? x) (string-append "#" (tag-name x))]
+    ;; A date's span includes its keyword ("due 2026-09-30"), so both are its visible text.
+    [(date-ref? x) (if (date-ref-keyword x) (string-append (date-ref-keyword x) " " (date-ref-date x)) (date-ref-date x))]
     [(or (soft-break? x) (hard-break? x)) " "]
     [else ""]))
