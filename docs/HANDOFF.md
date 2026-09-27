@@ -83,12 +83,14 @@ E13/E12.M2-icebox are in or out):
 
 ## In flight
 
-- Tags so far: v0.3.0-alpha.1 through alpha.10. Wave 1 (#87, #109, #353) and 3 of 4 of wave 2 (#303, #298,
-  #299) are merged, tested, tagged, pushed. #294 (task-heading-states) is still actively being revised in its
-  worktree (`.claude/worktrees/agent-a9e4fd8a34f9e5c15`) as of alpha.10 — it has one commit already
-  (6385471) but uncommitted changes on top, so it hasn't actually reported done; don't merge it until its
-  own completion report arrives. **No pull requests, ever** (owner instruction, 2026-09-27) — see
-  docs/DEVELOPMENT.md's new Workflow section.
+- Tags so far: v0.3.0-alpha.1 through alpha.11. Wave 1 (#87, #109, #353) and all of wave 2 (#303, #298,
+  #299, #294) are merged, tested (747 passing, clean), tagged, pushed. **Nothing is currently running** —
+  no background agents in flight, no dispatched-but-unmerged work. **No wave 3 has been dispatched**: the
+  owner asked (2026-09-27) to bring this to a stable stopping point after wave 2, so the lead paused new
+  dispatches rather than continuing the wave cadence automatically. Resuming is a deliberate next action,
+  not something that happens on its own — see "Priority order (post-v0.3)" above for what's next in line
+  (E7/E8/E16's remaining unblocked issues) whenever that's wanted again.
+  **No pull requests, ever** (owner instruction, 2026-09-27) — see docs/DEVELOPMENT.md's new Workflow section.
   Close #261, #141, and #87 when convenient (blocked here by a Bash permission-classifier denial on
   `gh issue close`, not a GitHub-side problem); #87 predates this effort (this wave only added test coverage,
   referencing e97dfb9/d6f1fd3/55c2da3 plus tests/encoding-test.rkt).
