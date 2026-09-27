@@ -18,6 +18,14 @@ Rules for anyone (person or agent) changing this repository.
   Windows-only work is deferred (label `platform:windows`).
 - **Pre-release.** Versions are v0.x. Do not create, plan or mention a v1.0.
 
+## Workflow
+
+- **Develop directly on `main`. Never open a pull request.** Work happens on a branch (own worktree per
+  agent/lane), the lead session reviews the diff, reruns the full suite on `main` itself, merges with
+  `git merge`, and pushes — the same way every merge to date has happened (`git log` has no "Merge pull
+  request" commits; CI's `pull_request:` trigger is dormant, not a workflow to use). Commit and tag often:
+  a `vX.Y.Z-alphaN` tag per meaningful chunk of merged work, not just at the end of a milestone.
+
 ## Code rules
 
 - Match the surrounding style: short modules, a header comment saying what the module is for, comments
