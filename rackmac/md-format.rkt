@@ -7,8 +7,8 @@
 ;; only apply to prose documents (`#:when markdown-document?`), which is also what shows the
 ;; Format menu (frame.rkt hides an otherwise-empty top menu; see rebuild-menus!).
 (require racket/class
-         "command.rkt" "editor.rkt" "md-doc.rkt" "md-view-commands.rkt" "md-checkbox.rkt"
-         "../rackmac-markdown/main.rkt")
+         "command.rkt" "editor.rkt" "hook.rkt" "md-doc.rkt" "md-view-commands.rkt" "md-checkbox.rkt"
+         "md-heading-state.rkt" "../rackmac-markdown/main.rkt")
 
 ;; ---- inline: bold, italic, inline code, strikethrough -----------------------------------------
 
@@ -183,16 +183,36 @@
     (apply-md-edits! b edits)
     (send b set-position ns ne)))
 
-;; ---- task checkbox ----------------------------------------------------------------------------
+;; ---- task checkbox and heading state ------------------------------------------------------
+;; One shortcut, two targets (docs/UI-DESIGN.md's shortcut table): on a list item it toggles the
+;; checkbox (#293); on a heading line it cycles the heading keyword instead (#294,
+;; md-heading-state.rkt) -- a heading is never a list item, so the two never compete for a caret.
 
 (define-command (mark-done)
   #:title "Mark Done" #:menu "Format" #:menu-order 50 #:icon "check" #:keys ("Shift-Mod-u")
-  #:aliases ("mark done" "toggle checkbox" "check off" "mark complete")
-  #:help "Toggle the checkbox of the current list item."
+  #:aliases ("mark done" "toggle checkbox" "check off" "mark complete" "cycle heading state")
+  #:help "Toggle the checkbox of the current list item, or cycle the keyword of the current heading."
   #:when markdown-document?
   (define b (current-buffer))
   (when (markdown-document? b)
     (define pos (send b get-start-position))
-    (define edits (toggle-task-at! b pos))              ; the checkbox click's path too (#293)
+    (define doc (current-md-document b))
+    (define edits
+      (if (heading-line-at? doc pos)
+          (let ([es (cycle-heading-keyword-edits doc pos)]) (apply-md-edits! b es) es)
+          (toggle-task-at! b pos)))                     ; the checkbox click's path too (#293)
     (define np (map-position edits pos 'after))
     (send b set-position np np)))
+
+;; Rehighlights every open document so already-open notes recolor immediately, the same
+;; 'setting-changed -> rehighlight-all-buffers shape appearance.rkt uses for a theme change.
+;; Calls `sync-heading-keywords!` itself, first, rather than trusting md-heading-state.rkt's own
+;; same-named hook to have already run: hook.rkt's `run-hook` runs same-priority hooks in
+;; most-recently-added-first order, and which of the two 'setting-changed hooks was added last
+;; depends on module load order, so rehighlighting here must not assume the parameter is already
+;; synced -- it makes sure.
+(add-hook! 'setting-changed
+           (lambda (name . _)
+             (when (eq? name 'heading-state-keywords)
+               (sync-heading-keywords!)
+               (for ([b (in-list (all-buffers))]) (send b rehighlight!)))))
