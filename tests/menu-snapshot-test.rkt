@@ -52,7 +52,9 @@
      "Toggle Comment" "Duplicate Line" "Delete Line" "Move Line Up" "Move Line Down"
      "Indent Lines" "Outdent Lines" "---"
      "Insert Date" "Insert Date and Time" "---"
-     ("Spelling" "Check Spelling While Typing" "Check Document Now"))
+     ("Spelling" "Check Spelling While Typing" "Check Document Now") "---"
+     "Sort Lines" "Wrap to Width" "Trim Trailing Whitespace" "Swap Words" "Swap Lines"
+     ("Change Case" "UPPERCASE" "lowercase" "Title Case"))
     ("Format" "Bold" "Italic" "Inline Code" "Strikethrough" "---" "Insert Link…" "---"
      "Heading 1" "Heading 2" "Heading 3" "Body Text" "---"
      "Bulleted List" "Numbered List" "Checklist" "Quote" "---" "Mark Done")
@@ -77,7 +79,9 @@
      "Toggle Comment" "Duplicate Line" "Delete Line" "Move Line Up" "Move Line Down"
      "Indent Lines" "Outdent Lines" "---"
      "Insert Date" "Insert Date and Time" "---"
-     ("Spelling" "Check Spelling While Typing" "Check Document Now"))
+     ("Spelling" "Check Spelling While Typing" "Check Document Now") "---"
+     "Sort Lines" "Wrap to Width" "Trim Trailing Whitespace" "Swap Words" "Swap Lines"
+     ("Change Case" "UPPERCASE" "lowercase" "Title Case"))
     ("View" "Zoom In" "Zoom Out" "Actual Size" "---" "Toggle Word Wrap" "Toggle Dark/Light Theme"
      "Toggle Full Screen" ("Editor Theme" "Use System Setting" "Light" "Dark") "Show Toolbar" "Show Library"
      "Show Markdown Source" "---" "Show Activity Log" "---" "Command Palette…" "Set Language…")
