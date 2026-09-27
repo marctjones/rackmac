@@ -83,8 +83,12 @@ E13/E12.M2-icebox are in or out):
 
 ## In flight
 
-- Tags so far: v0.3.0-alpha.1 through alpha.7. Nothing currently merged-and-awaiting-close; the `app`, `app2`, and
-  `mdlib` worktrees are all clean (checked 2026-09-27).
+- Tags so far: v0.3.0-alpha.1 through alpha.9. Wave 1 (#87, #109, #353) is fully merged, tested (682 passing),
+  tagged, and pushed as of alpha.9. The `app`, `app2`, and `mdlib` worktrees are all clean (checked 2026-09-27).
+  **No pull requests, ever** (owner instruction, 2026-09-27) — see docs/DEVELOPMENT.md's new Workflow section.
+  Close #261 and #141 as duplicates when convenient (blocked here by a Bash permission-classifier denial on
+  `gh issue close`, not a GitHub-side problem); #87 itself should also be closed (implementation predates this
+  effort, this wave only added test coverage) referencing e97dfb9/d6f1fd3/55c2da3 plus tests/encoding-test.rkt.
 - **Before starting new lane work: check whether the shared-Mac quiet period is still in effect.** Other sessions on
   this Mac (skiaracket, excise) have asked for quiet periods before, and an untracked, uncommitted
   `tests/open-clean-test.rkt` was found in the main checkout on 2026-09-27 — not ours, don't touch it, don't clean it
