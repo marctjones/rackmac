@@ -83,12 +83,23 @@ E13/E12.M2-icebox are in or out):
 
 ## In flight
 
-- Tags so far: v0.3.0-alpha.1 through alpha.9. Wave 1 (#87, #109, #353) is fully merged, tested (682 passing),
-  tagged, and pushed as of alpha.9. The `app`, `app2`, and `mdlib` worktrees are all clean (checked 2026-09-27).
-  **No pull requests, ever** (owner instruction, 2026-09-27) — see docs/DEVELOPMENT.md's new Workflow section.
-  Close #261 and #141 as duplicates when convenient (blocked here by a Bash permission-classifier denial on
-  `gh issue close`, not a GitHub-side problem); #87 itself should also be closed (implementation predates this
-  effort, this wave only added test coverage) referencing e97dfb9/d6f1fd3/55c2da3 plus tests/encoding-test.rkt.
+- Tags so far: v0.3.0-alpha.1 through alpha.10. Wave 1 (#87, #109, #353) and 3 of 4 of wave 2 (#303, #298,
+  #299) are merged, tested, tagged, pushed. #294 (task-heading-states) is still actively being revised in its
+  worktree (`.claude/worktrees/agent-a9e4fd8a34f9e5c15`) as of alpha.10 — it has one commit already
+  (6385471) but uncommitted changes on top, so it hasn't actually reported done; don't merge it until its
+  own completion report arrives. **No pull requests, ever** (owner instruction, 2026-09-27) — see
+  docs/DEVELOPMENT.md's new Workflow section.
+  Close #261, #141, and #87 when convenient (blocked here by a Bash permission-classifier denial on
+  `gh issue close`, not a GitHub-side problem); #87 predates this effort (this wave only added test coverage,
+  referencing e97dfb9/d6f1fd3/55c2da3 plus tests/encoding-test.rkt).
+  Filed #413 (E17.M2 outline sidebar vs. promote/demote disagree on headings nested in a block quote/list
+  item — both #298 and #299 are individually correct, this is a cross-feature seam for whoever builds the
+  real mdlib document-headings API, #328).
+  A wall-clock test, `tests/md-view-test.rkt`'s "5,000-line note switches in under a second" check, is
+  reliably flaky under this shared Mac's load (confirmed independently by three separate wave-2 agents plus
+  the lead): it fails around 1000-1200ms under concurrent load from other sessions, passes at 650-800ms
+  isolated. Not a regression from anything in this effort — rerun that one file alone before concluding a
+  real regression exists.
 - **Before starting new lane work: check whether the shared-Mac quiet period is still in effect.** Other sessions on
   this Mac (skiaracket, excise) have asked for quiet periods before, and an untracked, uncommitted
   `tests/open-clean-test.rkt` was found in the main checkout on 2026-09-27 — not ours, don't touch it, don't clean it
