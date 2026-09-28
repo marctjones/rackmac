@@ -20,6 +20,7 @@
 ;; take in the feature commands too.
 (define-runtime-path library-sidebar "../rackmac/library/sidebar.rkt")
 (define-runtime-path feature-templates "../rackmac/templates.rkt")     ; #353
+(define-runtime-path feature-preview "../rackmac/scribble-preview.rkt") ; #420 (requires library/folders.rkt)
 
 (define golden-names
   '(about close-tab close-other-tabs close-tabs-to-right command-palette copy copy-tab-path
@@ -58,11 +59,13 @@
     table-tab table-shift-tab table-enter                                            ; #343, #414
     table-insert-row-above table-insert-row-below table-delete-row
     table-insert-column-left table-insert-column-right table-delete-column           ; #414
-    table-sort-column))                                                              ; #415
+    table-sort-column                                                                ; #415
+    preview-document))                                                               ; #420
 
 (test-case "feature command names are stable, with help and aliases"
   (dynamic-require library-sidebar #f)
   (dynamic-require feature-templates #f)
+  (dynamic-require feature-preview #f)
   (for ([n feature-command-names])
     (define c (find-command n))
     (check-not-false c (format "~a still resolves" n))
