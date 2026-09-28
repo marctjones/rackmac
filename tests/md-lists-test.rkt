@@ -8,7 +8,8 @@
 (require rackunit racket/class racket/gui/base
          "../rackmac/commands.rkt" "../rackmac/command.rkt" "../rackmac/frame.rkt"
          "../rackmac/editor.rkt" "../rackmac/buffer.rkt" "../rackmac/platform.rkt"
-         "../rackmac/md-lists.rkt")
+         "../rackmac/md-lists.rkt"
+         "../rackmac/md-tables.rkt")   ; markdown-mode's keymap binds table-tab/-enter first, falling through to md-lists
 
 (define f (make-main-frame))
 
