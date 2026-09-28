@@ -176,9 +176,22 @@
        (with-handlers ([exn:fail? void]) (delete-directory/files out)))
      result]))
 
+;; The worker's environment: only what Racket itself needs to start and find its libraries. The app's
+;; own environment can hold secrets (an API key fallback, tokens), and a document is a program that
+;; could read them with getenv and put them in its HTML.
+(define kept-environment-rx #rx#"^(PATH|HOME|TMPDIR|USER|LANG|LC_[A-Z_]*|PLT.*)$")
+(define (scrubbed-environment)
+  (define src (current-environment-variables))
+  (define env (make-environment-variables))
+  (for ([name (in-list (environment-variables-names src))]
+        #:when (regexp-match? kept-environment-rx name))
+    (environment-variables-set! env name (environment-variables-ref src name)))
+  env)
+
 (define (run-worker racket src dir out secs mb read-roots)
   (define-values (sp stdout stdin stderr)
     (parameterize ([current-directory dir]
+                   [current-environment-variables (scrubbed-environment)]
                    [subprocess-group-enabled #t]
                    [current-subprocess-custodian-mode 'kill])
       (apply subprocess #f #f #f racket (scribble-worker-path)

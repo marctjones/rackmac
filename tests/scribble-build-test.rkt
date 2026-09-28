@@ -321,3 +321,18 @@
   (check-equal? (processes-matching (path->string fakes)) '()))
 
 (delete-directory/files root)
+
+;; The app's environment can hold secrets (an API key fallback, tokens). A document is a program and
+;; must not be able to read them (found 2026-09-28: it could, before the environment was scrubbed).
+(test-case "a document cannot read the app's environment variables"
+  (define d (make-temporary-file "rackmac-env~a" 'directory))
+  (define doc (build-path d "env.scrbl"))
+  (display-to-file "#lang scribble/base\n@title{Env}\nsecret: @(or (getenv \"RACKMAC_TEST_SECRET\") \"NOT-VISIBLE\")\n" doc)
+  (putenv "RACKMAC_TEST_SECRET" "hunter2-must-not-leak")
+  (define r (build-scribble doc #:dest (build-path d "out") #:read-roots (list d)))
+  (check-true (scribble-built? r) (format "built: ~a" r))
+  (when (scribble-built? r)
+    (define html (file->string (scribble-built-entry r)))
+    (check-true (string-contains? html "NOT-VISIBLE"))
+    (check-false (string-contains? html "hunter2-must-not-leak")))
+  (delete-directory/files d))
