@@ -101,7 +101,29 @@ E13/E12.M2-icebox are in or out):
    override standing owner directives (E13 was explicitly told to be skipped; E12 is "Parked by request").
 6. E21 (Assistant) — blocked entirely on decision #396.
 
-## In flight — nothing. Session ended cleanly 2026-09-27.
+## Update 2026-09-28 (after the 09-27 stop): wave 4 landed, publishing epic filed
+
+- **Wave 4 merged, 894 tests passing, tagged `v0.3.0-alpha.13`**: #416 (paste a copied spreadsheet range as a GFM
+  pipe table) and #343/#414/#415 (pipe-table alignment, row/column editing, cell navigation, sort by column).
+  #416 turned out to need the rich-paste base layer (`pasteboard.rkt`, `paste-dispatch.rkt`, a small `do-paste`
+  override in `buffer.rkt`) because **#307 (paste-from-word) is still open**; my brief wrongly called it shipped
+  (only the #282 spike is closed). #307 should register an HTML-via-pandoc converter *below* priority 100.
+  Both branches were checked by reading the diff before merging; the only merge conflict was two adjacent
+  one-line requires in `app.rkt`.
+- **The "flaky" `md-view-test` is a load artefact, now measured**: about 215 ms to Source and 250 ms to Formatted
+  on a quiet machine (budget 1000 ms), and roughly 1000-1600 ms when the shared Mac's load average is 12-45.
+  Neither the table `#:when` checks nor anything else merged today affects it.
+- **New epic E22 Publishing (#429)**, design in `docs/PUBLISHING-DESIGN.md`: Scribble, Slideshow and Pollen as
+  editable Rackmac Languages with a live preview, PDF and slides first, visible styles, Pollen layer for power
+  users. Milestones E22.M1 (#419-#424 Scribble + preview), E22.M2 (#425-#427 Slideshow), E22.M3 (#428 Pollen,
+  optional, detect-never-bundle). Two spikes gate the embedded previews: #422 (WKWebView) and #425 (capturing
+  Slideshow picts). Documents in these languages are programs, so preview is explicit and sandboxed. Depends on
+  E19 language groundwork still open (#310, #315). Pollen is not installed here; Scribble/Slideshow/pict are.
+- Local models: a verified MLX bridge exists in `/Users/marc/Documents/GitHub/racket-steering`
+  (`scripts/mlx_generate.py`, `scripts/eval-local.rkt`); see the comment on #418 (batch-shaped, not interactive).
+- Reminder: close the GitHub issue as the last step of landing something (see the 09-27 note below).
+
+## In flight — nothing (as of 2026-09-27's stop; see the update above for wave 4).
 
 - **Bookkeeping gap caught and fixed just before archiving**: all 14 issues shipped this session (#87, #109,
   #353, #303, #298, #299, #294, #302, #118, #121, #125–129) were merged/tested/tagged but never actually
