@@ -4,7 +4,7 @@
 ;; the keymap layers before text% sees them.
 (require racket/class racket/gui/base racket/string racket/list racket/file
          "keymap.rkt" "mode.rkt" "hook.rkt" "input.rkt" "theme.rkt" "fileio.rkt" "platform.rkt"
-         "doc-text.rkt")
+         "doc-text.rkt" "paste-dispatch.rkt")
 (provide buffer% large-file-threshold)
 
 ;; Documents longer than this many characters open without syntax coloring (it re-lexes the
@@ -222,6 +222,18 @@
         (define before (and extend? (send the-clipboard get-clipboard-string time)))
         (send the-clipboard set-clipboard-string (if before (string-append before text) text) time)
         (run-hook 'text-copied this text)))         ; #118: rackmac/clipboard-history.rkt records it
+
+    ;; Paste asks the paste converters first (rackmac/paste-dispatch.rkt: a copied spreadsheet
+    ;; range becomes a Markdown table, #416); with no answer it is text%'s plain-text paste.
+    ;; text%'s paste has already removed the selection and opened an edit sequence around this,
+    ;; so a converted paste is one undo step like any other.
+    (define/override (do-paste start time)
+      (define converted (convert-paste this start))
+      (cond
+        [converted
+         (send this insert converted start)
+         (send this set-position (+ start (string-length converted)))]
+        [else (super do-paste start time)]))
 
     ;; ---- input -----------------------------------------------------------
     (define/override (on-char ev)
