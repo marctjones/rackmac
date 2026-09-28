@@ -123,7 +123,31 @@ E13/E12.M2-icebox are in or out):
   (`scripts/mlx_generate.py`, `scripts/eval-local.rkt`); see the comment on #418 (batch-shaped, not interactive).
 - Reminder: close the GitHub issue as the last step of landing something (see the 09-27 note below).
 
-## In flight — nothing (as of 2026-09-27's stop; see the update above for wave 4).
+## Update 2026-09-28 (later): E22 Scribble slice landed, tags alpha.14 and alpha.15
+
+- **alpha.14**: #419 Scribble as a Language (`rackmac/lang-scribble.rkt`; `mode.rkt` gained `#:first-line`, so a
+  `#lang` line beats the extension), #424 Publishing settings (`rackmac/publish-settings.rkt`), #422 spike.
+- **alpha.15**: #420 Preview builds a `.scrbl` to HTML in a sandboxed subprocess (`scribble-build.rkt`,
+  `scribble-worker.rkt`, `scribble-preview.rkt`). 957 tests passing.
+- **The web view is a GO** (`docs/spikes/webview-embed.md`): a `WKWebView` embeds beside the editor with conditions
+  recorded on #423 (hand-built ObjC blocks, `#:async-apply`, results via a script message handler, build the
+  preview outside `$TMPDIR`). Not yet verified live: a real mouse click into the page and back, and racket/gui
+  focus events. Add both to the #283 live check.
+- **Security decisions made while reviewing**: a document is a program, so (1) Run Selection/Run Document refuse in
+  Scribble (`runs-in-app` mode local; the body guard exists because key bindings ignore `#:when`, #398), (2) the
+  build worker gets a scrubbed environment (a probe showed `getenv` leaked a secret; fixed and tested), (3)
+  **#431 blocks #421/#423**: a preview must not be able to make network requests, because a built document can read
+  its folder and Library and write that into HTML, and only showing the HTML gives it a way out. #432 lists the
+  remaining sandbox hardening.
+- **The Settings dialog is taller than the screen** (908 pt on an 833 pt display, before anything new). #424's help
+  text under each control made it 1569 pt, so that part was backed out. **#430** adds a scroll area.
+- Lead-side reviews that mattered this session: reading the diff caught the Run-in-app hole, the dialog height
+  (measured with `get-graphical-min-size`), and the environment leak (probed through the real build function).
+  Measure and probe; do not trust a report or a green suite alone.
+- Next for E22: #431 (ready), #425 Slideshow spike (ready), #428 Pollen detect (ready), then #421/#423 once #431
+  lands. #426, #427 follow the Slideshow spike.
+
+## In flight — nothing (as of 2026-09-27's stop; see the updates above).
 
 - **Bookkeeping gap caught and fixed just before archiving**: all 14 issues shipped this session (#87, #109,
   #353, #303, #298, #299, #294, #302, #118, #121, #125–129) were merged/tested/tagged but never actually
