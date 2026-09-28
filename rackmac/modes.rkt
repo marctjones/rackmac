@@ -23,7 +23,7 @@
 (define-mode racket-mode
   #:label "Racket"
   #:parent 'prog-mode
-  #:files '("*.rkt" "*.rktl" "*.scrbl" "*.ss")
+  #:files '("*.rkt" "*.rktl" "*.ss")             ; *.scrbl is Scribble's (lang-scribble.rkt)
   #:locals '((comment-start . ";"))
   #:highlighter highlight-racket!
   #:doc "Racket source: syntax coloring and ; comments.")

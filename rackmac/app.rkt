@@ -34,6 +34,8 @@
          "selection-tools.rkt"           ; #125-#129: Change Case, Sort Lines, Swap, Wrap, Trim
          "paste-table.rkt"               ; #416: a copied spreadsheet range pastes as a Markdown table
          "md-tables.rkt"                 ; #343, #414, #415: pipe-table alignment, editing, sort
+         "lang-scribble.rkt"             ; #419: Scribble as a Language (.scrbl or a #lang scribble line)
+         "publish-settings.rkt"          ; #424: output folder, preview target, refresh, build outside Library
          "smoke.rkt"                     ; #286: RACKMAC_SMOKE=1 checks startup and exits, window unshown
          )
 (provide main)

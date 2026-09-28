@@ -3,7 +3,7 @@
 ;; modified flag is restored, so highlighting never shows up as an edit.
 (require racket/class racket/gui/base racket/list racket/string
          syntax-color/racket-lexer "theme.rkt" "doc-text.rkt")
-(provide highlight-racket! highlight-markdown! clear-highlight!)
+(provide highlight-racket! highlight-markdown! clear-highlight! apply-highlight-spans!)
 
 (define (delta-for key)
   (define d (make-object style-delta%))
@@ -27,6 +27,15 @@
 ;; Back to the document's base style: "Prose" for notes, "Standard" for code.
 (define (clear-highlight! t)
   (send t change-style (send editor-style-list find-named-style (send t default-style-name)) 0 'end))
+
+;; A Language that finds its own tokens (Scribble, lang-scribble.rkt) hands over (start end key)
+;; spans, 0-based and half-open, with keys from `delta-for`; the rest is the document's base style.
+(define (apply-highlight-spans! t spans)
+  (with-styling t
+    (lambda ()
+      (clear-highlight! t)
+      (for ([s (in-list spans)])
+        (send t change-style (delta-for (caddr s)) (car s) (cadr s))))))
 
 (define racket-forms
   (for/hash ([s '("define" "define-values" "define-syntax" "define-syntax-rule" "lambda" "λ" "let" "let*"

@@ -11,6 +11,11 @@
 ;; whole document after edits, which gets slow). A parameter so tests can lower it.
 (define large-file-threshold (make-parameter 500000))
 
+;; The first line of a document's text (capped: a huge one-line file must not cost anything), used to
+;; pick a Language from a `#lang` line.
+(define (first-line-of text)
+  (car (regexp-match #rx"^[^\r\n]*" (if (> (string-length text) 200) (substring text 0 200) text))))
+
 ;; A word/space/punctuation classifier for word-boundary detection (double-click, RM-058).
 (define (word-char? ch) (or (char-alphabetic? ch) (char-numeric? ch) (eqv? ch #\_)))
 (define (char-class ch) (cond [(word-char? ch) 'word] [(char-whitespace? ch) 'space] [else 'punct]))
@@ -193,7 +198,7 @@
       (set! buf-path p)
       (define-values (base fname dir?) (split-path p))
       (set! buf-name (path->string fname))
-      (set-mode! (or (mode-for-path p) 'text-mode))
+      (set-mode! (or (mode-for-path p (first-line-of text)) 'text-mode))
       (when (eq? enc 'binary) (send this lock #t))      ; never write a binary file back
       (send this set-modified #f))
     ;; Encodes first, so an unsavable character aborts the save before anything is written;
