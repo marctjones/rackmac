@@ -17,7 +17,7 @@
 (require racket/list "owner.rkt" "hook.rkt" "platform.rkt" "store.rkt")
 (provide define-setting setting-ref setting-set! find-setting all-settings
          setting-name setting-doc setting-category setting-scope setting-default setting-contract
-         setting-choices settings-file-path)
+         setting-choices setting-label settings-file-path)
 
 ;; contract: a plain predicate (any/c -> boolean?), not a racket/contract value -- consistent
 ;; with #:when elsewhere in this codebase (command.rkt), and simple enough that a bad value can
@@ -26,7 +26,9 @@
 ;; choices (#291, settings-dialog-min): #f for an open-ended setting, or a list of (value . label)
 ;; pairs for one with a finite set of values -- the Settings dialog uses it to draw a `choice%`
 ;; with friendly labels (e.g. editor-theme's System/Light/Dark) instead of a text field.
-(struct setting (name contract default doc category scope choices) #:transparent)
+;;
+;; label (#424): the plain-word name the Settings dialog shows, or #f for the name title-cased.
+(struct setting (name contract default doc category scope choices label) #:transparent)
 
 (define registry (make-hasheq))            ; name -> setting
 (define global-values (make-hasheq))       ; name -> current global value
@@ -45,7 +47,8 @@
 
 (define (register-setting! name #:contract pred #:default default #:doc [doc ""]
                            #:category [category "General"] #:scope [scope 'global]
-                           #:choices [choices #f])
+                           #:choices [choices #f]
+                           #:label [label #f])
   (unless (and (procedure? pred) (procedure-arity-includes? pred 1))
     (raise-argument-error 'define-setting "(-> any/c boolean?)" pred))
   (unless (memq scope '(global document))
@@ -59,7 +62,7 @@
     (unless (member default (map car choices))
       (raise-argument-error 'define-setting "a #:default among #:choices" default)))
   (define old (hash-ref registry name #f))
-  (hash-set! registry name (setting name pred default doc category scope choices))
+  (hash-set! registry name (setting name pred default doc category scope choices label))
   ;; Seed the global value from disk every time a setting is (re)registered -- global values
   ;; are write-through (setting-set! saves immediately), so the file is always the source of
   ;; truth and reloading (Reload Extensions, or a real restart) picking it back up is exactly

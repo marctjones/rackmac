@@ -6,7 +6,7 @@
 (provide (struct-out mode) define-mode register-mode! find-mode all-modes mode-display-name
          mode-chain mode-keymaps mode-local find-highlighter mode-for-path mode-user-keymap)
 
-(struct mode (name kind parent keymap files locals on-enable on-disable highlighter doc label))
+(struct mode (name kind parent keymap files locals on-enable on-disable highlighter doc label first-line))
 
 (define modes (make-hasheq))
 
@@ -20,9 +20,10 @@
                         #:on-disable [on-disable #f]
                         #:highlighter [highlighter #f]   ; (buffer) -> void
                         #:doc [doc ""]
-                        #:label [label #f])            ; what users see, e.g. "Plain Text"
+                        #:label [label #f]             ; what users see, e.g. "Plain Text"
+                        #:first-line [first-line #f])  ; regexp: a document whose first line matches is this Language
   (define old (hash-ref modes name #f))
-  (hash-set! modes name (mode name kind parent keymap files locals on-enable on-disable highlighter doc label))
+  (hash-set! modes name (mode name kind parent keymap files locals on-enable on-disable highlighter doc label first-line))
   (register-undo! 'mode (lambda () (if old (hash-set! modes name old) (hash-remove! modes name))))
   (run-hook 'mode-registered name))
 
@@ -73,8 +74,15 @@
                     (case c [(#\*) ".*"] [(#\?) "."] [(#\.) "[.]"] [else (regexp-quote (string c))])))
            "$")))
 
-(define (mode-for-path path)
+;; The Language for a file: one whose #:first-line pattern matches the document's first line
+;; (a `#lang` line names its language better than the file name does), else one whose #:files
+;; pattern matches the name. `first-line` is #f when the text is not at hand.
+(define (mode-for-path path [first-line #f])
   (define file (let-values ([(base name dir?) (split-path path)]) (path->string name)))
-  (for/or ([m (in-list (all-modes 'major))])
-    (and (for/or ([g (in-list (mode-files m))]) (regexp-match? (glob->regexp g) file))
-         (mode-name m))))
+  (define majors (all-modes 'major))
+  (or (and first-line
+           (for/or ([m (in-list majors)])
+             (and (mode-first-line m) (regexp-match? (mode-first-line m) first-line) (mode-name m))))
+      (for/or ([m (in-list majors)])
+        (and (for/or ([g (in-list (mode-files m))]) (regexp-match? (glob->regexp g) file))
+             (mode-name m)))))

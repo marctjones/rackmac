@@ -14,6 +14,18 @@
 (provide make-settings-dialog)
 
 (define (friendly-title name) (default-title name))
+;; A setting's own plain-word label (#424) when it gave one, else its name title-cased.
+(define (label-for s) (or (setting-label s) (friendly-title (setting-name s))))
+
+;; The help line(s) under a row (#424): the setting's #:doc, broken into lines a dialog this
+;; wide can show (a message% does not wrap), in the small style of a hint.
+(define help-columns 66)
+(define (help-lines doc)
+  (let loop ([words (string-split doc)] [line ""] [acc '()])
+    (cond [(null? words) (reverse (if (string=? line "") acc (cons line acc)))]
+          [(and (not (string=? line "")) (> (+ (string-length line) 1 (string-length (car words))) help-columns))
+           (loop words "" (cons line acc))]
+          [else (loop (cdr words) (if (string=? line "") (car words) (string-append line " " (car words))) acc)])))
 
 ;; A setting's current value formatted for a text-field%.
 (define (format-value v) (if (string? v) v (format "~a" v)))
@@ -37,7 +49,7 @@
 ;; One control for `s`, added to `parent`, and recorded in `controls` under the setting's name.
 (define (add-row! parent controls s)
   (define name (setting-name s))
-  (define label (friendly-title name))
+  (define label (label-for s))
   (define control
     (cond
       ;; A finite set of values (e.g. editor-theme): a choice%, its friendly labels from #:choices.
@@ -57,7 +69,12 @@
        (new text-field% [label label] [parent parent] [init-value (format-value (setting-ref name))]
             [callback (lambda (t e) (when (eq? (send e get-event-type) 'text-field-enter)
                                       (commit-text! s t)))])]))
-  (hash-set! controls name control))
+  (hash-set! controls name control)
+  (unless (string=? (setting-doc s) "")
+    (define help (new vertical-panel% [parent parent] [alignment '(left top)]
+                      [stretchable-height #f] [spacing 0] [horiz-margin 20]))
+    (for ([line (in-list (help-lines (setting-doc s)))])
+      (new message% [parent help] [label line] [font small-control-font]))))
 
 ;; Builds the dialog, unshown. Returns (values dialog control-for), where (control-for name) is
 ;; the check-box%/choice%/text-field% for that registered setting (or #f).

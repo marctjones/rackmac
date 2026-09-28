@@ -12,7 +12,7 @@
          "../rackmac/ui/settings-dialog.rkt" "../rackmac/tools-menu.rkt"
          "../rackmac/md-view-commands.rkt" "../rackmac/pdf-export.rkt" "../rackmac/spell.rkt"
          "../rackmac/md-format.rkt" "../rackmac/md-lists.rkt" "../rackmac/md-toolbar.rkt"
-         "../rackmac/outline-structure.rkt" "../rackmac/md-tables.rkt"
+         "../rackmac/outline-structure.rkt" "../rackmac/md-tables.rkt" "../rackmac/lang-scribble.rkt"
          "../rackmac/record-actions.rkt" "../rackmac/selection-tools.rkt"
          racket/runtime-path)
 ;; Loaded only once the tests run (below): requiring rackmac/library/*.rkt statically changes the
@@ -58,7 +58,8 @@
     table-tab table-shift-tab table-enter                                            ; #343, #414
     table-insert-row-above table-insert-row-below table-delete-row
     table-insert-column-left table-insert-column-right table-delete-column           ; #414
-    table-sort-column))                                                              ; #415
+    table-sort-column                                                                ; #415
+    scribble-newline))                                                               ; #419
 
 (test-case "feature command names are stable, with help and aliases"
   (dynamic-require library-sidebar #f)
@@ -139,6 +140,7 @@
   (check-equal? (mode-display-name 'text-mode) "Plain Text")
   (check-equal? (mode-display-name 'markdown-mode) "Markdown")
   (check-equal? (mode-display-name 'prog-mode) "Code")
+  (check-equal? (mode-display-name 'scribble-mode) "Scribble")
   (register-mode! 'vocab-fancy-mode)
   (check-equal? (mode-display-name 'vocab-fancy-mode) "Vocab Fancy" "default: strip -mode and title-case")
   (check-equal? (mode-display-name 'never-registered-mode) "Never Registered"))
