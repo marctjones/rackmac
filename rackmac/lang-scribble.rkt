@@ -143,6 +143,6 @@
   #:files '("*.scrbl")
   #:first-line scribble-lang-line-rx
   #:keymap scribble-keymap
-  #:locals '((wrap-lines . #t) (indent-string . "  ") (comment-start . "@;"))
+  #:locals '((wrap-lines . #t) (indent-string . "  ") (comment-start . "@;") (runs-in-app . #f))
   #:highlighter highlight-scribble!
   #:doc "Scribble documents: @ forms are colored apart from the prose, and @; comments.")

@@ -162,3 +162,18 @@
   (check-not-equal? n2 'scribble-newline "only in Scribble"))
 
 (delete-directory/files dir)
+
+;; A Scribble document is a program of its own kind: Run Selection and Run Document must never
+;; evaluate its prose as Racket in the app's process (docs/PUBLISHING-DESIGN.md, principle 4). The
+;; body guard matters because a key binding does not yet consult #:when (#398).
+(test-case "Run Selection and Run Document do not evaluate a Scribble document"
+  (define b (fresh! "(set! ran-scribble-marker #t)" #:sel '(0 . 28)))
+  (define marker-ran? #f)
+  (define ns (current-namespace))
+  (namespace-set-variable-value! 'ran-scribble-marker #f #t ns)
+  (run-command 'run-selection)
+  (run-command 'run-document)
+  (check-false (namespace-variable-value 'ran-scribble-marker #t (lambda () #f) ns)
+               "nothing was evaluated")
+  (check-false (command-enabled? (find-command 'run-selection)) "Run Selection is disabled in Scribble")
+  (check-false (command-enabled? (find-command 'run-document)) "Run Document is disabled in Scribble"))

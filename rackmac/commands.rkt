@@ -20,6 +20,14 @@
 ;; even bound outside a code Language's own keymap -- see #:key-keymap code-keymap below).
 (define (code-language? [b (t)]) (and (memq 'prog-mode (map mode-name (mode-chain (send b get-mode)))) #t))
 
+;; Run Selection/Run Document evaluate text as Racket in the app's own process. A Language whose
+;; documents are programs of a different kind (Scribble, #419) sets the mode local `runs-in-app`
+;; to #f, so prose is never evaluated as Racket there; the build for such a Language goes through
+;; its own sandboxed Preview (docs/PUBLISHING-DESIGN.md, principle 4). The commands also check this
+;; in their bodies, because a key binding does not yet consult #:when (#398).
+(define (runs-in-app? [b (t)]) (mode-local (send b get-mode) 'runs-in-app #t))
+(define (runnable-language? [b (t)]) (and (code-language? b) (runs-in-app? b)))
+
 (define-syntax-rule (edit-group b body ...)
   (let ([buf b])
     (send buf begin-edit-sequence)
@@ -880,7 +888,7 @@ TEMPLATE
   (line-text b (send b position-paragraph (send b get-start-position))))
 
 (define-command (run-selection)
-  #:when code-language?
+  #:when runnable-language?
   #:icon "run"
   #:aliases ("evaluate selection" "evaluate" "run code")
   #:help "Run the selected Racket code, or the current line."
@@ -888,19 +896,25 @@ TEMPLATE
   #:keys ("Mod-Enter") #:key-keymap code-keymap
   #:doc "Evaluate the selected Racket code (or the current line) in the running editor."
   (define b (t))
-  (define code (let ([s (selection-string b)]) (if (string=? s "") (current-line-text b) s)))
-  (define r (eval-string code))
-  (message "~a" (if (string=? r "") "(no output)" r)))
+  (cond
+    [(not (runs-in-app? b)) (message "Run is not available in this Language.")]
+    [else
+     (define code (let ([s (selection-string b)]) (if (string=? s "") (current-line-text b) s)))
+     (define r (eval-string code))
+     (message "~a" (if (string=? r "") "(no output)" r))]))
 
 (define-command (run-document)
-  #:when code-language?
+  #:when runnable-language?
   #:icon "run-all"
   #:aliases ("evaluate document" "run file")
   #:help "Run the whole document as Racket code."
   #:title "Run Document" #:menu "Tools" #:menu-order 11
   #:keys ("Mod-Shift-Enter") #:key-keymap code-keymap
-  (define r (eval-string (buffer-string)))
-  (message "~a" (if (string=? r "") "Evaluated document" r)))
+  (cond
+    [(not (runs-in-app? (t))) (message "Run is not available in this Language.")]
+    [else
+     (define r (eval-string (buffer-string)))
+     (message "~a" (if (string=? r "") "Evaluated document" r))]))
 
 ;; ---- help ----------------------------------------------------------------
 
