@@ -29,17 +29,21 @@
   #:doc "Racket source: syntax coloring and ; comments.")
 
 
-;; Enter/Tab/Shift-Tab in a list (#337, md-lists.rkt), and Promote/Demote heading and Move Section
-;; Up/Down on a heading line (#299, outline-structure.rkt), are bound ahead of the global keymap's
-;; plain "Enter"/"Tab"/"Shift-Tab", "Outdent/Indent Lines" and "Move Line Up/Down" commands, by
-;; NAME: a keymap only ever stores command symbols (keymap.rkt), so this module never has to
-;; require md-lists.rkt or outline-structure.rkt (which would cycle back through editor.rkt --
-;; see md-view.rkt's note on why it avoids the same thing).
+;; Enter/Tab/Shift-Tab in a list (#337, md-lists.rkt), Enter/Tab/Shift-Tab in a pipe table (#343,
+;; #414, md-tables.rkt), and Promote/Demote heading and Move Section Up/Down on a heading line
+;; (#299, outline-structure.rkt), are bound ahead of the global keymap's plain "Enter"/"Tab"/
+;; "Shift-Tab", "Outdent/Indent Lines" and "Move Line Up/Down" commands, by NAME: a keymap only
+;; ever stores command symbols (keymap.rkt), so this module never has to require md-lists.rkt,
+;; md-tables.rkt or outline-structure.rkt (which would cycle back through editor.rkt -- see
+;; md-view.rkt's note on why it avoids the same thing). md-tables.rkt's table-tab/table-shift-tab/
+;; table-enter take "Tab"/"Shift-Tab"/"Enter" here instead of md-lists.rkt's own markdown-indent/
+;; markdown-outdent/markdown-enter, and fall through BY NAME to those exactly when the caret is
+;; not inside a pipe table, so list behavior is unchanged.
 (define markdown-keymap
   (make-keymap/pairs 'markdown-mode
-                     (list (cons "Enter" 'markdown-enter)
-                           (cons "Tab" 'markdown-indent)
-                           (cons "Shift-Tab" 'markdown-outdent)
+                     (list (cons "Enter" 'table-enter)
+                           (cons "Tab" 'table-tab)
+                           (cons "Shift-Tab" 'table-shift-tab)
                            (cons "Mod-[" 'promote-heading)
                            (cons "Mod-]" 'demote-heading)
                            (cons "Alt-Up" 'move-section-up)

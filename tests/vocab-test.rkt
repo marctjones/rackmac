@@ -12,7 +12,7 @@
          "../rackmac/ui/settings-dialog.rkt" "../rackmac/tools-menu.rkt"
          "../rackmac/md-view-commands.rkt" "../rackmac/pdf-export.rkt" "../rackmac/spell.rkt"
          "../rackmac/md-format.rkt" "../rackmac/md-lists.rkt" "../rackmac/md-toolbar.rkt"
-         "../rackmac/outline-structure.rkt"
+         "../rackmac/outline-structure.rkt" "../rackmac/md-tables.rkt"
          "../rackmac/record-actions.rkt" "../rackmac/selection-tools.rkt"
          racket/runtime-path)
 ;; Loaded only once the tests run (below): requiring rackmac/library/*.rkt statically changes the
@@ -54,7 +54,11 @@
     new-from-template edit-templates                                                    ; #353
     start-recording stop-recording                                                      ; #121
     change-case-upper change-case-lower change-case-title sort-lines                        ; #125, #126
-    swap-words swap-lines wrap-to-width trim-trailing-whitespace))                    ; #127, #128, #129
+    swap-words swap-lines wrap-to-width trim-trailing-whitespace                     ; #127, #128, #129
+    table-tab table-shift-tab table-enter                                            ; #343, #414
+    table-insert-row-above table-insert-row-below table-delete-row
+    table-insert-column-left table-insert-column-right table-delete-column           ; #414
+    table-sort-column))                                                              ; #415
 
 (test-case "feature command names are stable, with help and aliases"
   (dynamic-require library-sidebar #f)

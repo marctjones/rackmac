@@ -57,7 +57,10 @@
      ("Change Case" "UPPERCASE" "lowercase" "Title Case"))
     ("Format" "Bold" "Italic" "Inline Code" "Strikethrough" "---" "Insert Link…" "---"
      "Heading 1" "Heading 2" "Heading 3" "Body Text" "---"
-     "Bulleted List" "Numbered List" "Checklist" "Quote" "---" "Mark Done")
+     "Bulleted List" "Numbered List" "Checklist" "Quote" "---" "Mark Done" "---"
+     ;; #414, #415: table structure commands (menu-order 60-66)
+     "Insert Row Above" "Insert Row Below" "Insert Column Left" "Insert Column Right"
+     "Delete Row" "Delete Column" "Sort Table by Column")
     ("View" "Zoom In" "Zoom Out" "Actual Size" "---" "Toggle Word Wrap" "Toggle Dark/Light Theme"
      "Toggle Full Screen" ("Editor Theme" "Use System Setting" "Light" "Dark") "Show Toolbar" "Show Library"
      "Show Markdown Source" "---" "Show Activity Log" "---" "Command Palette…" "Set Language…")
