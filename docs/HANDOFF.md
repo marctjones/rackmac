@@ -103,6 +103,13 @@ E13/E12.M2-icebox are in or out):
 
 ## In flight — nothing. Session ended cleanly 2026-09-27.
 
+- **Bookkeeping gap caught and fixed just before archiving**: all 14 issues shipped this session (#87, #109,
+  #353, #303, #298, #299, #294, #302, #118, #121, #125–129) were merged/tested/tagged but never actually
+  closed on GitHub — the merge-test-tag-push loop never included the `gh issue close` step. All closed now,
+  each commented with its merge commit. **Lesson for next time**: close the issue as the last step of landing
+  a wave item, not as an afterthought — check `gh issue list --state open` against what's actually in `main`
+  before trusting milestone completion percentages.
+
 - Tags: v0.3.0-alpha.1 through **alpha.12**. Three full waves merged, tested, tagged, pushed this session:
   - Wave 1: #87 (encoding test coverage), #109 (Find-all highlight), #353 (New from Template)
   - Wave 2: #303 (lib-watch), #298 (Outline sidebar), #299 (promote/demote/move section), #294 (heading states)
