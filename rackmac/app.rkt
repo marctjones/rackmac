@@ -36,6 +36,7 @@
          "md-tables.rkt"                 ; #343, #414, #415: pipe-table alignment, editing, sort
          "lang-scribble.rkt"             ; #419: Scribble as a Language (.scrbl or a #lang scribble line)
          "publish-settings.rkt"          ; #424: output folder, preview target, refresh, build outside Library
+         "scribble-preview.rkt"          ; #420: Preview builds a .scrbl to HTML in a sandboxed process
          "smoke.rkt"                     ; #286: RACKMAC_SMOKE=1 checks startup and exits, window unshown
          )
 (provide main)
